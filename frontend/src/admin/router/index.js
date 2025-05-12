@@ -1,0 +1,130 @@
+import { createRouter, createWebHashHistory } from 'vue-router';
+
+// Import view components (We will create these files soon)
+// import UserManagement from '../views/UserManagement.vue';
+// import ApplicationManagement from '../views/ApplicationManagement.vue';
+// import PageManagement from '../views/PageManagement.vue';
+
+const routes = [
+  { path: '', redirect: '/users' }, 
+  {
+    path: '/login',
+    name: 'AdminLogin',
+    component: () => import('../views/AdminLoginPage.vue'),
+    meta: { title: '系统登录', requiresGuest: true }
+  },
+  {
+    path: '/users',
+    name: 'UserManagement',
+    // component: UserManagement,
+    component: () => import('../views/UserManagement.vue'),
+    meta: { title: '用户管理' }
+  },
+  {
+    path: '/applications',
+    name: 'ApplicationManagement',
+    // component: ApplicationManagement,
+    component: () => import('../views/ApplicationManagement.vue'),
+    meta: { title: '应用管理' }
+  },
+  {
+    path: '/ai-types',
+    name: 'AiTypeManagement',
+    component: () => import('../views/AiTypeManagement.vue'),
+    meta: { title: 'AI 类型管理' }
+  },
+  {
+    path: '/ai-management',
+    name: 'AiManagement',
+    component: () => import('../views/AiManagement.vue'),
+    meta: { title: 'AI 应用管理' }
+  },
+  {
+    path: '/pages',
+    name: 'PageManagement',
+    // component: PageManagement,
+    component: () => import('../views/PageManagement.vue'),
+    meta: { title: '官网页面管理' }
+  },
+  {
+    path: '/pages/:pageId/articles', 
+      name: 'ArticleManagement',
+    component: () => import('../views/ArticleManagement.vue'), 
+    props: true, 
+    meta: { title: '文章列表管理' } 
+  },
+  {
+    path: '/menus',
+    name: 'MenuManagement',
+    component: () => import('../views/MenuManagement.vue'),
+    meta: { title: '菜单管理' }
+  },
+  {
+    path: '/templates',
+    name: 'TemplateManagement',
+    component: () => import('../views/TemplateManagement.vue'),
+    meta: { title: '模板管理' }
+  },
+  {
+    path: '/apis',
+    name: 'ApiManagement',
+    component: () => import('../views/ApiManagement.vue'),
+    meta: { title: 'API 管理' }
+  },
+  {
+    path: '/credits',
+    name: 'CreditTransactionManagement',
+    component: () => import('../views/CreditsManagement.vue'),
+    meta: { title: '消费记录' }
+  },
+  {
+    path: '/credit-settings',
+    name: 'CreditSettingsManagement',
+    component: () => import('../views/CreditSettingsPage.vue'),
+    meta: { title: '积分设置' }
+  },
+  {
+    path: '/promotion-activities',
+    name: 'PromotionActivityManagement',
+    component: () => import('../views/PromotionActivityManagement.vue'),
+    meta: { title: '优惠活动管理' }
+  },
+  // Add a catch-all or 404 route if needed
+  // { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundComponent }
+];
+
+const router = createRouter({
+  // Use Hash history because the entry is index.html
+  history: createWebHashHistory(), 
+  routes,
+});
+
+// Optional: Add navigation guards (e.g., for authentication) if needed later
+// router.beforeEach((to, from, next) => { ... });
+
+// Add navigation guard to check authentication state
+router.beforeEach((to, from, next) => {
+  // Check if the route requires authentication
+  if (to.matched.some(record => record.meta.requiresAuth)) {
+    // Check if user is authenticated (token exists)
+    const token = localStorage.getItem('accessToken');
+    if (!token) {
+      // User is not authenticated, redirect to admin login page
+      next({
+        path: '/login', // Correct path for the admin login route
+        query: { redirect: to.fullPath } // Optionally, save the intended path
+      });
+    } else {
+      // User is authenticated, proceed
+      next();
+    }
+  } else if (to.matched.some(record => record.meta.requiresGuest) && localStorage.getItem('accessToken')) {
+    // If route is for guests only (like login) and user is already authenticated
+    next({ path: '/' }); // Redirect to admin section root
+  } else {
+    // Route doesn't require authentication or user is authenticated, proceed
+    next();
+  }
+});
+
+export default router; 

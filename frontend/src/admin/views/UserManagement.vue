@@ -1,0 +1,489 @@
+<template>
+  <div>
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-semibold">用户管理</h2>
+      <a-space>
+        <a-input-search 
+           v-model="searchTerm" 
+           placeholder="搜索用户 (用户名或邮箱)" 
+           allow-clear
+           style="width: 250px;"
+        />
+        <a-select v-model="selectedStatus" placeholder="按状态筛选" allow-clear style="width: 150px;">
+          <a-option value="active">正常</a-option>
+          <a-option value="disabled">禁用</a-option>
+        </a-select>
+        <a-select v-model="selectedIsAdmin" placeholder="按管理员筛选" allow-clear style="width: 150px;">
+          <a-option :value="true">是</a-option>
+          <a-option :value="false">否</a-option>
+        </a-select>
+        <a-button type="primary" @click="openCreateModal">
+             <template #icon><icon-plus /></template> 创建用户
+        </a-button>
+        <a-button @click="refreshUsers" :loading="isLoading">
+          <template #icon><icon-refresh /></template> 刷新
+        </a-button>
+      </a-space>
+    </div>
+
+    <a-spin :loading="isLoading" tip="加载用户列表中..." class="w-full">
+      <a-table
+        :data="filteredUsers"
+        :pagination="{ pageSize: 15 }" 
+        row-key="_id"
+        stripe
+      >
+        <template #columns>
+           <a-table-column title="ID" data-index="_id" :width="180">
+               <template #cell="{ record }">
+                   {{ record._id }}
+               </template>
+           </a-table-column>
+           <a-table-column title="用户名" data-index="username" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
+           <a-table-column title="邮箱" data-index="email">
+              <template #cell="{ record }">
+                {{ record.email || '-' }} <!-- Display dash if no email -->
+              </template>
+           </a-table-column>
+           <a-table-column title="状态" data-index="status" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+              <template #cell="{ record }">
+                <a-tag :color="record.status === 'active' ? 'green' : 'red'">
+                  {{ record.status === 'active' ? '正常' : '禁用' }}
+                </a-tag>
+              </template>
+           </a-table-column>
+           <a-table-column title="管理员" data-index="isAdmin" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+             <template #cell="{ record }">
+                <a-tag :color="record.isAdmin ? 'blue' : 'gray'">{{ record.isAdmin ? '是' : '否' }}</a-tag>
+             </template>
+           </a-table-column>
+           <!-- New Column for Credits Balance -->
+           <a-table-column title="积分余额" data-index="creditsBalance" :width="120" align="right" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+             <template #cell="{ record }">
+                {{ typeof record.creditsBalance === 'number' ? record.creditsBalance : '-' }}
+             </template>
+           </a-table-column>
+           <a-table-column title="注册时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+             <template #cell="{ record }">
+                {{ formatDate(record.createdAt) }}
+             </template>
+           </a-table-column>
+            <a-table-column title="上次登录" data-index="lastLoginAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+             <template #cell="{ record }">
+                {{ record.lastLoginAt ? formatDate(record.lastLoginAt) : '从未登录' }}
+             </template>
+           </a-table-column>
+           <!-- TODO: Add Actions column (Edit, Delete, Change Status) -->
+           <a-table-column title="操作" :width="150">
+             <template #cell="{ record }">
+                <a-button type="text" status="warning" size="mini" @click="editUser(record)">编辑</a-button>
+                <a-tooltip 
+                  v-if="record.username === 'admin'" 
+                  content="不允许删除 'admin' 用户。"
+                >
+                  <a-button type="text" status="danger" size="mini" disabled>删除</a-button>
+                </a-tooltip>
+                <a-tooltip 
+                  v-else-if="record.isAdmin && adminUsersCount <= 1" 
+                  content="系统中至少需要保留一名管理员。"
+                >
+                  <a-button type="text" status="danger" size="mini" disabled>删除</a-button>
+                </a-tooltip>
+                <a-button 
+                  v-else 
+                  type="text" 
+                  status="danger" 
+                  size="mini" 
+                  @click="confirmDeleteUser(record)"
+                >删除</a-button>
+             </template>
+           </a-table-column>
+        </template>
+      </a-table>
+    </a-spin>
+
+    <!-- User Create/Edit Modal -->
+    <a-modal
+      v-model:visible="userModalVisible"
+      :title="isEditMode ? `编辑用户: ${currentUser?.username}` : '创建新用户'"
+      @ok="handleSubmit"
+      @cancel="handleCancel"
+      :confirm-loading="isSubmitting"
+      unmount-on-close 
+    >
+      <a-form ref="userFormRef" :model="userForm" :rules="formRules" layout="vertical">
+        <!-- Username (Required for Create, Readonly for Edit) -->
+        <a-form-item field="username" label="用户名" :rules="isEditMode ? [] : [{ required: true, message: '请输入用户名' }]" validate-trigger="blur">
+          <a-input v-model="userForm.username" placeholder="输入用户名" :disabled="isEditMode" />
+        </a-form-item>
+        
+        <!-- Email (Optional for Create, still validate format if provided) -->
+         <a-form-item field="email" label="邮箱" :rules="[{ type: 'email', message: '请输入有效的邮箱格式' }]" validate-trigger="blur">
+           <a-input v-model="userForm.email" placeholder="输入用户邮箱 (可选)" />
+         </a-form-item>
+
+        <!-- Password (Required for Create, Optional for Edit) -->
+        <a-form-item field="password" label="新密码" :rules="isEditMode ? [] : [{ required: true, message: '请输入密码' }]" validate-trigger="blur">
+          <a-input-password v-model="userForm.password" :placeholder="isEditMode ? '留空则不修改密码' : '输入登录密码'" allow-clear />
+        </a-form-item>
+
+         <!-- Confirm Password (Only for Create) -->
+         <a-form-item v-if="!isEditMode" field="confirmPassword" label="确认密码" :rules="[{ required: true, message: '请再次输入密码' }, { validator: validatePasswordMatch }]" validate-trigger="blur">
+           <a-input-password v-model="userForm.confirmPassword" placeholder="再次输入登录密码" allow-clear />
+         </a-form-item>
+
+        <a-form-item field="status" label="状态">
+          <a-select v-model="userForm.status" placeholder="选择用户状态">
+            <a-option value="active">Active (正常)</a-option>
+            <a-option value="disabled">Disabled (禁用)</a-option>
+          </a-select>
+        </a-form-item>
+
+        <a-form-item field="isAdmin" label="管理员权限">
+          <a-switch v-model="userForm.isAdmin" />
+        </a-form-item>
+      </a-form>
+    </a-modal>
+
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, computed } from 'vue';
+import {
+    Message,
+    Modal,
+    Table as ATable,
+    TableColumn as ATableColumn,
+    Spin as ASpin,
+    Tag as ATag,
+    Button as AButton,
+    Modal as AModal,
+    Form as AForm,
+    FormItem as AFormItem,
+    Input as AInput,
+    InputPassword as AInputPassword,
+    Select as ASelect,
+    Option as AOption,
+    Switch as ASwitch,
+    Space as ASpace,
+    InputSearch as AInputSearch
+} from '@arco-design/web-vue';
+import { IconRefresh, IconPlus, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
+import { debounce } from 'lodash-es';
+
+const users = ref([]);
+const isLoading = ref(false);
+const userModalVisible = ref(false);
+const isEditMode = ref(false);
+const currentUser = ref(null);
+const userFormRef = ref(null);
+const userForm = ref({});
+const isSubmitting = ref(false);
+const searchTerm = ref('');
+const selectedStatus = ref(undefined); // Filter state for status (undefined means all)
+const selectedIsAdmin = ref(undefined); // Filter state for isAdmin (undefined means all)
+
+// Computed property to count admin users
+const adminUsersCount = computed(() => {
+  return users.value.filter(user => user.isAdmin).length;
+});
+
+// Helper function to format date
+const formatDate = (dateString) => {
+  if (!dateString) return '';
+  const date = new Date(dateString);
+  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+// Helper to get initial form values
+const getInitialUserForm = () => ({
+  username: '',
+  email: '',
+  password: '',
+  confirmPassword: '', // Added for create validation
+  status: 'active',
+  isAdmin: false,
+});
+
+// --- Password confirmation validator --- 
+const validatePasswordMatch = (value, callback) => {
+    if (!isEditMode.value && value !== userForm.value.password) {
+        callback('两次输入的密码不一致');
+    }
+    callback();
+};
+
+// Combine rules (optional, can keep inline too)
+const formRules = computed(() => {
+    // Add more rules here if needed, e.g., password complexity
+    return {
+        // email: [{ required: !isEditMode.value, message: '请输入邮箱' }, { type: 'email', message: '请输入有效的邮箱格式' }],
+        // Other fields are handled inline for now
+    };
+});
+
+// Filtered users based on search term AND filters
+const filteredUsers = computed(() => {
+  // console.log('--- Recalculating filteredUsers ---'); 
+  const term = searchTerm.value.toLowerCase().trim();
+  const statusFilter = selectedStatus.value;
+  const isAdminFilter = selectedIsAdmin.value;
+
+  // console.log(`Filters - Search: '${term}', Status: ${statusFilter} (type: ${typeof statusFilter}), IsAdmin: ${isAdminFilter} (type: ${typeof isAdminFilter})`);
+
+  const filtered = users.value.filter((user, index) => {
+    const matchesSearch = !term || 
+                          user.username.toLowerCase().includes(term) ||
+                          (user.email && user.email.toLowerCase().includes(term));
+
+    // Treat undefined AND empty string as "no filter" for status
+    const matchesStatus = statusFilter === undefined || statusFilter === '' || user.status === statusFilter;
+    
+    // Treat undefined AND empty string as "no filter" for isAdmin
+    // Note: user.isAdmin is boolean, isAdminFilter might be boolean, undefined, or ''
+    const matchesAdmin = isAdminFilter === undefined || isAdminFilter === '' || user.isAdmin === isAdminFilter;
+
+    // Log first few items for detail
+    // if (index < 3) { 
+    //     console.log(`  User: ${user.username}, Status: ${user.status}, IsAdmin: ${user.isAdmin}`);
+    //     console.log(`    Search Match: ${matchesSearch}, Status Match: ${matchesStatus}, Admin Match: ${matchesAdmin}`);
+    //     console.log(`    Overall Match: ${matchesSearch && matchesStatus && matchesAdmin}`);
+    // }
+
+    return matchesSearch && matchesStatus && matchesAdmin;
+  });
+  // console.log(`Result: ${filtered.length} users filtered out of ${users.value.length}`);
+  return filtered;
+});
+
+// Fetch users function
+const fetchUsers = async () => {
+  isLoading.value = true;
+  const accessToken = localStorage.getItem('accessToken');
+  let isAdmin = false;
+  const userInfoString = localStorage.getItem('userInfo');
+  if (userInfoString) {
+      try {
+          isAdmin = JSON.parse(userInfoString).isAdmin;
+      } catch (e) {
+          console.error('Failed to parse userInfo', e);
+          Message.error('本地用户信息错误，请重新登录。');
+          localStorage.clear(); window.location.reload();
+          return;
+      }
+  }
+
+  if (!accessToken || !isAdmin) {
+      Message.error('未授权或非管理员，无法访问用户列表。请以管理员身份登录。');
+      isLoading.value = false;
+      localStorage.clear(); window.location.reload();
+      return;
+  }
+
+  try {
+    const response = await fetch('/api/users', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
+      if (response.status === 401 || response.status === 403) {
+        Message.error(`认证失败或无权限 (${response.status})，请重新登录。`);
+        localStorage.clear(); window.location.reload();
+      } else {
+        throw new Error(`获取用户列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
+      }
+      return;
+    }
+
+    const data = await response.json();
+    users.value = data;
+    // console.log('Fetched users:', data);
+
+  } catch (error) {
+    console.error('Error fetching users:', error);
+    Message.error(error.message || '加载用户列表时出错');
+    users.value = []; // Clear users on error
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+// Refresh users and clear search/filters
+const refreshUsers = () => {
+    searchTerm.value = '';
+    selectedStatus.value = undefined;
+    selectedIsAdmin.value = undefined;
+    fetchUsers();
+};
+
+// --- Modal Logic ---
+const openCreateModal = () => {
+    userForm.value = getInitialUserForm();
+    isEditMode.value = false;
+    currentUser.value = null;
+    userModalVisible.value = true;
+    userFormRef.value?.clearValidate(); // Clear validation on open
+};
+
+const editUser = (user) => {
+  currentUser.value = user;
+  // Reset password fields for edit mode
+  userForm.value = { 
+      ...user, 
+      password: '', // Clear password for edit
+      confirmPassword: '' // Clear confirm password
+  };
+  isEditMode.value = true;
+  userModalVisible.value = true;
+  userFormRef.value?.clearValidate(); // Clear validation on open
+};
+
+const handleCancel = () => {
+  userModalVisible.value = false;
+};
+
+// --- Handle Submit (Create/Update) ---
+const handleSubmit = async () => {
+  const validationResult = await userFormRef.value?.validate();
+  if (validationResult) return false;
+
+  isSubmitting.value = true;
+  const accessToken = localStorage.getItem('accessToken');
+  if (!accessToken) { Message.error('认证令牌丢失'); isSubmitting.value = false; return false; }
+
+  let url = '/api/users';
+  let method = 'POST';
+  const payload = { ...userForm.value };
+
+  if (isEditMode.value) {
+    // Update operation
+    url = `/api/users/${currentUser.value._id}`;
+    method = 'PUT';
+    // Don't send password if it's empty during edit
+    if (!payload.password) {
+        delete payload.password; 
+    }
+    delete payload.confirmPassword; // Never send confirmPassword on edit
+    delete payload.username; // Don't allow changing username on edit
+    // delete payload.email; // Don't allow changing email on edit for now (backend enforces unique?)
+
+  } else {
+    // Create operation - remove confirmPassword before sending
+    delete payload.confirmPassword;
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: method,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
+      let errorMessage = `${isEditMode.value ? '更新' : '创建'}失败: ${response.status}`;
+      if (errorData.message) {
+        if (response.status === 409) errorMessage = `用户名或邮箱 '${isEditMode.value ? currentUser.value.username : payload.username}' 可能已存在`;
+        else errorMessage += ` - ${errorData.message.replace(/^.+验证失败: /, '')}`;
+      }
+      throw new Error(errorMessage);
+    }
+
+    Message.success(`用户 ${isEditMode.value ? '更新' : '创建'}成功！`);
+    await fetchUsers(); // Refresh user list
+    userModalVisible.value = false;
+    return true;
+  } catch (error) {
+    Message.error(error.message);
+    return false;
+  } finally {
+    isSubmitting.value = false;
+  }
+};
+
+// --- Delete User Logic ---
+const confirmDeleteUser = (user) => {
+  Modal.confirm({
+    title: '确认删除',
+    content: `您确定要删除用户 "${user.username}" 吗？此操作不可恢复。`,
+    okText: '确认删除',
+    cancelText: '取消',
+    okButtonProps: {
+        status: 'danger'
+    },
+    onOk: async () => {
+      // Return a promise to handle loading state
+      return new Promise(async (resolve, reject) => {
+        const accessToken = localStorage.getItem('accessToken');
+        if (!accessToken) {
+          Message.error('认证令牌丢失，请重新登录。');
+          localStorage.clear(); window.location.reload();
+          reject(new Error('No access token'));
+          return;
+        }
+
+        try {
+          const response = await fetch(`/api/users/${user._id}`, {
+            method: 'DELETE',
+            headers: {
+              'Authorization': `Bearer ${accessToken}`,
+            }
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
+            let errorMessage = `删除用户失败: ${response.status}`;
+            if (errorData.message) {
+              errorMessage += ` - ${errorData.message}`;
+            }
+            // Handle specific errors like 403 (cannot delete self)
+            if (response.status === 401 || response.status === 403) {
+                errorMessage = `认证失败或无权限 (${response.status}) ${errorData.message ? '- ' + errorData.message : ''}。请重新登录或检查权限。`;
+                 // Consider logout only on 401? 403 might just be lack of permission
+                 // localStorage.clear(); window.location.reload();
+            }
+            throw new Error(errorMessage);
+          }
+
+          // Success
+          Message.success(`用户 "${user.username}" 已成功删除。`);
+          await fetchUsers(); // Refresh the list
+          resolve(true); // Resolve promise to close modal
+
+        } catch (error) {
+          console.error('Error deleting user:', error);
+          Message.error(error.message || '删除用户时发生错误');
+          reject(error); // Reject promise to potentially keep modal open or indicate error
+        }
+      });
+    },
+    onCancel: () => {
+      // console.log('Delete cancelled');
+    }
+  });
+};
+
+onMounted(() => {
+  fetchUsers(); // Fetch users when component is mounted
+});
+</script>
+
+<style scoped>
+/* Add specific styles for AdminPanel if needed */
+.arco-table-cell .arco-btn-text {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+.arco-form {
+    padding: 0 10px; /* Add some padding to the form */
+}
+</style> 

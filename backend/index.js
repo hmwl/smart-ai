@@ -1,0 +1,125 @@
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') }); // Specify .env path within backend
+const express = require('express');
+const cors = require('cors');
+const path = require('path'); // Keep path, might be needed for other things
+const mongoose = require('mongoose');
+const Application = require('./models/Application'); // Needed for /app route
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+// Middleware
+app.use(cors()); // Consider restricting CORS origin in production
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// --- Serve uploaded files statically ---
+// Make the /uploads directory accessible via HTTP
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// --- MongoDB Connection ---
+// Ensure we ONLY use MONGODB_URI
+const mongoConnectionString = process.env.MONGODB_URI;
+
+// Remove any potential leftover checks for the old MONGO_URI variable
+
+if (!mongoConnectionString) {
+  console.error('ERROR: MONGODB_URI was not found in .env file or process.env');
+  process.exit(1);
+}
+
+mongoose.connect(mongoConnectionString) // Use the correct variable
+  .then(() => console.log('MongoDB connected successfully.'))
+  .catch(err => {
+    console.error('MongoDB connection error:', err);
+    process.exit(1);
+  });
+
+// --- API Routes ---
+const userRoutes = require('./routes/users');
+const authRoutes = require('./routes/auth');
+const applicationRoutes = require('./routes/applications');
+const pageRoutes = require('./routes/pages');
+const articleRoutes = require('./routes/articles');
+const menuRoutes = require('./routes/menus'); // Import menu routes
+const templateRoutes = require('./routes/templates'); // Import template routes
+const publicRoutes = require('./routes/public'); // Import public routes
+const apiEntryRoutes = require('./routes/apiEntries'); // Restore API entry routes require
+const aiTypeRoutes = require('./routes/aiTypes'); // Import AI Type routes
+const aiApplicationRoutes = require('./routes/aiApplications'); // Import AI Application routes
+const creditTransactionRoutes = require('./routes/creditTransactions'); // Ensure this is present
+const creditSettingsRoutes = require('./routes/creditSettings');
+const promotionActivityRoutes = require('./routes/promotionActivities'); // Import Promotion Activity routes
+const paymentConfigRoutes = require('./routes/paymentConfig'); // Added for payment config
+// const transactionRoutes = require('./routes/transactions'); // This should be removed or commented out
+
+// Mount admin/authenticated routes
+app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/applications', applicationRoutes);
+app.use('/api/pages', pageRoutes);
+app.use('/api/articles', articleRoutes);
+app.use('/api/menus', menuRoutes); // Restore menu routes
+app.use('/api/templates', templateRoutes); // Restore template routes
+app.use('/api/external-apis', apiEntryRoutes); // Restore API entry routes mount
+app.use('/api/ai-types', aiTypeRoutes); // Mount AI Type routes
+app.use('/api/ai-applications', aiApplicationRoutes); // Mount AI Application routes
+app.use('/api/credit-transactions', creditTransactionRoutes); // Ensure this is present
+app.use('/api/credit-settings', creditSettingsRoutes);
+app.use('/api/promotion-activities', promotionActivityRoutes);
+// app.use('/api/transactions', transactionRoutes); // This should be removed or commented out
+
+// Mount public routes
+app.use('/api/public', publicRoutes); // Restore public routes
+app.use('/api/public/payment-config', paymentConfigRoutes); // Added for payment config
+
+// --- Special Backend Routes (like /app) ---
+// Handle /app?id=... specifically
+app.get('/app', async (req, res, next) => {
+  if (req.query.id) {
+    const appId = req.query.id;
+    try {
+      if (!mongoose.Types.ObjectId.isValid(appId)) {
+        return res.status(400).json({ message: 'Invalid Application ID format' });
+      }
+      const application = await Application.findOne({ _id: appId, status: 'active' });
+      if (application) {
+        console.log(`Serving config for application ID: ${appId}`);
+        return res.json(application.config || {});
+      } else {
+        return res.status(404).json({ message: 'Application not found or is inactive' });
+      }
+    } catch (error) {
+      console.error(`Error handling /app?id=${appId}:`, error);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+  } else {
+    // If just /app, maybe return an error or specific message?
+    res.status(400).json({ message: '/app route requires an id query parameter' });
+    // Or let it fall through if /app itself might be a valid API endpoint later
+    // next();
+    }
+});
+
+// --- REMOVED ALL FRONTEND STATIC SERVING AND SPA FALLBACKS ---
+
+// Optional: Add a simple root route for testing
+app.get('/', (req, res) => {
+    res.send('Backend API is running!');
+});
+
+// Optional: Catch-all for unhandled routes (404)
+app.use((req, res, next) => {
+    res.status(404).json({ message: 'Not Found' });
+});
+
+// Optional: Basic error handler
+app.use((err, req, res, next) => {
+    console.error('Unhandled Error:', err.stack || err);
+    res.status(500).json({ message: 'Internal Server Error' });
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Backend server listening on port ${PORT}`);
+});

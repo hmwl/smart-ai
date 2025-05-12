@@ -1,0 +1,43 @@
+{
+  "name": "smart-ai-frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:client": "vite src/client",
+    "dev:admin": "vite src/admin",
+    "build": "vite build",
+    "build:home": "vite build --outDir dist/home --base /",
+    "build:client": "vite build --outDir dist/client --base /client/",
+    "build:admin": "vite build --outDir dist/admin --base /admin/",
+    "build:miniapp": "vite build --outDir dist/miniapp --base /miniapp/",
+    "build:website": "vite build --outDir dist/website --base /website/",
+    "build:all": "npm run build:home && npm run build:client && npm run build:admin && npm run build:website && npm run build:miniapp",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@arco-design/web-vue": "^2.57.0",
+    "@types/uuid": "^10.0.0",
+    "@vueup/vue-quill": "^1.2.0",
+    "axios": "^1.9.0",
+    "date-fns": "^4.1.0",
+    "lodash-es": "^4.17.21",
+    "uuid": "^11.1.0",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.1",
+    "vuedraggable": "^4.1.0"
+  },
+  "devDependencies": {
+    "@arco-plugins/vite-vue": "^1.4.5",
+    "@tailwindcss/postcss": "^4.1.4",
+    "@tailwindcss/vite": "^4.1.5",
+    "@vitejs/plugin-vue": "^5.2.2",
+    "autoprefixer": "^10.4.21",
+    "less": "^4.3.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.4",
+    "vite": "^6.3.1",
+    "vite-plugin-style-import": "^2.0.0"
+  }
+}
