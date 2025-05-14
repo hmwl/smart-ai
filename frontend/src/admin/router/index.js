@@ -89,6 +89,19 @@ const routes = [
     component: () => import('../views/PromotionActivityManagement.vue'),
     meta: { title: '优惠活动管理' }
   },
+  // New Routes for Works Management
+  {
+    path: '/inspiration-market',
+    name: 'InspirationMarket',
+    component: () => import('../views/InspirationMarketPage.vue'), // To be created
+    meta: { title: '灵感市场', requiresAuth: true } // Assuming requiresAuth for admin pages
+  },
+  {
+    path: '/all-works',
+    name: 'AllWorks',
+    component: () => import('../views/AllWorksPage.vue'), // To be created
+    meta: { title: '所有作品', requiresAuth: true } // Assuming requiresAuth
+  },
   // Add a catch-all or 404 route if needed
   // { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundComponent }
 ];

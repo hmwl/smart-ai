@@ -83,6 +83,20 @@
                  模板管理
             </a-menu-item>
         </a-sub-menu>
+
+        <!-- Works Management Sub-menu -->
+        <a-sub-menu key="works-management-group">
+            <template #icon><icon-book /></template>
+            <template #title>作品管理</template>
+            <a-menu-item key="inspiration-market">
+                <template #icon><icon-bulb /></template>
+                灵感市场
+            </a-menu-item>
+            <a-menu-item key="all-works">
+                <template #icon><icon-select-all /></template>
+                所有作品
+            </a-menu-item>
+        </a-sub-menu>
         
         <!-- <a-menu-item key="settings">
           <template #icon><icon-settings /></template>
@@ -125,7 +139,10 @@ import {
   IconCodeSquare,
   IconGift,
   IconFire,
-  IconList
+  IconList,
+  IconBook,
+  IconBulb,
+  IconSelectAll
 } from '@arco-design/web-vue/es/icon';
 
 const router = useRouter();
@@ -152,6 +169,8 @@ const targetSelectedKey = computed(() => {
       'CreditTransactionManagement': 'credit-transactions',
       'CreditSettingsManagement': 'credit-settings',
       'PromotionActivityManagement': 'promotion-activity-management',
+      'InspirationMarket': 'inspiration-market',
+      'AllWorks': 'all-works',
   };
   let selected = keyMap[route.name] || 'user-management';
   
@@ -174,8 +193,11 @@ watch(targetSelectedKey, (newKey) => {
   if (['credit-transactions', 'credit-settings', 'promotion-activity-management'].includes(newKey)) {
       keysToOpen.push('credits-management-group');
   }
+  if (['inspiration-market', 'all-works'].includes(newKey)) {
+    keysToOpen.push('works-management-group');
+  }
 
-  if (JSON.stringify(keysToOpen) !== JSON.stringify(currentOpenKeys.value)) {
+  if (JSON.stringify(keysToOpen.sort()) !== JSON.stringify(currentOpenKeys.value.sort())) {
       currentOpenKeys.value = keysToOpen;
   }
 
@@ -199,7 +221,8 @@ const onClickMenuItem = (key) => {
     'credit-transactions': { name: 'CreditTransactionManagement' },
     'credit-settings': { name: 'CreditSettingsManagement' },
     'promotion-activity-management': { name: 'PromotionActivityManagement' },
-    // Add other routes
+    'inspiration-market': { name: 'InspirationMarket' },
+    'all-works': { name: 'AllWorks' },
   };
   if (routeMap[key]) {
     router.push(routeMap[key]);

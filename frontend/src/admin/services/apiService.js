@@ -97,4 +97,82 @@ apiService.interceptors.response.use(
   }
 );
 
+// --- Inspiration Category Service Methods ---
+// Get all categories
+apiService.getInspirationCategories = (params) => { // params: { populateWorks: true/false }
+  return apiService.get('/inspiration-categories', { params });
+};
+
+// Get a single category by ID
+apiService.getInspirationCategoryById = (id) => {
+  return apiService.get(`/inspiration-categories/${id}`);
+};
+
+// Create a new category
+apiService.createInspirationCategory = (data) => { // data: { name, description, order }
+  return apiService.post('/inspiration-categories', data);
+};
+
+// Update an existing category
+apiService.updateInspirationCategory = (id, data) => { // data: { name, description, works (array of work IDs), order }
+  return apiService.put(`/inspiration-categories/${id}`, data);
+};
+
+// Delete a category by ID
+apiService.deleteInspirationCategory = (id) => {
+  return apiService.delete(`/inspiration-categories/${id}`);
+};
+
+// Add a work to a category (Note: This specific endpoint might be deprecated if work management is done via updateCategory)
+apiService.addWorkToInspirationCategory = (categoryId, workId) => {
+  return apiService.post(`/inspiration-categories/${categoryId}/add-work`, { workId });
+};
+
+// Remove a work from a category (Note: This specific endpoint might be deprecated)
+apiService.removeWorkFromInspirationCategory = (categoryId, workId) => {
+  // The original service used POST, but a DELETE request might be more semantically correct for a removal.
+  // However, backend route for this was POST /:id/remove-work and then DELETE /:id/works/:workId
+  // Sticking to POST to match one of the original service's signatures, but backend should be checked.
+  // The backend route was DELETE /:id/works/:workId, using that.
+  return apiService.delete(`/inspiration-categories/${categoryId}/works/${workId}`);
+};
+  
+// Reorder categories
+apiService.reorderInspirationCategories = (orderedCategoryIds) => { // orderedCategoryIds is an array of category IDs
+  return apiService.put('/inspiration-categories/reorder-categories', { orderedCategoryIds });
+};
+
+// --- Work Service Methods ---
+// Get all works (paginated, filterable)
+apiService.getWorks = (params) => { // params: { page, limit, type, tags, creator, status, search }
+  return apiService.get('/works', { params });
+};
+
+// Get a single work by ID
+apiService.getWorkById = (id) => {
+  return apiService.get(`/works/${id}`);
+};
+
+// Create a new work (formData for file upload)
+apiService.createWork = (formData) => { // formData should include the file and other fields
+  // The request interceptor in apiService should already handle FormData Content-Type
+  return apiService.post('/works', formData);
+};
+
+// Update an existing work
+apiService.updateWork = (id, data) => { // data can be an object or formData if file is being replaced
+  // The request interceptor in apiService should already handle FormData Content-Type if data is FormData
+  return apiService.put(`/works/${id}`, data);
+};
+
+// Delete a work by ID
+apiService.deleteWork = (id) => {
+  return apiService.delete(`/works/${id}`);
+};
+
+// Batch update status of works
+apiService.batchUpdateWorkStatus = (workIds, status) => { // workIds is an array
+  return apiService.post('/works/batch-update-status', { workIds, status });
+};
+
 export default apiService; 

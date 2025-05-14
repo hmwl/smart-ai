@@ -171,6 +171,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
+import apiService from '@/admin/services/apiService';
 
 const users = ref([]);
 const isLoading = ref(false);
@@ -260,54 +261,58 @@ const filteredUsers = computed(() => {
 // Fetch users function
 const fetchUsers = async () => {
   isLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  let isAdmin = false;
-  const userInfoString = localStorage.getItem('userInfo');
-  if (userInfoString) {
-      try {
-          isAdmin = JSON.parse(userInfoString).isAdmin;
-      } catch (e) {
-          console.error('Failed to parse userInfo', e);
-          Message.error('本地用户信息错误，请重新登录。');
-          localStorage.clear(); window.location.reload();
-          return;
-      }
-  }
+  // const accessToken = localStorage.getItem('accessToken');
+  // let isAdmin = false;
+  // const userInfoString = localStorage.getItem('userInfo');
+  // if (userInfoString) {
+  //     try {
+  //         isAdmin = JSON.parse(userInfoString).isAdmin;
+  //     } catch (e) {
+  //         console.error('Failed to parse userInfo', e);
+  //         Message.error('本地用户信息错误，请重新登录。');
+  //         // localStorage.clear(); window.location.reload(); // Let apiService handle this
+  //         isLoading.value = false;
+  //         return;
+  //     }
+  // }
 
-  if (!accessToken || !isAdmin) {
-      Message.error('未授权或非管理员，无法访问用户列表。请以管理员身份登录。');
-      isLoading.value = false;
-      localStorage.clear(); window.location.reload();
-      return;
-  }
+  // if (!accessToken || !isAdmin) {
+  //     Message.error('未授权或非管理员，无法访问用户列表。请以管理员身份登录。');
+  //     isLoading.value = false;
+  //     // localStorage.clear(); window.location.reload(); // Let apiService handle this
+  //     return;
+  // }
 
   try {
-    const response = await fetch('/api/users', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
+    // const response = await fetch('/api/users', {
+    //   method: 'GET',
+    //   headers: {
+    //     'Authorization': `Bearer ${accessToken}`,
+    //     'Content-Type': 'application/json'
+    //   }
+    // });
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-      if (response.status === 401 || response.status === 403) {
-        Message.error(`认证失败或无权限 (${response.status})，请重新登录。`);
-        localStorage.clear(); window.location.reload();
-      } else {
-        throw new Error(`获取用户列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
-      }
-      return;
-    }
+    // if (!response.ok) {
+    //   const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
+    //   if (response.status === 401 || response.status === 403) {
+    //     Message.error(`认证失败或无权限 (${response.status})，请重新登录。`);
+    //     // localStorage.clear(); window.location.reload(); // Let apiService handle this
+    //   } else {
+    //     throw new Error(`获取用户列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
+    //   }
+    //   return;
+    // }
 
-    const data = await response.json();
-    users.value = data;
-    // console.log('Fetched users:', data);
+    // const data = await response.json();
+    const response = await apiService.get('/users');
+    users.value = response.data;
 
   } catch (error) {
     console.error('Error fetching users:', error);
-    Message.error(error.message || '加载用户列表时出错');
+    // Message.error(error.message || '加载用户列表时出错'); // apiService interceptor will handle
+    if (!error.response) {
+        Message.error('加载用户列表失败，请检查网络连接。');
+    }
     users.value = []; // Clear users on error
   } finally {
     isLoading.value = false;
@@ -351,60 +356,80 @@ const handleCancel = () => {
 // --- Handle Submit (Create/Update) ---
 const handleSubmit = async () => {
   const validationResult = await userFormRef.value?.validate();
-  if (validationResult) return false;
-
-  isSubmitting.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  if (!accessToken) { Message.error('认证令牌丢失'); isSubmitting.value = false; return false; }
-
-  let url = '/api/users';
-  let method = 'POST';
-  const payload = { ...userForm.value };
-
-  if (isEditMode.value) {
-    // Update operation
-    url = `/api/users/${currentUser.value._id}`;
-    method = 'PUT';
-    // Don't send password if it's empty during edit
-    if (!payload.password) {
-        delete payload.password; 
+  if (validationResult) { 
+    // Scroll to the first error field for better UX if validationResult is an object of errors
+    const firstErrorField = Object.keys(validationResult)[0];
+    if (firstErrorField && userFormRef.value?.scrollToField) {
+        userFormRef.value.scrollToField(firstErrorField);
     }
-    delete payload.confirmPassword; // Never send confirmPassword on edit
-    delete payload.username; // Don't allow changing username on edit
-    // delete payload.email; // Don't allow changing email on edit for now (backend enforces unique?)
-
-  } else {
-    // Create operation - remove confirmPassword before sending
-    delete payload.confirmPassword;
+    return false; 
   }
 
-  try {
-    const response = await fetch(url, {
-      method: method,
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
+  isSubmitting.value = true;
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-      let errorMessage = `${isEditMode.value ? '更新' : '创建'}失败: ${response.status}`;
-      if (errorData.message) {
-        if (response.status === 409) errorMessage = `用户名或邮箱 '${isEditMode.value ? currentUser.value.username : payload.username}' 可能已存在`;
-        else errorMessage += ` - ${errorData.message.replace(/^.+验证失败: /, '')}`;
-      }
-      throw new Error(errorMessage);
+  // Construct payload, removing confirmPassword and password if empty during edit
+  const payload = { ...userForm.value };
+  delete payload.confirmPassword; 
+
+  if (isEditMode.value && !payload.password) {
+    delete payload.password; // Don't send empty password for update if not changed
+  }
+  if (!isEditMode.value && !payload.password) {
+    Message.error('创建用户时密码不能为空');
+    isSubmitting.value = false;
+    return false;
+  }
+
+  // const accessToken = localStorage.getItem('accessToken');
+  // if (!accessToken) {
+  //   Message.error('认证失败，请重新登录。');
+  //   isSubmitting.value = false;
+  //   return false;
+  // }
+
+  try {
+    let response;
+    if (isEditMode.value) {
+      // response = await fetch(`/api/users/${currentUser.value._id}`, {
+      //   method: 'PUT',
+      //   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+      //   body: JSON.stringify(payload)
+      // });
+      response = await apiService.put(`/users/${currentUser.value._id}`, payload);
+    } else {
+      // response = await fetch('/api/users', {
+      //   method: 'POST',
+      //   headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+      //   body: JSON.stringify(payload)
+      // });
+      response = await apiService.post('/users', payload);
     }
 
-    Message.success(`用户 ${isEditMode.value ? '更新' : '创建'}成功！`);
-    await fetchUsers(); // Refresh user list
+    // if (!response.ok) {
+    //   const errorData = await response.json().catch(() => ({ message: '请求失败' }));
+    //   let detail = errorData.message || '';
+    //    if (errorData.errors) { // Handle validation errors from backend if any
+    //        detail = errorData.errors.map(e => e.msg).join('; ');
+    //    }
+    //   throw new Error(`${isEditMode.value ? '更新' : '创建'}用户失败: ${detail} (${response.status})`);
+    // }
+
+    Message.success(`用户 ${isEditMode.value ? '更新' : '创建'}成功`);
     userModalVisible.value = false;
-    return true;
+    await fetchUsers();
+
   } catch (error) {
-    Message.error(error.message);
-    return false;
+    console.error('Error submitting user:', error);
+    // Message.error(error.message || '处理用户时发生错误');
+    // Specific error handling for 409 (e.g. duplicate username/email)
+    if (error.response && error.response.status === 409) {
+        Message.error(`操作失败: ${error.response.data.message || '用户名或邮箱已存在'}`);
+    } else if (error.response && error.response.status === 400 && error.response.data.errors) {
+        const errorMessages = error.response.data.errors.map(e => e.msg).join('; ');
+        Message.error(`表单验证失败: ${errorMessages}`);
+    } else if (!error.response) {
+        Message.error('操作失败，请检查网络连接。');
+    }
   } finally {
     isSubmitting.value = false;
   }
@@ -412,62 +437,43 @@ const handleSubmit = async () => {
 
 // --- Delete User Logic ---
 const confirmDeleteUser = (user) => {
+  if (user.username === 'admin') {
+    Message.warning('不允许删除 \'admin\' 用户。');
+    return;
+  }
+  if (user.isAdmin && adminUsersCount.value <= 1) {
+    Message.warning('系统中至少需要保留一名管理员，无法删除此用户。');
+    return;
+  }
+
   Modal.confirm({
     title: '确认删除',
-    content: `您确定要删除用户 "${user.username}" 吗？此操作不可恢复。`,
+    content: `确定要删除用户 “${user.username}” 吗？此操作不可撤销。`,
     okText: '确认删除',
     cancelText: '取消',
-    okButtonProps: {
-        status: 'danger'
-    },
     onOk: async () => {
-      // Return a promise to handle loading state
-      return new Promise(async (resolve, reject) => {
-        const accessToken = localStorage.getItem('accessToken');
-        if (!accessToken) {
-          Message.error('认证令牌丢失，请重新登录。');
-          localStorage.clear(); window.location.reload();
-          reject(new Error('No access token'));
-          return;
+      // const accessToken = localStorage.getItem('accessToken');
+      // if (!accessToken) { Message.error('认证失败'); return; }
+      try {
+        // const response = await fetch(`/api/users/${user._id}`, {
+        //   method: 'DELETE',
+        //   headers: { 'Authorization': `Bearer ${accessToken}` }
+        // });
+        // if (!response.ok) {
+        //   const errorData = await response.json().catch(() => ({ message: '请求失败' }));
+        //   throw new Error(`删除用户失败: ${errorData.message || response.status}`);
+        // }
+        await apiService.delete(`/users/${user._id}`);
+        Message.success(`用户 “${user.username}” 删除成功`);
+        await fetchUsers(); // Refresh list
+      } catch (error) {
+        console.error('Error deleting user:', error);
+        // Message.error(error.message || '删除用户时发生错误');
+        if (!error.response) {
+            Message.error('删除用户失败，请检查网络连接。');
         }
-
-        try {
-          const response = await fetch(`/api/users/${user._id}`, {
-            method: 'DELETE',
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-            }
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-            let errorMessage = `删除用户失败: ${response.status}`;
-            if (errorData.message) {
-              errorMessage += ` - ${errorData.message}`;
-            }
-            // Handle specific errors like 403 (cannot delete self)
-            if (response.status === 401 || response.status === 403) {
-                errorMessage = `认证失败或无权限 (${response.status}) ${errorData.message ? '- ' + errorData.message : ''}。请重新登录或检查权限。`;
-                 // Consider logout only on 401? 403 might just be lack of permission
-                 // localStorage.clear(); window.location.reload();
-            }
-            throw new Error(errorMessage);
-          }
-
-          // Success
-          Message.success(`用户 "${user.username}" 已成功删除。`);
-          await fetchUsers(); // Refresh the list
-          resolve(true); // Resolve promise to close modal
-
-        } catch (error) {
-          console.error('Error deleting user:', error);
-          Message.error(error.message || '删除用户时发生错误');
-          reject(error); // Reject promise to potentially keep modal open or indicate error
-        }
-      });
-    },
-    onCancel: () => {
-      // console.log('Delete cancelled');
+        // apiService interceptor handles other errors.
+      }
     }
   });
 };

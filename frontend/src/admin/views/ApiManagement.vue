@@ -117,6 +117,7 @@ import {
     Tooltip as ATooltip
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconLaunch } from '@arco-design/web-vue/es/icon';
+import apiService from '@/admin/services/apiService';
 
 const apiEntries = ref([]);
 const isLoading = ref(false);
@@ -174,25 +175,35 @@ const formatDate = (dateString) => {
 // Fetch API Entries
 const fetchApiEntries = async () => {
   isLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  if (!accessToken) { Message.error('未认证'); isLoading.value = false; return; }
+  // const accessToken = localStorage.getItem('accessToken');
+  // if (!accessToken) { Message.error('未认证'); isLoading.value = false; return; }
 
   try {
-    const response = await fetch('/api/external-apis', {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        if (response.status === 401 || response.status === 403) {
-             Message.error(`无权限 (${response.status})`);
-        } else {
-            throw new Error(`获取 API 列表失败: ${response.status} ${errorData.message || ''}`);
-        }
-        return;
-    }
-    apiEntries.value = await response.json();
+    // const response = await fetch('/api/external-apis', {
+    //   headers: { 'Authorization': `Bearer ${accessToken}` }
+    // });
+    // if (!response.ok) {
+    //     const errorData = await response.json().catch(() => ({}));
+    //     if (response.status === 401 || response.status === 403) {
+    //          Message.error(`无权限 (${response.status})`);
+    //     } else {
+    //         throw new Error(`获取 API 列表失败: ${response.status} ${errorData.message || ''}`);
+    //     }
+    //     return;
+    // }
+    // apiEntries.value = await response.json();
+    const response = await apiService.get('/external-apis');
+    apiEntries.value = response.data;
   } catch (error) {
-    Message.error(error.message);
+    // Message.error(error.message);
+    // apiService interceptor will handle generic error messages.
+    // Specific messages can be kept if needed, or rely on interceptor.
+    console.error('Error fetching API entries:', error);
+    if (!error.response) { // Network or other request setup errors
+        Message.error('获取 API 列表失败，请检查网络连接。');
+    }
+    // For 4xx/5xx errors, the interceptor in apiService should show a message.
+    // If a specific message for this context is needed, it can be added here.
     apiEntries.value = []; 
   } finally {
     isLoading.value = false;
@@ -238,42 +249,56 @@ const handleSubmit = async () => {
     if (validationResult) return false;
 
     isSubmitting.value = true;
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) { Message.error('认证令牌丢失'); isSubmitting.value = false; return false; }
+    // const accessToken = localStorage.getItem('accessToken');
+    // if (!accessToken) { Message.error('认证令牌丢失'); isSubmitting.value = false; return false; }
 
-    let url = '/api/external-apis';
-    let method = 'POST';
+    // let url = '/api/external-apis';
+    // let method = 'POST';
     const payload = { ...apiForm.value };
     delete payload._id; // Remove frontend ID before sending
 
-    if (isEditMode.value) {
-        url = `/api/external-apis/${currentApiEntry.value._id}`;
-        method = 'PUT';
-    }
-
     try {
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-            let errorMessage = `${isEditMode.value ? '更新' : '创建'}失败: ${response.status}`;
-            if (errorData.message) {
-                 errorMessage += ` - ${errorData.message}`;
-             }
-            throw new Error(errorMessage);
-        }
+      let response;
+      if (isEditMode.value) {
+          // url = `/api/external-apis/${currentApiEntry.value._id}`;
+          // method = 'PUT';
+          response = await apiService.put(`/external-apis/${currentApiEntry.value._id}`, payload);
+      } else {
+          response = await apiService.post('/external-apis', payload);
+      }
+
+        // const response = await fetch(url, {
+        //     method: method,
+        //     headers: {
+        //         'Authorization': `Bearer ${accessToken}`,
+        //         'Content-Type': 'application/json'
+        //     },
+        //     body: JSON.stringify(payload)
+        // });
+        // if (!response.ok) {
+        //     const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
+        //     let errorMessage = `${isEditMode.value ? '更新' : '创建'}失败: ${response.status}`;
+        //     if (errorData.message) {
+        //          errorMessage += ` - ${errorData.message}`;
+        //      }
+        //     throw new Error(errorMessage);
+        // }
         Message.success(`API 条目 ${isEditMode.value ? '更新' : '创建'}成功！`);
         await fetchApiEntries();
         modalVisible.value = false;
         return true;
     } catch (error) {
-        Message.error(error.message);
+        // Message.error(error.message);
+        // apiService interceptor should handle most error messages.
+        console.error('Error submitting API entry:', error);
+        // Specific messages can be added here if the interceptor's message is too generic.
+        // For example, if a 409 Conflict has a specific meaning here:
+        if (error.response && error.response.status === 409) {
+            Message.error(`操作失败: ${error.response.data.message || '可能存在重复的API信息'}`);
+        } else if (!error.response) {
+            Message.error('操作失败，请检查网络连接。');
+        }
+        // The interceptor in apiService.js already shows a generic error for other cases.
         return false;
     } finally {
         isSubmitting.value = false;
@@ -281,38 +306,41 @@ const handleSubmit = async () => {
 };
 
 // --- Delete Logic ---
-const confirmDeleteApiEntry = (entry) => {
-    Modal.confirm({
-        title: '确认删除',
-        content: `确定要删除 API 条目 "${entry.platformName}" 吗？此操作不可恢复。`, 
-        okText: '确认删除',
-        cancelText: '取消',
-        okButtonProps: { status: 'danger' },
-        onOk: async () => {
-           return new Promise(async (resolve, reject) => {
-                const accessToken = localStorage.getItem('accessToken');
-                if (!accessToken) { Message.error('认证令牌丢失'); reject(new Error('No token')); return; }
-                 try {
-                    const response = await fetch(`/api/external-apis/${entry._id}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
-                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-                        let errorMessage = `删除失败: ${response.status}`;
-                        if (errorData.message) errorMessage += ` - ${errorData.message}`; 
-                        throw new Error(errorMessage);
-                    }
-                     Message.success(`API 条目 "${entry.platformName}" 已删除。`);
-                    await fetchApiEntries();
-                    resolve(true);
-                } catch (error) {
-                    Message.error(error.message || '删除时发生错误');
-                    reject(error);
-                }
-           });
+const confirmDeleteApiEntry = (record) => {
+  if (record.usageCount && record.usageCount > 0) {
+    Message.warning(`该API被 ${record.usageCount} 个应用使用，无法删除`);
+    return;
+  }
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除 API " ${record.platformName} " 吗？此操作不可撤销。`,
+    okText: '确认删除',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        // const accessToken = localStorage.getItem('accessToken');
+        // if (!accessToken) { Message.error('认证令牌丢失'); return; }
+        // const response = await fetch(`/api/external-apis/${record._id}`, {
+        //   method: 'DELETE',
+        //   headers: { 'Authorization': `Bearer ${accessToken}` },
+        // });
+        // if (!response.ok) {
+        //   const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
+        //   throw new Error(`删除失败: ${response.status} ${errorData.message || ''}`);
+        // }
+        await apiService.delete(`/external-apis/${record._id}`);
+        Message.success('API 删除成功');
+        fetchApiEntries(); // Refresh the list
+      } catch (error) {
+        // Message.error(error.message);
+        console.error('Error deleting API entry:', error);
+        if (!error.response) {
+             Message.error('删除失败，请检查网络连接。');
         }
-    });
+        // apiService interceptor handles other errors.
+      }
+    },
+  });
 };
 
 // --- Lifecycle Hook ---

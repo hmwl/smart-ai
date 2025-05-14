@@ -156,6 +156,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconLaunch } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
+import apiService from '@/admin/services/apiService';
 
 // Get pageId from route props
 const props = defineProps({
@@ -233,20 +234,13 @@ const formatDate = (dateString) => {
 
 // Fetch parent page title (optional but nice)
 const fetchPageTitle = async () => {
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) return; // Skip if no token
+    if (!props.pageId) return;
     try {
-        const response = await fetch(`/api/pages/${props.pageId}`, {
-             headers: { 'Authorization': `Bearer ${accessToken}` }
-        });
-        if (response.ok) {
-            const data = await response.json();
-            pageTitle.value = data.name || '未知页面';
-        } else {
-             console.error('Failed to fetch page title');
-        }
+        const response = await apiService.get(`/pages/${props.pageId}`);
+        pageTitle.value = response.data.name || '未知页面';
     } catch (error) {
         console.error('Error fetching page title:', error);
+        pageTitle.value = '加载页面标题失败'; // Keep a fallback
     }
 };
 
@@ -269,47 +263,19 @@ const fetchCollectionPages = async () => {
     }
 };
 
-// Fetch articles for the selected page (using props.pageId)
+// Fetch articles for the current page
 const fetchArticles = async () => {
-  if (!props.pageId) return; // Don't fetch if pageId isn't available
+  if (!props.pageId) return;
   isLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  // Basic auth check
-  const userInfoString = localStorage.getItem('userInfo');
-  let isAdmin = false;
-   if (userInfoString) {
-      try { isAdmin = JSON.parse(userInfoString).isAdmin; } catch (e) { /* ignore */ }
-  }
-  if (!accessToken || !isAdmin) {
-      Message.error('未授权或非管理员。');
-      isLoading.value = false;
-      localStorage.clear(); window.location.reload(); // Or redirect to login
-      return;
-  }
 
   try {
-    const response = await fetch(`/api/articles?pageId=${props.pageId}`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-      if (response.status === 401 || response.status === 403) {
-        Message.error(`认证失败或无权限 (${response.status})。`);
-        localStorage.clear(); window.location.reload();
-      } else {
-        throw new Error(`获取文章列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
-      }
-      return;
-    }
-    const data = await response.json();
-    articles.value = data;
+    const response = await apiService.get('/articles', { params: { pageId: props.pageId } });
+    articles.value = response.data;
   } catch (error) {
     console.error('Error fetching articles:', error);
-    Message.error(error.message || '加载文章列表时出错');
+    if (!error.response) {
+        Message.error('加载文章列表失败，请检查网络。');
+    }
     articles.value = [];
   } finally {
     isLoading.value = false;
@@ -399,83 +365,54 @@ const handleCancel = () => {
 };
 
 const handleSubmit = async () => {
-    const validationResult = await articleFormRef.value?.validate();
-    if (validationResult) return false;
-
-    isSubmitting.value = true;
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-        Message.error('认证令牌丢失');
-        isSubmitting.value = false;
-        localStorage.clear(); window.location.reload();
+    const isValid = await articleFormRef.value?.validate();
+    if (isValid) { // If validation fails (returns an error object)
+        const firstErrorField = Object.keys(isValid)[0];
+        if (firstErrorField && isValid[firstErrorField][0] && isValid[firstErrorField][0].message) {
+             Message.error(`表单验证失败: ${isValid[firstErrorField][0].message}`);
+        }
+        if(firstErrorField) articleFormRef.value?.scrollToField(firstErrorField); 
         return false;
     }
 
-    let url = '/api/articles';
-    let method = 'POST';
-    // Add pageId for creation
-    const payload = {
-        ...articleForm.value,
-        ...( !isEditMode.value && { page: props.pageId } ) 
+    isSubmitting.value = true;
+    let payload = { 
+        ...articleForm.value, 
+        page: props.pageId // Ensure pageId is included
     };
 
-    // --- Revision: Map frontend status to backend status ---
-    if (payload.status === 'published') {
-        payload.status = 'active';
-    } else if (payload.status === 'draft') {
-        payload.status = 'disabled';
-    } else {
-        // Fallback or error if status is unexpected, though select should prevent this
-        payload.status = 'disabled'; // Default to disabled if somehow invalid
-    }
-    // --- End Revision ---
-
-    // Ensure publishDate is formatted correctly or null
-    if (payload.publishDate) {
-        // Try converting the string/object from date picker to a Date object
-        const date = new Date(payload.publishDate);
-        // Check if the conversion resulted in a valid date
-        if (!isNaN(date.getTime())) {
-            payload.publishDate = date.toISOString();
-        } else {
-            // If the string from picker was invalid, set to null
-            console.warn('Invalid date value received from date picker:', payload.publishDate);
-            payload.publishDate = null;
-        }
-    } else {
-        payload.publishDate = null; // Ensure it's null if empty
+    // If slug is empty, backend should generate it, so send undefined or remove it.
+    if (payload.slug === '') {
+        delete payload.slug; // Or set to undefined, depending on backend handling
     }
 
-    if (isEditMode.value) {
-        url = `/api/articles/${currentArticle.value._id}`;
-        method = 'PUT';
+    // Remove _id from payload for creation
+    if (!isEditMode.value) {
+        delete payload._id;
     }
 
     try {
-        const response = await fetch(url, {
-            method: method,
-            headers: {
-                'Authorization': `Bearer ${accessToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(payload)
-        });
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-            let errorMessage = `${isEditMode.value ? '更新' : '创建'}文章失败: ${response.status}`;
-            if (errorData.message) errorMessage += ` - ${errorData.message.replace('创建文章验证失败: ','').replace('更新文章验证失败: ','')}`;
-            if (response.status === 401 || response.status === 403) errorMessage = `无权限 (${response.status})。`;
-            // Handle 409 conflict if title uniqueness is enforced later
-            throw new Error(errorMessage);
+        let response;
+        if (isEditMode.value && currentArticle.value?._id) {
+            response = await apiService.put(`/articles/${currentArticle.value._id}`, payload);
+        } else {
+            response = await apiService.post('/articles', payload);
         }
-        Message.success(`文章 ${isEditMode.value ? '更新' : '创建'}成功！`);
-        await fetchArticles();
+
+        Message.success(`文章 ${isEditMode.value ? '更新' : '创建'}成功`);
         modalVisible.value = false;
-        return true;
+        await fetchArticles();
     } catch (error) {
-        console.error(`Error ${isEditMode.value ? 'updating' : 'creating'} article:`, error);
-        Message.error(error.message || `处理文章时发生错误`);
-        return false;
+        console.error('Error submitting article:', error);
+        // Specific error handling for 409 (e.g. duplicate slug)
+        if (error.response && error.response.status === 409) {
+            Message.error(`操作失败: ${error.response.data.message || '文章标识符(slug)可能已存在'}`);
+        } else if (error.response && error.response.status === 400 && error.response.data.errors) {
+            const errorMessages = error.response.data.errors.map(e => e.msg).join('; ');
+            Message.error(`表单验证失败: ${errorMessages}`);
+        } else if (!error.response) {
+            Message.error('操作失败，请检查网络连接。');
+        }
     } finally {
         isSubmitting.value = false;
     }
@@ -485,35 +422,20 @@ const handleSubmit = async () => {
 const confirmDeleteArticle = (article) => {
     Modal.confirm({
         title: '确认删除',
-        content: `您确定要删除文章 "${article.title}" 吗？`, // Simpler message
+        content: `确定要删除文章 “${article.title}” 吗？此操作不可撤销。`,
         okText: '确认删除',
         cancelText: '取消',
-        okButtonProps: { status: 'danger' },
         onOk: async () => {
-           return new Promise(async (resolve, reject) => {
-                const accessToken = localStorage.getItem('accessToken');
-                if (!accessToken) { Message.error('认证令牌丢失'); reject(new Error('No token')); return; }
-                try {
-                    const response = await fetch(`/api/articles/${article._id}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
-                    if (!response.ok) {
-                       const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-                       let errorMessage = `删除文章失败: ${response.status}`;
-                       if (errorData.message) errorMessage += ` - ${errorData.message}`;
-                       if (response.status === 401 || response.status === 403) errorMessage = `无权限 (${response.status})。`;
-                       throw new Error(errorMessage);
-                    }
-                    Message.success(`文章 "${article.title}" 已删除。`);
-                    await fetchArticles();
-                    resolve(true);
-                } catch (error) {
-                    console.error('Error deleting article:', error);
-                    Message.error(error.message || '删除文章时发生错误');
-                    reject(error);
+            try {
+                await apiService.delete(`/articles/${article._id}`);
+                Message.success(`文章 “${article.title}” 删除成功`);
+                await fetchArticles();
+            } catch (error) {
+                console.error('Error deleting article:', error);
+                if (!error.response) {
+                    Message.error('删除文章失败，请检查网络。');
                 }
-           });
+            }
         }
     });
 };

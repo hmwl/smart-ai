@@ -74,4 +74,14 @@ apiClient.interceptors.response.use(
   }
 );
 
+// Add public inspiration market methods here
+apiClient.getPublicInspirationCategories = () => {
+  return apiClient.get('/public/market/inspiration-categories'); // Path relative to API_BASE_URL ('/api')
+};
+
+apiClient.getPublicWorks = (params) => {
+  // params: { category_id, page, limit, search }
+  return apiClient.get('/public/market/works', { params }); // Path relative to API_BASE_URL ('/api')
+};
+
 export default apiClient; 

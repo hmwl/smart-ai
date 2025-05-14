@@ -11,12 +11,11 @@ const routes = [
   {
     path: '/',
     component: ClientLayout,
-    // redirect: '/ai-applications', // Default page after login
     children: [
       {
         path: '',
         name: 'ClientHomeRedirect',
-        redirect: '/inspiration'
+        redirect: '/inspiration' // Default to InspirationPage
       },
       {
         path: 'ai-applications',
@@ -25,10 +24,10 @@ const routes = [
         meta: { title: 'AI 应用' }
       },
       {
-        path: 'inspiration', // New route for Inspiration Gallery
+        path: 'inspiration', // Route for Inspiration Gallery / Market
         name: 'Inspiration',
-        component: () => import('../views/InspirationPage.vue'), // This file will be created next
-        meta: { title: '灵感画廊' } // Publicly accessible, no requiresAuth
+        component: () => import('../views/InspirationPage.vue'), 
+        meta: { title: '灵感画廊' } // Publicly accessible
       },
       {
         path: 'creation-history',

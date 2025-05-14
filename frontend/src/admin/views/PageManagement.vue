@@ -223,6 +223,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconLaunch, IconEdit, IconDelete, IconList, IconEye } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
+import apiService from '@/admin/services/apiService';
 
 const router = useRouter();
 
@@ -289,17 +290,14 @@ const filteredPages = computed(() => {
 // Fetch all templates
 const fetchTemplates = async () => {
   isTemplatesLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  if (!accessToken) { Message.error('未认证'); isTemplatesLoading.value = false; return; }
-
   try {
-    const response = await fetch('/api/templates', {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    if (!response.ok) throw new Error(`获取模板列表失败: ${response.status}`);
-    allTemplates.value = await response.json();
+    const response = await apiService.get('/templates', { params: { type: 'page' } });
+    allTemplates.value = response.data;
   } catch (error) {
-    Message.error(error.message);
+    console.error('Error fetching templates:', error);
+    if (!error.response) {
+        Message.error('加载模板列表失败，请检查网络连接。');
+    }
     allTemplates.value = [];
   } finally {
     isTemplatesLoading.value = false;
@@ -347,47 +345,14 @@ const formatDate = (dateString) => {
 // Fetch pages function
 const fetchPages = async () => {
   isLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  const userInfoString = localStorage.getItem('userInfo');
-  let isAdmin = false;
-   if (userInfoString) {
-      try { isAdmin = JSON.parse(userInfoString).isAdmin; } catch (e) { /* ignore */ }
-  }
-
-  if (!accessToken || !isAdmin) {
-      Message.error('未授权或非管理员。');
-      isLoading.value = false;
-      localStorage.clear(); window.location.reload();
-      return;
-  }
-
   try {
-    const response = await fetch('/api/pages', {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-      if (response.status === 401 || response.status === 403) {
-        Message.error(`认证失败或无权限 (${response.status})，请重新登录。`);
-        localStorage.clear(); window.location.reload();
-      } else {
-        throw new Error(`获取页面列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
-      }
-      return;
-    }
-
-    const data = await response.json();
-    pages.value = data;
-    // console.log('Fetched pages:', data);
-
+    const response = await apiService.get('/pages');
+    pages.value = response.data;
   } catch (error) {
     console.error('Error fetching pages:', error);
-    Message.error(error.message || '加载页面列表时出错');
+    if (!error.response) {
+        Message.error('获取页面列表失败，请检查网络连接。');
+    }
     pages.value = []; // Clear on error
   } finally {
     isLoading.value = false;
@@ -435,117 +400,79 @@ const handleCancel = () => {
 };
 
 const handleSubmit = async () => {
-  const validationResult = await pageFormRef.value?.validate();
-  if (validationResult) {
-    const firstErrorField = Object.keys(validationResult)[0];
-    if (firstErrorField && validationResult[firstErrorField][0] && validationResult[firstErrorField][0].message) {
-        Message.error(`表单验证失败: ${validationResult[firstErrorField][0].message}`);
+  const isValid = await pageFormRef.value?.validate();
+  if (!isValid) {
+    isSubmitting.value = true;
+    let payload = { ...pageForm.value };
+
+    // Ensure content is handled correctly (Quill gives HTML string directly if contentType is html)
+    // If pageForm.content is a Delta object, convert it: payload.content = JSON.stringify(pageForm.value.content);
+    // For single page, content is already string (HTML)
+    // For collection, content is a description string
+
+    // Remove _id from payload if it's for creation, not needed by backend then
+    if (!isEditMode.value) {
+      delete payload._id;
     }
-    if(firstErrorField) pageFormRef.value?.scrollToField(firstErrorField);
-    return false; 
-  }
 
-  isSubmitting.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  if (!accessToken) {
-    Message.error('认证令牌丢失，请重新登录。');
-    isSubmitting.value = false;
-    localStorage.clear(); 
-    window.location.reload();
-    return false;
-  }
-
-  let url = '/api/pages';
-  let method = 'POST';
-  
-  const payload = JSON.parse(JSON.stringify(pageForm.value));
-
-  if (payload.type === 'single') {
-    delete payload.templateList;
-    delete payload.templateItem;
-  } else if (payload.type === 'collection') {
-    delete payload.templateSingle;
-  }
-  
-  if (isEditMode.value && currentPage.value?._id) {
-    url = `/api/pages/${currentPage.value._id}`;
-    method = 'PUT';
-  } 
-
-  try {
-    const response = await fetch(url, {
-      method: method,
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-      let errorMessage = `${isEditMode.value ? '更新' : '创建'}页面失败: ${response.status}`;
-      if (errorData.message) {
-         if (response.status === 409 && errorData.message.includes('route')) {
-             errorMessage = `路由 '${payload.route}' 已存在，请使用其他路由。`;
-         } else if (response.status === 409 && errorData.message.includes('name')) {
-             errorMessage = `页面名称 '${payload.name}' 已存在，请使用其他名称。`;
-         } else {
-             errorMessage += ` - ${errorData.message.replace(/^.+验证失败: /, '')}`;
-         }
+    try {
+      let response;
+      if (isEditMode.value && currentPage.value?._id) {
+        response = await apiService.put(`/pages/${currentPage.value._id}`, payload);
+      } else {
+        response = await apiService.post('/pages', payload);
       }
-      throw new Error(errorMessage);
-    }
 
-    Message.success(`页面 ${isEditMode.value ? '更新' : '创建'}成功！`);
-    await fetchPages(); 
-    modalVisible.value = false; 
-    return true;
-  } catch (error) {
-    Message.error(error.message);
-    return false;
-  } finally {
-    isSubmitting.value = false;
+      Message.success(`页面 ${isEditMode.value ? '更新' : '创建'}成功`);
+      modalVisible.value = false;
+      await fetchPages();
+    } catch (error) {
+      console.error('Error submitting page:', error);
+      // apiService interceptor should handle most errors.
+      // Add specific handling if needed, e.g., for 409 conflict on route name
+        if (error.response && error.response.status === 409) {
+            Message.error(`操作失败: ${error.response.data.message || '页面路由可能已存在'}`);
+        } else if (error.response && error.response.status === 400 && error.response.data.errors) {
+            const errorMessages = error.response.data.errors.map(e => e.msg).join('; ');
+            Message.error(`表单验证失败: ${errorMessages}`);
+        } else if (!error.response) {
+            Message.error('操作失败，请检查网络连接。');
+        }
+    } finally {
+      isSubmitting.value = false;
+    }
   }
 };
 
 // --- Delete Page Logic ---
 const confirmDeletePage = (page) => {
-    Modal.confirm({
-        title: '确认删除',
-        content: `您确定要删除 "${page.name}" 吗？此操作不可恢复。`,
-        okText: '确认删除',
-        cancelText: '取消',
-        okButtonProps: { status: 'danger' },
-        onOk: async () => {
-           return new Promise(async (resolve, reject) => {
-                const accessToken = localStorage.getItem('accessToken');
-                 if (!accessToken) {
-                    Message.error('认证令牌丢失'); reject(new Error('No token')); return;
-                }
-                 try {
-                    const response = await fetch(`/api/pages/${page._id}`, {
-                        method: 'DELETE',
-                        headers: { 'Authorization': `Bearer ${accessToken}` }
-                    });
-                     if (!response.ok) {
-                        const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-                        let errorMessage = `删除失败: ${response.status}`;
-                        if (errorData.message) { errorMessage += ` - ${errorData.message}`; }
-                        if (response.status === 401 || response.status === 403) { errorMessage = `无权限 (${response.status})。`; }
-                        throw new Error(errorMessage);
-                    }
-                     Message.success(`"${page.name}" 已删除。`);
-                    await fetchPages();
-                    resolve(true);
-                } catch (error) {
-                    console.error('Error deleting page:', error);
-                    Message.error(error.message || '删除时发生错误');
-                    reject(error);
-                }
-           });
+  if (page.route === '/' || page.route === '/index') {
+    Message.warning('首页不允许删除。');
+    return;
+  }
+  if (page.type === 'collection' && page.articleCount > 0) {
+    Message.warning(`该集合页面包含 ${page.articleCount} 篇文章，无法直接删除。请先清空文章。`);
+    return;
+  }
+
+  Modal.confirm({
+    title: '确认删除',
+    content: `确定要删除页面 “${page.name}” (路径: ${page.route}) 吗？此操作不可撤销。`,
+    okText: '确认删除',
+    cancelText: '取消',
+    onOk: async () => {
+      try {
+        await apiService.delete(`/pages/${page._id}`);
+        Message.success(`页面 “${page.name}” 删除成功`);
+        await fetchPages();
+      } catch (error) {
+        console.error('Error deleting page:', error);
+        if (!error.response) {
+            Message.error('删除失败，请检查网络连接。');
         }
-    });
+      }
+    }
+  });
 };
 
 // Updated manageList to navigate
