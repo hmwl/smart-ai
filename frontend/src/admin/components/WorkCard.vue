@@ -111,6 +111,7 @@
 import { computed } from 'vue';
 import { Card as ACard, CardMeta as ACardMeta, Avatar as AAvatar, TypographyParagraph as ATypographyParagraph, TypographyText as ATypographyText, Tag as ATag, Tooltip as ATooltip } from '@arco-design/web-vue';
 import { IconVideoCamera, IconVoice, IconCodepen, IconFile, IconEye, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
+import { getStaticAssetBaseUrl } from '../services/apiService.js';
 
 const props = defineProps({
   work: {
@@ -147,13 +148,7 @@ const fullSourceUrl = computed(() => {
     return props.work.sourceUrl;
   }
 
-  let backendOrigin = '';
-  if (import.meta.env.DEV) {
-    backendOrigin = 'http://localhost:3000';
-  } else {
-    backendOrigin = window.location.origin;
-  }
-
+  let backendOrigin = getStaticAssetBaseUrl();
   const path = props.work.sourceUrl.startsWith('/') ? props.work.sourceUrl : `/${props.work.sourceUrl}`;
   return `${backendOrigin}${path}`;
 });

@@ -5,26 +5,23 @@
         <router-link to="/" class="logo">APP LOGO</router-link>
         <nav class="main-nav">
           <router-link to="/inspiration" class="nav-item">灵感市场</router-link>
-          <router-link to="/ai-applications" class="nav-item">AI 应用</router-link>
-          <router-link to="/creation-history" class="nav-item">创作历史</router-link>
+          <a href="#" @click.prevent="handleAuthLinkClick($event, '/ai-applications', false)" class="nav-item">AI 应用</a>
+          <a href="#" @click.prevent="handleAuthLinkClick($event, '/creation-history', true)" class="nav-item">创作历史</a>
         </nav>
       </div>
 
       <div class="header-right">
         <span v-if="userData">积分：{{ userData.creditsBalance ?? 'N/A' }}</span>
+        <span v-else-if="!isLoggedIn"></span>
         <span v-else>积分：加载中...</span>
 
-        <a-dropdown @select="handleDropdownSelect" trigger="click">
-          <div class="user-profile-trigger" v-if="userData">
+        <a-dropdown @select="handleDropdownSelect" trigger="click" v-if="isLoggedIn && userData">
+          <div class="user-profile-trigger">
             <a-avatar :size="32" shape="circle" style="margin-right: 8px; background-color: #165dff;">
               {{ userData.nickname ? userData.nickname.charAt(0).toUpperCase() : (userData.username ? userData.username.charAt(0).toUpperCase() : 'U') }}
             </a-avatar>
             <span class="nickname">{{ userData.nickname || userData.username }}</span>
             <icon-down />
-          </div>
-          <div v-else class="user-profile-trigger">
-             <a-avatar :size="32" shape="circle" style="margin-right: 8px;"><icon-user /></a-avatar>
-             <span>验证身份...</span>
           </div>
           <template #content>
             <a-doption value="account-info">
@@ -35,7 +32,7 @@
               <template #icon><icon-gift /></template>
               充值
             </a-doption>
-            <a-doption value="credit-transactions" @click="navigateToPath('/credit-transactions')">
+            <a-doption value="credit-transactions" @click="handleAuthLinkClick($event, '/credit-transactions', true)">
               <template #icon><icon-unordered-list /></template>
               消费记录
             </a-doption>
@@ -45,6 +42,13 @@
             </a-doption>
           </template>
         </a-dropdown>
+        <a-button type="primary" @click="openLoginModal" v-else-if="!isLoggedIn && !loadingUserData">
+          登录
+        </a-button>
+        <div v-else class="user-profile-trigger">
+          <a-avatar :size="32" shape="circle" style="margin-right: 8px;"><icon-user /></a-avatar>
+          <span>验证身份...</span>
+        </div>
       </div>
     </header>
     <main class="client-main-content">
@@ -65,16 +69,22 @@
       @update:user-data="userData = $event"
       @top-up-success="handleTopUpSuccess"
     />
+    <login-modal
+      v-model:visible="loginModalVisible"
+      @login-success="handleLoginSuccess"
+      @switch-to-register="openRegisterModalInstead"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, onMounted, computed, provide } from 'vue';
+import { useRouter, useRoute } from 'vue-router';
 import apiClient from '../services/apiService';
 import {
   Avatar as AAvatar,
   Dropdown as ADropdown,
+  Button as AButton,
   Tag as ATag,
   Divider as ADivider,
   Message,
@@ -89,29 +99,93 @@ import {
   IconExport,
   IconUnorderedList
 } from '@arco-design/web-vue/es/icon';
-import { router } from '../router'; // Assuming router is exported from here
+import { router as globalRouter } from '../router'; // Renamed to avoid conflict with useRouter instance
 import AccountInfoModal from '../components/AccountInfoModal.vue'; // 使用专门的账户信息弹窗组件
 import TopUpModal from '../components/TopUpModal.vue'; // 使用专门的充值弹窗组件
+import LoginModal from '../components/LoginModal.vue'; // Import LoginModal
 
+const appRouter = useRouter(); // Instance from useRouter for navigation
+const route = useRoute();
 const userData = ref(null);
 const accountInfoModalVisible = ref(false);
 const topUpModalVisible = ref(false);
+const loginModalVisible = ref(false);
+const registerModalVisible = ref(false);
+const loadingUserData = ref(false);
+
+// Reactive state for the access token to ensure isLoggedIn updates reactively
+const clientAccessToken = ref(localStorage.getItem('clientAccessToken'));
+
+const isLoggedIn = computed(() => !!clientAccessToken.value);
 
 const fetchCurrentUserData = async () => {
+  if (!isLoggedIn.value) {
+    userData.value = null; // Clear user data if not logged in
+    return;
+  }
+  loadingUserData.value = true;
   try {
     const response = await apiClient.get('/auth/me');
     userData.value = response.data;
   } catch (error) {
     console.error('Failed to fetch user data for layout:', error);
-    // Optional: Message.error('无法加载用户信息');
+    if (error.response && error.response.status === 401) {
+        localStorage.removeItem('clientAccessToken');
+        localStorage.removeItem('clientUserInfo');
+        clientAccessToken.value = null; // Update reactive token state
+        userData.value = null;
+    }
+  } finally {
+    loadingUserData.value = false;
   }
 };
 
 const logout = () => {
   localStorage.removeItem('clientAccessToken');
   localStorage.removeItem('clientUserInfo');
+  clientAccessToken.value = null; // Update reactive token state
   userData.value = null;
-  router.push({ name: 'ClientLogin' });
+  if (route.meta.requiresAuth) {
+      appRouter.push('/'); 
+  } else {
+      window.location.reload(); 
+  }
+};
+
+function openLoginModal() { 
+  registerModalVisible.value = false;
+  loginModalVisible.value = true;
+}
+
+const openRegisterModalInstead = () => {
+  loginModalVisible.value = false;
+  registerModalVisible.value = true;
+  Message.info('注册功能待实现。');
+};
+
+const handleLoginSuccess = (loggedInUser) => {
+  // LoginModal already set the token in localStorage.
+  // Update our reactive ref for the token to trigger UI changes.
+  clientAccessToken.value = localStorage.getItem('clientAccessToken'); 
+  // userData.value = loggedInUser; // Direct set from modal emit
+  loginModalVisible.value = false;
+  fetchCurrentUserData(); // Fetch fresh user data, including potentially updated credits etc.
+  
+  if (route.query.redirect) {
+    appRouter.push(route.query.redirect);
+  } 
+};
+
+const handleAuthLinkClick = (event, path, requiresAuth = false) => {
+  if (requiresAuth && !isLoggedIn.value) {
+    event.preventDefault();
+    openLoginModal();
+  } else {
+    // For non-auth or already logged-in scenarios, let router handle it.
+    // If we used <router-link>, this else block wouldn't be strictly needed
+    // as the default behavior would take over. Since we use <a>, we push.
+    appRouter.push(path);
+  }
 };
 
 const handleDropdownSelect = (value) => {
@@ -127,14 +201,11 @@ const handleDropdownSelect = (value) => {
     case 'logout':
       performLogout();
       break;
+    // 'credit-transactions' is now handled by handleAuthLinkClick in the template
     default:
       // console.log('Dropdown item selected with no specific action:', value);
       break;
   }
-};
-
-const navigateToPath = (path) => {
-  router.push({ path: path });
 };
 
 const performLogout = () => {
@@ -159,8 +230,16 @@ const handleTopUpSuccess = (data) => {
 };
 
 onMounted(() => {
-  fetchCurrentUserData();
+  // Initialize clientAccessToken from localStorage on mount
+  clientAccessToken.value = localStorage.getItem('clientAccessToken');
+  if (isLoggedIn.value) {
+    fetchCurrentUserData();
+  }
 });
+
+// Provide openLoginModal to child components if needed globally
+provide('isLoggedIn', isLoggedIn);
+provide('openLoginModal', openLoginModal);
 </script>
 
 <style scoped>

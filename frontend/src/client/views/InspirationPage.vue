@@ -1,6 +1,6 @@
 <template>
   <div class="inspiration-page p-4 md:p-6">
-    <a-page-header title="灵感画廊" class="mb-4 page-header-custom">
+    <a-page-header title="灵感市场" class="mb-4 page-header-custom">
       <template #subtitle>
         <p>在这里发现和探索由 AI 生成的艺术作品和创意灵感。</p>
       </template>
@@ -272,15 +272,14 @@ watch(selectedFilterTags, () => {
 
 <style scoped>
 .inspiration-page {
-  min-height: calc(100vh - 60px);
-  /* color: #fff; */ /* Removed to use theme colors */
+  color: #fff;
 }
 
 .page-header-custom {
-  /* background-color: var(--custom-bg-secondary); */ /* Use theme variables if available or remove for default */
+  background-color: var(--custom-bg-secondary);
   border-radius: 4px;
   padding: 16px 24px;
-  /* border: 1px solid rgba(255, 255, 255, 0.1); */ /* Use theme variables for borders */
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Removed specific dark theme text colors to allow theme to control them */

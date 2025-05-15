@@ -1,12 +1,14 @@
 <template>
-  <div class="ai-app-detail-page">
+  <div class="ai-app-detail-page p-4 md:p-6">
     <a-page-header title="AI 应用详情" @back="goBack" class="page-header-custom">
       <template #subtitle>
         <span v-if="application && !loading">{{ application.name }}</span>
       </template>
       <template #extra>
-        <a-button @click="goBack">返回列表</a-button>
-        <a-button type="primary" v-if="application && application.status === 'active'" @click="launchApp">启动应用</a-button>
+        <div class="flex items-center gap-2">
+          <a-button @click="goBack">返回列表</a-button>
+          <a-button type="primary" v-if="application && application.status === 'active'" @click="launchApp">启动应用</a-button>
+        </div>
       </template>
     </a-page-header>
 
@@ -92,9 +94,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, inject } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import apiClient from '../services/apiService';
+import apiClient, { getStaticAssetBaseUrl } from '../services/apiService';
 import { Message, PageHeader as APageHeader, Spin as ASpin, Alert as AAlert, Card as ACard, Empty as AEmpty, Tag as ATag, Divider as ADivider, List as AList, ListItem as AListItem, ListItemMeta as AListItemMeta, Space as ASpace, Button as AButton, Modal } from '@arco-design/web-vue';
 import {
   IconApps, IconTag, IconLayers, IconStar, IconBookmark, IconSchedule, IconHistory
@@ -102,6 +104,10 @@ import {
 
 const route = useRoute();
 const router = useRouter();
+
+// Inject isLoggedIn and openLoginModal from ClientLayout
+const isLoggedIn = inject('isLoggedIn');
+const openLoginModal = inject('openLoginModal');
 
 const application = ref(null);
 const loading = ref(true);
@@ -111,9 +117,9 @@ const appId = computed(() => route.params.id);
 
 const getImageUrl = (relativePath) => {
   if (!relativePath) return '';
-  const backendOrigin = import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin;
+  const staticAssetBase = getStaticAssetBaseUrl();
   const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  return `${backendOrigin}${path}`;
+  return `${staticAssetBase}${path}`;
 };
 
 const formatDate = (dateString) => {
@@ -151,6 +157,13 @@ const goBack = () => {
 };
 
 const launchApp = async () => {
+  if (!isLoggedIn.value) {
+    if (openLoginModal) {
+      openLoginModal();
+    }
+    return;
+  }
+
   if (!application.value) return;
 
   const appName = application.value.name;
@@ -199,14 +212,14 @@ onMounted(() => {
 
 <style scoped>
 .ai-app-detail-page {
-  /* Inherits dark theme from App.vue */
-  padding: 0; /* PageHeader will have its own padding */
+  color: #fff;
 }
 
 .page-header-custom {
-  background-color: var(--dark-bg-secondary);
-  border-bottom: 1px solid var(--dark-border-color);
+  background-color: var(--custom-bg-secondary);
+  border-radius: 4px;
   padding: 16px 24px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .page-header-custom .arco-page-header-title,
@@ -346,6 +359,10 @@ onMounted(() => {
 
 .error-display {
   padding: 24px;
+}
+
+.arco-space-item {
+  margin: 0;
 }
 
 </style> 

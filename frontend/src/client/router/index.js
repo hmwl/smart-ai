@@ -27,7 +27,7 @@ const routes = [
         path: 'inspiration', // Route for Inspiration Gallery / Market
         name: 'Inspiration',
         component: () => import('../views/InspirationPage.vue'), 
-        meta: { title: '灵感画廊' } // Publicly accessible
+        meta: { title: '灵感市场' } // Publicly accessible
       },
       {
         path: 'creation-history',
@@ -53,7 +53,7 @@ const routes = [
         path: 'ai-applications/:id', // New Detail Route
         name: 'AiApplicationDetail',
         component: () => import('../views/AiApplicationDetailPage.vue'),
-        meta: { requiresAuth: true, title: 'AI 应用详情' },
+        meta: { title: 'AI 应用详情' },
         props: true // Pass route params as props to the component
       }
     ]
@@ -73,7 +73,20 @@ router.beforeEach((to, from, next) => {
 
   if (to.matched.some(record => record.meta.requiresAuth)) {
     if (!isAuthenticated) {
-      next({ name: 'ClientLogin', query: { redirect: to.fullPath } });
+      // Instead of redirecting to a login page, we prevent navigation.
+      // The UI should handle prompting for login via a modal.
+      console.warn(`Navigation to "${to.path}" blocked, requires authentication.`);
+      // Emitting an event or calling a store action to open a global login modal
+      // would be a more robust solution here for handling direct URL access to protected routes.
+      // For now, we rely on UI elements to trigger login.
+      // If `from.name` is null, it might be a direct entry, consider redirecting to home or login page still.
+      if (from.name) {
+        next(false); // Cancel navigation if coming from another route
+      } else {
+        // Optional: For direct URL access to a protected route, you might still want to redirect to login or home.
+        // Or, rely on the component itself to show a login prompt if it detects no user.
+        next({ name: 'ClientHomeRedirect' }); // Redirect to a safe public page like home/inspiration
+      }
     } else {
       next();
     }

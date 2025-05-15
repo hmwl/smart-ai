@@ -8,7 +8,7 @@
     @cancel="handleCancel"
     width="700px"
   >
-    <a-spin :spinning="loading" tip="加载中...">
+    <a-spin :spinning="loading" tip="加载中..." style="width: 100%;">
       <div v-if="error" class="error-message">
         <a-alert type="error" :message="error" banner />
       </div>
@@ -304,17 +304,6 @@ const handleCancel = () => {
 </script>
 
 <style scoped>
-.user-details-container {
-  padding: 16px 0;
-}
-
-.edit-mode-forms {
-  margin-bottom: 24px;
-}
-
-.form-section {
-  margin-bottom: 16px;
-}
 
 .action-buttons {
   display: flex;

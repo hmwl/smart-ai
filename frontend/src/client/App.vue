@@ -47,4 +47,36 @@ body {
 .custom-primary-button:hover {
   background-color: var(--custom-accent-hover);
 }
+
+/* Override browser autofill styles to match dark theme */
+
+/* Specific targeting for Arco Design inputs and modern autofill selectors */
+.arco-input-wrapper input:-webkit-autofill,
+.arco-input-wrapper input:-webkit-autofill:hover,
+.arco-input-wrapper input:-webkit-autofill:focus,
+.arco-input-wrapper input:-webkit-autofill:active,
+.arco-input-wrapper input:-internal-autofill-selected { 
+    -webkit-text-fill-color: var(--color-text-1) !important;
+    background-color: var(--color-fill-2) !important; 
+    -webkit-box-shadow: 0 0 0 1000px var(--color-fill-2) inset !important;
+    transition: background-color 5000s ease-in-out 0s;
+    font-family: inherit;
+    font-size: inherit;
+    caret-color: var(--color-text-1);
+}
+
+/* General fallback and modern autofill selector */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active,
+input:-internal-autofill-selected { 
+    -webkit-text-fill-color: var(--color-text-1) !important;
+    background-color: var(--color-fill-2) !important; 
+    -webkit-box-shadow: 0 0 0 1000px var(--color-fill-2) inset !important;
+    transition: background-color 5000s ease-in-out 0s;
+    font-family: inherit;
+    font-size: inherit;
+    caret-color: var(--color-text-1);
+}
 </style>

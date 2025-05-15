@@ -89,8 +89,9 @@
 import { computed } from 'vue';
 import { Modal as AModal, Descriptions as ADescriptions, DescriptionsItem as ADescriptionsItem, Avatar as AAvatar, Tag as ATag, TypographyParagraph as ATypographyParagraph, Empty as AEmpty } from '@arco-design/web-vue';
 import { IconCodepen, IconFile } from '@arco-design/web-vue/es/icon';
+import { getStaticAssetBaseUrl } from '../services/apiService.js';
 
-const API_BASE_URL = 'http://localhost:3000'; // TODO: Consider moving to env variables
+const API_BASE_URL = getStaticAssetBaseUrl();
 
 const props = defineProps({
   visible: Boolean,

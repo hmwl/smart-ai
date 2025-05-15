@@ -56,7 +56,7 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import apiClient from '../services/apiService';
+import apiClient, { getStaticAssetBaseUrl } from '../services/apiService';
 import {
   Message,
   List as AList,
@@ -77,9 +77,9 @@ const router = useRouter();
 
 const getImageUrl = (relativePath) => {
   if (!relativePath) return '';
-  const backendOrigin = import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin;
+  const staticAssetBase = getStaticAssetBaseUrl();
   const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
-  return `${backendOrigin}${path}`;
+  return `${staticAssetBase}${path}`;
 };
 
 const fetchApplications = async () => {

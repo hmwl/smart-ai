@@ -2,12 +2,20 @@ import axios from 'axios';
 import { Message } from '@arco-design/web-vue'; // Assuming Arco Design is used for messages
 import { router } from '../router'; // Assuming router is exported from here
 
+// Define the development backend origin
+const DEV_BACKEND_ORIGIN = 'http://localhost:3000';
+
+// Function to get the base URL for static assets
+export const getStaticAssetBaseUrl = () => {
+  return import.meta.env.DEV ? DEV_BACKEND_ORIGIN : window.location.origin;
+};
+
 // Base URL for client-specific APIs
 // Adjust if your client APIs are served from a different path e.g. /api/client
-const API_BASE_URL = '/api'; 
+const API_BASE_PATH = '/api'; 
 
 const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: API_BASE_PATH,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -76,18 +84,18 @@ apiClient.interceptors.response.use(
 
 // Add public inspiration market methods here
 apiClient.getPublicInspirationCategories = () => {
-  return apiClient.get('/public/market/inspiration-categories'); // Path relative to API_BASE_URL ('/api')
+  return apiClient.get('/public/market/inspiration-categories'); // Path relative to API_BASE_PATH ('/api')
 };
 
 apiClient.getPublicWorks = (params) => {
   // params: { category_id, page, limit, search, tags }
-  return apiClient.get('/public/market/works', { params }); // Path relative to API_BASE_URL ('/api')
+  return apiClient.get('/public/market/works', { params }); // Path relative to API_BASE_PATH ('/api')
 };
 
 // Added new method to fetch tags with counts for the public market
 apiClient.getPublicMarketTags = (params) => {
   // params: { category_id, search, active_tags }
-  return apiClient.get('/public/market/tags', { params }); // Path relative to API_BASE_URL ('/api')
+  return apiClient.get('/public/market/tags', { params }); // Path relative to API_BASE_PATH ('/api')
 };
 
 export default apiClient; 
