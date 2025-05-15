@@ -1,14 +1,19 @@
 import axios from 'axios';
 import { Message } from '@arco-design/web-vue';
 
-// Determine the base URL dynamically
-// In development (using Vite dev server), proxy should handle /api
-// In production, assume API is at the same origin under /api
-// Set the base URL to always include /api
-const API_BASE_URL = '/api'; 
+// Define the development backend origin
+const DEV_BACKEND_ORIGIN = 'http://localhost:3000';
+
+// Function to get the base URL for static assets
+export const getStaticAssetBaseUrl = () => {
+  return import.meta.env.DEV ? DEV_BACKEND_ORIGIN : window.location.origin;
+};
+
+// Determine the base path for API calls (remains relative for proxy)
+const API_BASE_PATH = '/api'; 
 
 const apiService = axios.create({
-  baseURL: API_BASE_URL, // Base URL is now /api
+  baseURL: API_BASE_PATH, // Base URL is /api, relies on current origin + proxy
   timeout: 10000, // Request timeout
   headers: {
     'Content-Type': 'application/json',
@@ -173,6 +178,27 @@ apiService.deleteWork = (id) => {
 // Batch update status of works
 apiService.batchUpdateWorkStatus = (workIds, status) => { // workIds is an array
   return apiService.post('/works/batch-update-status', { workIds, status });
+};
+
+// --- API Entry (External APIs) Service Methods ---
+apiService.getApiEntries = (params) => { // params could include filters like status, platformType
+  return apiService.get('/api-entries', { params });
+};
+
+apiService.createApiEntry = (data) => {
+  return apiService.post('/api-entries', data);
+};
+
+apiService.updateApiEntry = (id, data) => {
+  return apiService.put(`/api-entries/${id}`, data);
+};
+
+apiService.deleteApiEntry = (id) => {
+  return apiService.delete(`/api-entries/${id}`);
+};
+
+apiService.getApiPlatformTypes = () => {
+  return apiService.get('/api-entries/platform-types');
 };
 
 export default apiService; 

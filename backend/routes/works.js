@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Work = require('../models/Work');
+const Tag = require('../models/Tag');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
@@ -89,18 +90,39 @@ router.post('/', upload.single('workFile'), async (req, res) => {
 // GET /api/works - Get all works (with pagination and filtering)
 router.get('/', async (req, res) => {
   try {
-    const { page = 1, limit = 10, type, tags, creator, status, search } = req.query;
+    const { page = 1, limit = 10, type, tags, creator, status, search, startDate, endDate } = req.query;
     const query = {};
 
     if (type) query.type = type;
     if (status) query.status = status;
     if (creator) query.creator = creator;
-    if (tags) query.tags = { $in: tags.split(',') }; // Example: tags=tag1,tag2
+    if (tags) {
+      const tagsArray = tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+      if (tagsArray.length > 0) {
+        query.tags = { $in: tagsArray };
+      }
+    }
     if (search) {
         query.$or = [
             { title: { $regex: search, $options: 'i' } },
             { prompt: { $regex: search, $options: 'i' } }
         ];
+    }
+
+    // Add date range filtering for createdAt field
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        // Frontend sends ISO string, which is good. new Date() will parse it correctly.
+        // Assumes startDate from picker is the beginning of the day.
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        const endOfDay = new Date(endDate);
+        // Set to the end of the selected day to include all items from that day
+        endOfDay.setUTCHours(23, 59, 59, 999);
+        query.createdAt.$lte = endOfDay;
+      }
     }
 
     const works = await Work.find(query)
@@ -140,10 +162,20 @@ router.get('/:id', async (req, res) => {
 router.put('/:id', upload.single('workFile'), async (req, res) => {
   try {
     const { title, type, prompt, tags, status, thumbnailUrl, sourceUrl: bodySourceUrl } = req.body;
+    
+    // Fetch original work to compare tags later
+    const originalWork = await Work.findById(req.params.id);
+    if (!originalWork) {
+      return res.status(404).json({ message: 'Work not found for fetching original tags.' });
+    }
+    const originalTags = originalWork.tags ? [...originalWork.tags] : [];
+
     const updateData = { title, type, prompt, status, thumbnailUrl };
 
+    let newTags = [];
     if (tags) {
-        updateData.tags = Array.isArray(tags) ? tags : JSON.parse(tags);
+        newTags = Array.isArray(tags) ? tags : JSON.parse(tags); // Assuming tags from frontend are already string array
+        updateData.tags = newTags;
     }
 
     let determinedType = type;
@@ -166,7 +198,30 @@ router.put('/:id', upload.single('workFile'), async (req, res) => {
     Object.keys(updateData).forEach(key => updateData[key] === undefined && delete updateData[key]);
 
     const updatedWork = await Work.findByIdAndUpdate(req.params.id, updateData, { new: true });
-    if (!updatedWork) return res.status(404).json({ message: 'Work not found' });
+    if (!updatedWork) return res.status(404).json({ message: 'Work not found during update' });
+
+    // Opportunistic Tag Cleanup
+    if (originalTags.length > 0) {
+        const currentNewTags = updatedWork.tags ? updatedWork.tags.map(t => t.toLowerCase().trim()) : [];
+        const tagsThatWereRemoved = originalTags.filter(ot => 
+            !currentNewTags.includes(ot.toLowerCase().trim())
+        );
+
+        if (tagsThatWereRemoved.length > 0) {
+            for (const tagName of tagsThatWereRemoved) {
+                try {
+                    const worksUsingTag = await Work.countDocuments({ tags: tagName });
+                    if (worksUsingTag === 0) {
+                        await Tag.deleteOne({ name: tagName.toLowerCase() }); // Ensure case-insensitivity for safety
+                    }
+                } catch (tagCleanupError) {
+                    console.error(`Error during cleanup of tag "${tagName}":`, tagCleanupError);
+                    // Do not let tag cleanup error fail the main work update response
+                }
+            }
+        }
+    }
+
     res.json(updatedWork);
   } catch (error) {
     console.error("Error updating work:", error);
@@ -180,6 +235,8 @@ router.delete('/:id', async (req, res) => {
     const work = await Work.findById(req.params.id);
     if (!work) return res.status(404).json({ message: 'Work not found' });
 
+    const tagsOfDeletedWork = work.tags ? [...work.tags] : [];
+
     // Optional: Delete the actual file from /uploads
     if (work.sourceUrl && work.sourceUrl.startsWith('/uploads/')) {
       const filePath = path.join(__dirname, '../', work.sourceUrl);
@@ -191,6 +248,24 @@ router.delete('/:id', async (req, res) => {
     // if (work.thumbnailUrl && work.thumbnailUrl.startsWith('/uploads/') && work.thumbnailUrl !== work.sourceUrl) { ... }
 
     await Work.findByIdAndDelete(req.params.id);
+
+    // Opportunistic Tag Cleanup after deleting a work
+    if (tagsOfDeletedWork.length > 0) {
+        console.log('Work deleted, checking if its tags are orphaned:', tagsOfDeletedWork);
+        for (const tagName of tagsOfDeletedWork) {
+            try {
+                const worksUsingTag = await Work.countDocuments({ tags: tagName });
+                if (worksUsingTag === 0) {
+                    console.log(`Tag "${tagName}" is no longer used by any work after work deletion. Deleting from Tag collection.`);
+                    await Tag.deleteOne({ name: tagName.toLowerCase() }); // Ensure case-insensitivity
+                }
+            } catch (tagCleanupError) {
+                console.error(`Error during cleanup of tag "${tagName}" after work deletion:`, tagCleanupError);
+                // Do not let tag cleanup error fail the main work deletion response
+            }
+        }
+    }
+
     res.json({ message: 'Work deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting work', error: error.message });

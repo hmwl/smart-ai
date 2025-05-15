@@ -376,7 +376,6 @@ onMounted(() => {
 
 <style scoped>
 .tooltip-content {
-  max-width: 350px; /* Adjust as needed */
   padding: 8px 12px;
   border-radius: 4px;
 }

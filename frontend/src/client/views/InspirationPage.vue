@@ -13,15 +13,46 @@
         </a-tab-pane>
       </a-tabs>
 
-      <div class="search-container">
+      <div class="search-and-selected-tags-container mb-6">
         <a-input-search 
           v-model="searchTerm"
           placeholder="搜索作品标题、描述、标签..."
-          style="width: 300px;"
+          style="width: 300px; margin-bottom: 10px;"
           allow-clear
-          @input="debouncedFetchWorks"
-          @clear="fetchWorksFirstPage"
+          @input="debouncedSearchTermChange"
+          @search="fetchWorksFirstPage" 
+          @clear="handleSearchClear"
         />
+        <!-- Selected Filter Tags Display -->
+        <div v-if="selectedFilterTags.length > 0" class="selected-tags-display mt-2">
+          <span class="mr-2">筛选标签:</span>
+          <a-tag 
+            v-for="tag in selectedFilterTags" 
+            :key="tag" 
+            closable 
+            @close="removeFilterTag(tag)"
+            class="mr-1"
+          >
+            {{ tag }}
+          </a-tag>
+        </div>
+      </div>
+
+      <!-- Available Tags Filter -->
+      <div v-if="availableTags.length > 0" class="available-tags-container mb-4">
+        <a-spin :loading="loadingTags">
+          <div class="tags-list-wrapper">
+            <a-tag 
+              v-for="tag in availableTags" 
+              :key="tag.name" 
+              @click="handleTagClick(tag.name)"
+              :color="selectedFilterTags.includes(tag.name) ? 'blue' : undefined"
+              class="cursor-pointer m-1"
+            >
+              {{ tag.name }} ({{ tag.count }})
+            </a-tag>
+          </div>
+        </a-spin>
       </div>
 
       <a-spin :loading="loadingWorks" style="width: 100%;">
@@ -30,7 +61,6 @@
             v-for="work in works" 
             :key="work._id" 
             :work="work"
-            :show-details-button="false"
             :show-edit-button="false"
             :show-delete-button="false"
             :show-delete-from-category="false"
@@ -39,7 +69,7 @@
           />
         </div>
         <a-empty v-else-if="!loadingWorks && !initialLoad" description="该分类下暂无公开作品，或无匹配搜索结果。" />
-        <a-empty v-else-if="!loadingWorks && initialLoad && categories.length === 0" description="市场暂无公开作品。" />
+        <a-empty v-else-if="!loadingWorks && initialLoad && categories.length === 0 && availableTags.length === 0" description="市场暂无公开作品或标签。" />
       </a-spin>
 
       <div v-if="totalPages > 1" class="pagination-container">
@@ -62,13 +92,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, watch, computed } from 'vue';
 import { 
   PageHeader as APageHeader,
   Tabs as ATabs, TabPane as ATabPane,
   Spin as ASpin, Empty as AEmpty, Pagination as APagination, Message,
   InputSearch as AInputSearch,
-  Button as AButton
+  Button as AButton,
+  Tag as ATag
 } from '@arco-design/web-vue';
 import { debounce } from 'lodash-es';
 import apiClient from '../services/apiService';
@@ -91,6 +122,11 @@ const totalPages = ref(0);
 const workDetailModalVisible = ref(false);
 const workForDetailModal = ref(null);
 
+// New state variables for tag filtering
+const availableTags = ref([]);
+const selectedFilterTags = ref([]);
+const loadingTags = ref(false);
+
 const fetchCategories = async () => {
   loadingCategories.value = true;
   try {
@@ -105,14 +141,33 @@ const fetchCategories = async () => {
   }
 };
 
+const fetchAvailableTags = async () => {
+  loadingTags.value = true;
+  try {
+    const params = {
+      category_id: selectedCategoryId.value === 'all' ? undefined : selectedCategoryId.value,
+      search: searchTerm.value || undefined,
+      active_tags: selectedFilterTags.value.length > 0 ? selectedFilterTags.value.join(',') : undefined
+    };
+    const response = await apiClient.getPublicMarketTags(params);
+    availableTags.value = response.data;
+  } catch (error) {
+    Message.error('获取可用标签列表失败: ' + (error.response?.data?.message || error.message));
+    availableTags.value = [];
+  } finally {
+    loadingTags.value = false;
+  }
+};
+
 const fetchWorks = async (page = 1) => {
   loadingWorks.value = true;
   try {
     const params = {
-      category_id: selectedCategoryId.value,
+      category_id: selectedCategoryId.value === 'all' ? undefined : selectedCategoryId.value,
       page,
       limit: pageSize.value,
       search: searchTerm.value || undefined,
+      tags: selectedFilterTags.value.length > 0 ? selectedFilterTags.value.join(',') : undefined,
     };
     const response = await apiClient.getPublicWorks(params);
     works.value = response.data.works;
@@ -131,24 +186,40 @@ const fetchWorks = async (page = 1) => {
   }
 };
 
-const debouncedFetchWorks = debounce(() => {
-    currentPage.value = 1; 
-    fetchWorks(1);
-}, 500);
-
 const fetchWorksFirstPage = () => {
     currentPage.value = 1;
     fetchWorks(1);
-}
+};
+
+const debouncedFetchWorksAndTags = debounce(() => {
+    fetchWorksFirstPage();
+    fetchAvailableTags();
+}, 500);
+
+const debouncedSearchTermChange = debounce(() => {
+  fetchWorksFirstPage();
+  fetchAvailableTags();
+}, 500);
+
+const handleSearchClear = () => {
+  searchTerm.value = '';
+  fetchWorksFirstPage();
+  fetchAvailableTags();
+};
 
 const handleCategoryChange = (key) => {
   selectedCategoryId.value = key;
-  searchTerm.value = ''; 
+  searchTerm.value = ''; // Reset search term when category changes
+  selectedFilterTags.value = []; // Reset selected tags when category changes
   fetchWorksFirstPage();
+  fetchAvailableTags();
 };
 
 const handlePageChange = (page) => {
   fetchWorks(page);
+  // Tag counts might slightly change if works are distributed across pages differently,
+  // but for simplicity, we might not reload tags on mere page change unless desired.
+  // fetchAvailableTags(); 
 };
 
 const showWorkDetailsModal = (work) => {
@@ -156,34 +227,92 @@ const showWorkDetailsModal = (work) => {
   workDetailModalVisible.value = true;
 };
 
+const handleTagClick = (tagName) => {
+  const index = selectedFilterTags.value.indexOf(tagName);
+  if (index > -1) {
+    selectedFilterTags.value.splice(index, 1);
+  } else {
+    selectedFilterTags.value.push(tagName);
+  }
+  // No need to call fetchWorksFirstPage and fetchAvailableTags here, 
+  // as the watcher for selectedFilterTags will handle it.
+};
+
+const removeFilterTag = (tagName) => {
+  const index = selectedFilterTags.value.indexOf(tagName);
+  if (index > -1) {
+    selectedFilterTags.value.splice(index, 1);
+  }
+  // Watcher will also handle this.
+};
+
 onMounted(async () => {
   await fetchCategories();
+  // Initial fetch for works and tags will be triggered by watchers if needed,
+  // or can be called directly. For simplicity, let's call them directly after categories.
   await fetchWorksFirstPage(); 
+  await fetchAvailableTags();
 });
+
+// Watch for changes in filters to refetch data
+watch(selectedCategoryId, () => {
+  // This is handled by handleCategoryChange now to also reset other filters
+});
+
+watch(searchTerm, () => {
+  // This is handled by debouncedSearchTermChange
+});
+
+watch(selectedFilterTags, () => {
+  fetchWorksFirstPage();
+  fetchAvailableTags();
+}, { deep: true });
 
 </script>
 
 <style scoped>
 .inspiration-page {
   min-height: calc(100vh - 60px);
-  color: #fff;
+  /* color: #fff; */ /* Removed to use theme colors */
 }
 
 .page-header-custom {
-  background-color: var(--custom-bg-secondary);
+  /* background-color: var(--custom-bg-secondary); */ /* Use theme variables if available or remove for default */
   border-radius: 4px;
   padding: 16px 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  /* border: 1px solid rgba(255, 255, 255, 0.1); */ /* Use theme variables for borders */
 }
 
-.page-header-custom .arco-page-header-title,
-.page-header-custom .arco-page-header-subtitle,
-.page-header-custom .arco-page-header-subtitle p {
-  color: var(--dark-text-primary);
-}
+/* Removed specific dark theme text colors to allow theme to control them */
+/* .page-header-custom .arco-page-header-title, ... */
 
 .inspiration-page-main-content {
-  padding: 24px;
+  padding: 0px 24px 24px 24px; /* Adjusted padding */
+}
+
+.available-tags-container {
+  /* Max 3 lines of tags. Adjust max-height based on your tag size and margins. */
+  /* Assuming line-height of a-tag is around 22px and margin is 4px top/bottom (total ~30px per line) */
+  max-height: calc(3 * (22px + 8px)); /* (tag-height + vertical-margins) * 3 */
+  overflow-y: auto;
+  border: 1px solid var(--color-border-2);
+  padding: 8px;
+  border-radius: var(--border-radius-medium);
+}
+
+.tags-list-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px; /* For spacing between tags */
+}
+
+.search-and-selected-tags-container {
+  /* Container for search and selected tags display */
+}
+
+.selected-tags-display {
+  /* Styles for the display area of selected filter tags */
+  padding: 8px 0;
 }
 
 .works-grid {
@@ -196,7 +325,7 @@ onMounted(async () => {
   /* Styling for work cards if needed */
 }
 
-.search-container {
+.search-container { /* This class seems unused now, can be removed if .search-and-selected-tags-container covers it */
   display: flex;
   justify-content: flex-start; 
   margin-bottom: 1.5rem;
@@ -207,4 +336,17 @@ onMounted(async () => {
   display: flex;
   justify-content: center;
 }
+
+.cursor-pointer {
+  cursor: pointer;
+}
+
+/* Adjust Arco component styles if needed */
+:deep(.arco-tabs-nav-tab-list) {
+  /* Styles for tab list if needed */
+}
+:deep(.arco-tabs-tab) {
+  /* Styles for individual tabs if needed */
+}
+
 </style>

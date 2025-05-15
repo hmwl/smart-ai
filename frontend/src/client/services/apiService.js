@@ -80,8 +80,14 @@ apiClient.getPublicInspirationCategories = () => {
 };
 
 apiClient.getPublicWorks = (params) => {
-  // params: { category_id, page, limit, search }
+  // params: { category_id, page, limit, search, tags }
   return apiClient.get('/public/market/works', { params }); // Path relative to API_BASE_URL ('/api')
+};
+
+// Added new method to fetch tags with counts for the public market
+apiClient.getPublicMarketTags = (params) => {
+  // params: { category_id, search, active_tags }
+  return apiClient.get('/public/market/tags', { params }); // Path relative to API_BASE_URL ('/api')
 };
 
 export default apiClient; 

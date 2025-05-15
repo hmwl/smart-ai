@@ -180,7 +180,7 @@ router.post('/client/login', async (req, res) => {
 
     // 2. 检查用户是否为客户端用户 (isAdmin === false)
     if (user.isAdmin) {
-      return res.status(403).json({ message: '此接口仅供客户端用户登录' });
+      return res.status(403).json({ message: '用户名或密码错误' });
     }
 
     // 3. 检查用户状态是否为 active

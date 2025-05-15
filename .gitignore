@@ -1,5 +1,6 @@
 # SpecStory explanation file
 .specstory/
 /backend/uploads/*
+*.DS_Store
 # SpecStory explanation file
 .specstory/.what-is-this.md

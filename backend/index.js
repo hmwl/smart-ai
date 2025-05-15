@@ -62,6 +62,9 @@ const worksRoutes = require('./routes/works');
 const inspirationCategoriesRoutes = require('./routes/inspirationCategories');
 const publicInspirationMarketRoutes = require('./routes/publicInspirationMarketRoutes'); // Added for public market
 
+// Import the new tags router
+const tagsRouter = require('./routes/tags');
+
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
@@ -70,7 +73,7 @@ app.use('/api/pages', pageRoutes);
 app.use('/api/articles', articleRoutes);
 app.use('/api/menus', menuRoutes); // Restore menu routes
 app.use('/api/templates', templateRoutes); // Restore template routes
-app.use('/api/external-apis', apiEntryRoutes); // Restore API entry routes mount
+app.use('/api/api-entries', apiEntryRoutes); // Corrected mount point for API entry routes
 app.use('/api/ai-types', aiTypeRoutes); // Mount AI Type routes
 app.use('/api/ai-applications', aiApplicationRoutes); // Mount AI Application routes
 app.use('/api/credit-transactions', creditTransactionRoutes); // Ensure this is present
@@ -86,6 +89,9 @@ app.use('/api/inspiration-categories', authenticateToken, isAdmin, inspirationCa
 app.use('/api/public', publicRoutes); // Restore public routes
 app.use('/api/public/payment-config', paymentConfigRoutes); // Added for payment config
 app.use('/api/public/market', publicInspirationMarketRoutes); // Added for public market
+
+// Mount the new tags router
+app.use('/api/tags', tagsRouter);
 
 // --- Special Backend Routes (like /app) ---
 // Handle /app?id=... specifically

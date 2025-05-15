@@ -1,12 +1,26 @@
 const express = require('express');
 const router = express.Router();
 const ApiEntry = require('../models/ApiEntry');
+const { PLATFORM_TYPES } = require('../models/ApiEntry'); // Import PLATFORM_TYPES
 const AiApplication = require('../models/AiApplication');
 const authenticateToken = require('../middleware/authenticateToken');
 const isAdmin = require('../middleware/isAdmin');
 
 // Middleware for all routes in this file - REMOVED global router.use()
 // router.use(authenticateToken, isAdmin); 
+
+// New route to get platform types
+router.get('/platform-types', authenticateToken, isAdmin, (req, res) => {
+  try {
+    if (!PLATFORM_TYPES || PLATFORM_TYPES.length === 0) {
+      return res.status(404).json({ message: '平台类型未定义或为空' });
+    }
+    res.json(PLATFORM_TYPES);
+  } catch (error) {
+    console.error("Error fetching platform types:", error);
+    res.status(500).json({ message: '获取平台类型失败', error: error.message });
+  }
+});
 
 // GET / - Get all API entries (Apply middleware individually)
 router.get('/', authenticateToken, isAdmin, async (req, res) => {
@@ -29,14 +43,14 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
 
 // POST / - Create a new API entry (Apply middleware individually)
 router.post('/', authenticateToken, isAdmin, async (req, res) => {
-  const { platformName, description, apiUrl, status } = req.body;
+  const { platformName, platformType, description, apiUrl, config, status } = req.body;
 
   try {
     const existingEntry = await ApiEntry.findOne({ apiUrl });
     if (existingEntry) {
       return res.status(409).json({ message: `API 地址 '${apiUrl}' 已存在` });
     }
-    const newEntry = new ApiEntry({ platformName, description, apiUrl, status: status || 'active' });
+    const newEntry = new ApiEntry({ platformName, platformType, description, apiUrl, config, status: status || 'active' });
     const savedEntry = await newEntry.save();
     res.status(201).json(savedEntry);
   } catch (error) {
@@ -53,7 +67,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
 // PUT /:id - Update an API entry (Apply middleware individually)
 router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   const { id } = req.params;
-  const { platformName, description, apiUrl, status } = req.body;
+  const { platformName, platformType, description, apiUrl, config, status } = req.body;
 
   try {
     // If attempting to change status to 'inactive' (disable)
@@ -81,7 +95,7 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
     }
     const updatedEntry = await ApiEntry.findOneAndUpdate(
       { _id: id },
-      { platformName, description, apiUrl, status },
+      { platformName, platformType, description, apiUrl, config, status },
       { new: true, runValidators: true } 
     );
     if (!updatedEntry) {

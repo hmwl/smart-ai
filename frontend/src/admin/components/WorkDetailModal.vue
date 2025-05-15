@@ -67,11 +67,11 @@
           </a-descriptions-item>
           <a-descriptions-item label="创作时间">{{ formatDate(work.createdAt) }}</a-descriptions-item>
           <a-descriptions-item label="最后更新">{{ formatDate(work.updatedAt) }}</a-descriptions-item>
-          <a-descriptions-item label="状态">{{ work.status === 'public_market' ? '市场展示中' : '未在市场展示' }}</a-descriptions-item>
-          <a-descriptions-item label="源文件">
+          <!-- <a-descriptions-item label="状态">{{ work.status === 'public_market' ? '市场展示中' : '未在市场展示' }}</a-descriptions-item> -->
+          <!-- <a-descriptions-item label="源文件">
             <a :href="fullSourceUrl" target="_blank" v-if="work.sourceUrl">{{ fullSourceUrl }}</a>
             <span v-else>-</span>
-          </a-descriptions-item>
+          </a-descriptions-item> -->
            <a-descriptions-item label="缩略图文件" v-if="work.thumbnailUrl && work.thumbnailUrl !== work.sourceUrl">
             <a :href="fullThumbnailUrl" target="_blank">{{ fullThumbnailUrl }}</a>
           </a-descriptions-item>

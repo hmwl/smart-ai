@@ -19,17 +19,15 @@
           <template #icon><icon-user /></template>
           用户管理
         </a-menu-item>
-
-        <!-- API Management Menu Item -->
-        <a-menu-item key="api-management">
-            <template #icon><icon-link /></template>
-            API 管理
-        </a-menu-item>
         
         <!-- AI Management Sub-menu -->
         <a-sub-menu key="ai-management-group">
             <template #icon><icon-robot /></template>
             <template #title>AI 管理</template>
+            <a-menu-item key="api-management">
+                <template #icon><icon-link /></template>
+                API 管理
+            </a-menu-item>
             <a-menu-item key="ai-type-management">
                 <template #icon><icon-tag /></template>
                 AI 类型管理
@@ -45,8 +43,6 @@
           <template #icon><icon-apps /></template>
           应用管理
         </a-menu-item>
-
-
 
         <!-- Credits Management Sub-menu -->
         <a-sub-menu key="credits-management-group">
@@ -187,7 +183,7 @@ watch(targetSelectedKey, (newKey) => {
   if (['page-management', 'menu-management', 'template-management'].includes(newKey)) {
     keysToOpen.push('website-management');
   }
-  if (['ai-type-management', 'ai-app-management'].includes(newKey)) {
+  if (['api-management', 'ai-type-management', 'ai-app-management'].includes(newKey)) {
       keysToOpen.push('ai-management-group');
   }
   if (['credit-transactions', 'credit-settings', 'promotion-activity-management'].includes(newKey)) {

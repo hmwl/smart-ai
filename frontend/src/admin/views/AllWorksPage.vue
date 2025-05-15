@@ -1,21 +1,72 @@
 <template>
-  <div class="all-works-page">
-    <!-- New Header mimicking ApplicationManagement.vue -->
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold">所有作品</h2>
-      <a-space>
+  <div class="all-works-page p-4">
+    <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
+      <h2 class="text-xl font-semibold whitespace-nowrap">所有作品</h2>
+      <a-space wrap class="flex-grow justify-end">
         <a-input-search 
-          placeholder="搜索作品..." 
-          style="width: 240px;" 
+          placeholder="搜索标题/提示词"
+          style="width: 200px;" 
           v-model="searchTerm" 
-          @search="onSearch" 
-          @clear="onSearch()" 
+          @search="onFilterChange" 
+          @clear="onFilterChange" 
           allow-clear 
         />
+        <a-select 
+          v-model="selectedType" 
+          placeholder="类型"
+          allow-clear
+          style="width: 120px;"
+          @change="onFilterChange"
+        >
+          <a-option value="image">图片</a-option>
+          <a-option value="video">视频</a-option>
+          <a-option value="audio">音频</a-option>
+          <a-option value="model">3D模型</a-option>
+        </a-select>
+        <a-select 
+          v-model="selectedFilterTags" 
+          placeholder="筛选标签"
+          multiple
+          allow-clear
+          style="width: 200px;"
+          @change="onFilterChange"
+          :loading="tagsLoading"
+          :options="predefinedTagsOptionsForFilter"
+        >
+        </a-select>
+        <a-select 
+          v-model="selectedCreatorId" 
+          placeholder="创作者"
+          allow-clear
+          show-search
+          :filter-option="(inputValue, option) => option.children[0].children.toLowerCase().includes(inputValue.toLowerCase())"
+          style="width: 150px;"
+          @change="onFilterChange"
+          :loading="creatorsLoading"
+        >
+          <a-option v-for="creator in creatorsList" :key="creator._id" :value="creator._id">
+            {{ creator.username }}
+          </a-option>
+        </a-select>
+        <a-range-picker 
+          v-model="dateRange" 
+          style="width: 240px;" 
+          @change="onFilterChange"
+        />
+        <a-select 
+          v-model="selectedStatus" 
+          placeholder="状态"
+          allow-clear
+          style="width: 120px;"
+          @change="onFilterChange"
+        >
+          <a-option value="private">私有</a-option>
+          <a-option value="public_market">公开</a-option>
+        </a-select>
         <a-button type="primary" @click="showCreateWorkModal = true">
           <template #icon><icon-plus /></template> 添加作品
         </a-button>
-        <a-button @click="refreshWorks" :loading="worksLoading">
+        <a-button @click="refreshWorksAndFilters" :loading="worksLoading">
           <template #icon><icon-refresh /></template> 刷新
         </a-button>
       </a-space>
@@ -59,10 +110,10 @@
     <!-- Create/Edit Work Modal (Simplified for now) -->
     <a-modal v-model:visible="showCreateWorkModal" :title="editWorkId ? '编辑作品' : '添加新作品'" @ok="handleSaveWork" @cancel="closeCreateWorkModal" :width="600">
       <a-form :model="workForm" ref="workFormRef" layout="vertical">
-        <a-form-item field="title" label="标题">
+        <a-form-item field="title" label="标题" :rules="[{required: true, message: '请输入作品标题'}]">
           <a-input v-model="workForm.title" placeholder="请输入作品标题" />
         </a-form-item>
-        <a-form-item field="type" label="类型" required>
+        <a-form-item field="type" label="类型" :rules="[{required: true, message: '请选择作品类型'}]">
           <a-select v-model="workForm.type" placeholder="请选择作品类型">
             <a-option value="image">图片</a-option>
             <a-option value="video">视频</a-option>
@@ -73,13 +124,21 @@
         <a-form-item field="prompt" label="提示词">
           <a-textarea v-model="workForm.prompt" placeholder="请输入提示词" :auto-size="{minRows:3,maxRows:5}"/>
         </a-form-item>
-        <a-form-item field="tags" label="标签 (逗号分隔)">
-          <a-input v-model="workForm.tags" placeholder="例如：风景,科幻,未来感" />
+        <a-form-item field="tags" label="标签">
+          <a-select
+            v-model="workForm.tags"
+            :options="predefinedTagsOptionsForForm"
+            placeholder="选择或输入标签后按回车创建"
+            multiple
+            allow-create
+            allow-clear
+            @change="handleWorkFormTagsChange" 
+          />
         </a-form-item>
-        <a-form-item field="status" label="市场状态">
+        <a-form-item field="status" label="展示状态" tooltip="私有作品不展示在市场上">
             <a-radio-group v-model="workForm.status">
-                <a-radio value="private">私有 (不展示)</a-radio>
-                <a-radio value="public_market">公开 (市场展示)</a-radio>
+                <a-radio value="private">私有</a-radio>
+                <a-radio value="public_market">公开</a-radio>
             </a-radio-group>
         </a-form-item>
         <a-form-item field="workFile" label="作品文件" v-if="!editWorkId || workForm.replaceFile">
@@ -109,22 +168,36 @@
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue';
+import { ref, onMounted, reactive, watch, computed } from 'vue';
 import { 
-    PageHeader as APageHeader, InputSearch as AInputSearch, Spin as ASpin, Empty as AEmpty, 
-    Pagination as APagination, Message, Modal as AModal, Form as AForm, FormItem as AFormItem,
+    InputSearch as AInputSearch, Spin as ASpin, Empty as AEmpty, 
+    Pagination as APagination, Message, Modal, Form as AForm, FormItem as AFormItem,
     Input as AInput, Textarea as ATextarea, Select as ASelect, Option as AOption, Button as AButton,
-    Upload as AUpload, Grid as AGrid, GridItem as AGridItem, Space as ASpace,
-    RadioGroup as ARadioGroup, Radio as ARadio, Checkbox as ACheckbox, Popconfirm
+    Upload as AUpload, Space as ASpace, RangePicker as ARangePicker,
+    RadioGroup as ARadioGroup, Radio as ARadio, Checkbox as ACheckbox,
+    InputTag as AInputTag
 } from '@arco-design/web-vue';
 import { IconPlus, IconUpload, IconRefresh } from '@arco-design/web-vue/es/icon';
 import WorkCard from '../components/WorkCard.vue';
 import WorkDetailModal from '../components/WorkDetailModal.vue';
-import apiService from '../services/apiService'; // Added
+import apiService from '../services/apiService';
+import { debounce } from 'lodash-es';
 
 const works = ref([]);
 const worksLoading = ref(false);
 const searchTerm = ref('');
+
+// Filter states
+const selectedType = ref('');
+const selectedFilterTags = ref([]);
+const selectedCreatorId = ref('');
+const dateRange = ref([]);
+const selectedStatus = ref('');
+
+const creatorsList = ref([]);
+const creatorsLoading = ref(false);
+const predefinedTagsList = ref([]);
+const tagsLoading = ref(false);
 
 const pagination = reactive({
   current: 1,
@@ -141,14 +214,38 @@ const workForm = reactive({
   title: '',
   type: '',
   prompt: '',
-  tags: '', // Comma-separated string
+  tags: [],
   status: 'private',
   workFile: null, 
   fileList: [],
-  sourceUrl: null, // for edit mode to show current file
-  replaceFile: false, // for edit mode
+  sourceUrl: null, 
+  replaceFile: false,
 });
 const editWorkId = ref(null);
+
+const fetchCreators = async () => {
+  creatorsLoading.value = true;
+  try {
+    const response = await apiService.get('/users');
+    creatorsList.value = response.data.map(user => ({ _id: user._id, username: user.username }));
+  } catch (error) {
+    Message.error('获取创作者列表失败: ' + (error.response?.data?.message || error.message));
+  } finally {
+    creatorsLoading.value = false;
+  }
+};
+
+const fetchTags = async () => {
+  tagsLoading.value = true;
+  try {
+    const response = await apiService.get('/tags');
+    predefinedTagsList.value = response.data;
+  } catch (error) {
+    Message.error('获取标签列表失败: ' + (error.response?.data?.message || error.message));
+  } finally {
+    tagsLoading.value = false;
+  }
+};
 
 const fetchWorks = async () => {
   worksLoading.value = true;
@@ -157,7 +254,12 @@ const fetchWorks = async () => {
       page: pagination.current,
       limit: pagination.pageSize,
       search: searchTerm.value || undefined,
-      // status: 'public_market' // Or filter as needed
+      type: selectedType.value || undefined,
+      tags: selectedFilterTags.value && selectedFilterTags.value.length > 0 ? selectedFilterTags.value.join(',') : undefined,
+      creator: selectedCreatorId.value || undefined,
+      status: selectedStatus.value || undefined,
+      startDate: dateRange.value?.[0] ? new Date(dateRange.value[0]).toISOString() : undefined,
+      endDate: dateRange.value?.[1] ? new Date(dateRange.value[1]).toISOString() : undefined,
     };
     const response = await apiService.getWorks(params);
     works.value = response.data.works;
@@ -172,15 +274,26 @@ const fetchWorks = async () => {
 
 onMounted(() => {
   fetchWorks();
+  fetchCreators();
+  fetchTags();
 });
 
-const onSearch = () => {
+const onFilterChange = () => {
   pagination.current = 1;
   fetchWorks();
 };
 
-const refreshWorks = () => {
-  searchTerm.value = ''; // Clear search term on refresh
+const debouncedFilterChange = debounce(onFilterChange, 500);
+
+watch([searchTerm, selectedType, selectedFilterTags, selectedCreatorId, dateRange, selectedStatus], onFilterChange, { deep: true });
+
+const refreshWorksAndFilters = () => {
+  searchTerm.value = '';
+  selectedType.value = '';
+  selectedFilterTags.value = [];
+  selectedCreatorId.value = '';
+  dateRange.value = [];
+  selectedStatus.value = '';
   pagination.current = 1;
   fetchWorks();
   Message.success('数据已刷新');
@@ -207,7 +320,8 @@ const handleEditWork = (work) => {
   workForm.title = work.title;
   workForm.type = work.type;
   workForm.prompt = work.prompt;
-  workForm.tags = work.tags ? work.tags.join(',') : '';
+  // Ensure workForm.tags is an array of strings for a-select multiple
+  workForm.tags = work.tags ? [...work.tags] : []; 
   workForm.status = work.status;
   workForm.sourceUrl = work.sourceUrl; 
   workForm.replaceFile = false; 
@@ -224,7 +338,8 @@ const handleDeleteWorkConfirm = (workId) => {
             try {
                 await apiService.deleteWork(workId);
                 Message.success('作品删除成功');
-                fetchWorks(); // Refresh the list
+                fetchWorks();
+                fetchTags();
             } catch (error) {
                 Message.error('删除作品失败: ' + (error.response?.data?.message || error.message));
             }
@@ -239,7 +354,7 @@ const closeCreateWorkModal = () => {
   workForm.title = '';
   workForm.type = '';
   workForm.prompt = '';
-  workForm.tags = '';
+  workForm.tags = [];
   workForm.status = 'private';
   workForm.workFile = null;
   workForm.fileList = [];
@@ -270,25 +385,78 @@ const handleCustomRequest = (options) => {
     };
 };
 
+// Handler for a-input-tag changes in the form if needed, e.g., to normalize input
+const handleWorkFormTagsChange = (currentTags) => {
+  // Optional: normalize tags, e.g., to lowercase, trim spaces, if not handled by component
+  // workForm.tags = currentTags.map(tag => typeof tag === 'string' ? tag.trim().toLowerCase() : tag);
+  // a-input-tag with unique-value and allow-create usually handles this well.
+};
+
 const handleSaveWork = async () => {
-  const isValid = await workFormRef.value?.validate();
-  if (isValid) { // isValid will be an object of errors if any, undefined if ok
-    const firstErrorKey = Object.keys(isValid)[0];
-    const firstErrorMessage = isValid[firstErrorKey]?.[0]?.message;
+  const formValidationResult = await workFormRef.value?.validate();
+  if (formValidationResult) { 
+    const firstErrorKey = Object.keys(formValidationResult)[0];
+    const firstErrorMessage = formValidationResult[firstErrorKey]?.[0]?.message;
     Message.error(firstErrorMessage || '请修正表单错误');
     return;
+  }
+
+  // Normalize and ensure all tags in workForm.tags are registered in the backend
+  const currentWorkTags = [...new Set(workForm.tags.map(tag => 
+    (typeof tag === 'string' ? tag.trim().toLowerCase() : String(tag.value || tag.label || tag).trim().toLowerCase())
+  ).filter(t => t))];
+  
+  workForm.tags = currentWorkTags; // Update form with normalized tags
+
+  if (currentWorkTags.length > 0) {
+    try {
+      // Check which tags are new
+      const existingTagNames = predefinedTagsList.value.map(t => t.name.toLowerCase());
+      const newTagNamesToCreate = currentWorkTags.filter(tName => !existingTagNames.includes(tName));
+
+      if (newTagNamesToCreate.length > 0) {
+        const creationPromises = newTagNamesToCreate.map(tagName => 
+          apiService.post('/tags', { name: tagName })
+        );
+        const creationResults = await Promise.allSettled(creationPromises);
+        
+        let allNewTagsRegistered = true;
+        creationResults.forEach(result => {
+          if (result.status === 'rejected') {
+            allNewTagsRegistered = false;
+            console.error('Failed to create tag:', result.reason);
+            Message.error(`注册标签 "${result.reason?.config?.data ? JSON.parse(result.reason.config.data).name : '某个'}" 失败: ${result.reason?.response?.data?.message || result.reason?.message}`);
+          } else if (result.value.status === 200) { // Tag already existed
+             // Optionally update predefinedTagsList if it doesn't contain this tag (e.g. due to race condition or cache)
+             if (!predefinedTagsList.value.find(t => t.name === result.value.data.tag.name)) {
+                predefinedTagsList.value.push(result.value.data.tag);
+             }
+          } else if (result.value.status === 201) { // New tag created
+            predefinedTagsList.value.push(result.value.data); // Add newly created tag to our list
+          }
+        });
+
+        if (!allNewTagsRegistered) {
+          Message.warning('部分新标签未能成功注册，请检查或稍后重试。');
+          // Decide if you want to proceed with saving the work or not
+          // For now, we will proceed with successfully registered/existing tags.
+        }
+      }
+    } catch (tagError) {
+      Message.error('处理标签时出错: ' + tagError.message);
+      // Decide if you want to stop work submission
+      // return; 
+    }
   }
 
   const formData = new FormData();
   formData.append('title', workForm.title || '');
   formData.append('type', workForm.type);
   formData.append('prompt', workForm.prompt || '');
-  if (workForm.tags) {
-      // Backend expects tags as a JSON string array
-      formData.append('tags', JSON.stringify(workForm.tags.split(',').map(tag => tag.trim()).filter(tag => tag)));
-  } else {
-      formData.append('tags', JSON.stringify([]));
-  }
+  
+  // Backend expects tags as a JSON string array of tag names
+  formData.append('tags', JSON.stringify(workForm.tags)); 
+  
   formData.append('status', workForm.status);
   
   // Only append file if it's a new work or if replaceFile is checked for an existing work
@@ -312,6 +480,7 @@ const handleSaveWork = async () => {
     }
     closeCreateWorkModal();
     fetchWorks();
+    fetchTags();
   } catch (error) {
     Message.error('保存作品失败: ' + (error.response?.data?.message || error.message));
     console.error('Error saving work:', error);
@@ -319,6 +488,16 @@ const handleSaveWork = async () => {
     worksLoading.value = false;
   }
 };
+
+// Computed property for <a-select> filter options
+const predefinedTagsOptionsForFilter = computed(() => 
+  predefinedTagsList.value.map(tag => ({ label: tag.name, value: tag.name }))
+);
+
+// Computed property for <a-input-tag> options in the form
+const predefinedTagsOptionsForForm = computed(() => 
+  predefinedTagsList.value.map(tag => ({ label: tag.name, value: tag.name }))
+);
 
 </script>
 

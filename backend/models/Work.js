@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
+const generateCustomId = require('../utils/generateCustomId'); // Import the utility
 
 const workSchema = new mongoose.Schema({
+  _id: { // Define custom string ID
+    type: String,
+    default: () => generateCustomId('WK')
+  },
   title: {
     type: String,
     trim: true,
@@ -28,7 +33,7 @@ const workSchema = new mongoose.Schema({
     trim: true,
   }],
   creator: {
-    type: mongoose.Schema.Types.ObjectId,
+    type: String,
     ref: 'User',
     // required: true, // Might not always have a logged-in creator if works are added systemically
   },

@@ -66,7 +66,7 @@
       >
         <template #columns>
           <!-- Revision: Add ID column -->
-           <a-table-column title="ID" data-index="_id" :width="180">
+           <a-table-column title="ID" data-index="_id" :width="120">
                <template #cell="{ record }">
                    {{ record._id }}
                </template>
@@ -78,16 +78,16 @@
                 <span v-else>-</span>
              </template>
           </a-table-column>
-          <a-table-column title="名称" data-index="name" :width="150" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
-          <a-table-column title="简介" data-index="description" ellipsis tooltip :width="200"></a-table-column>
-          <a-table-column title="类型" data-index="type.name" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="应用名称" data-index="name" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
+          <a-table-column title="应用简介" data-index="description" ellipsis tooltip :width="250"></a-table-column>
+          <a-table-column title="应用类型" data-index="type.name" :width="120" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <span v-if="record.type && record.type.name">{{ record.type.name }} ({{ record.type.uri }})</span>
               <span v-else-if="record.type">{{ record.type }}</span>
               <span v-else>未知类型</span>
             </template>
           </a-table-column>
-          <a-table-column title="API 数" data-index="apis.length" :width="100" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="API 数量" data-index="apis.length" :width="120" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
                 {{ record.apis ? record.apis.length : 0 }}
              </template>
@@ -195,18 +195,20 @@
             </a-form-item>
           </a-col>
           <a-col :span="18">
-            <a-form-item label="名称" name="name">
+            <a-form-item label="应用名称" name="name">
               <a-input v-model="formState.name" placeholder="请输入 AI 应用名称" />
             </a-form-item>
-            <a-form-item label="简介" name="description">
+            <a-form-item label="应用简介" name="description">
               <a-textarea v-model="formState.description" placeholder="请输入简介" :rows="3" />
             </a-form-item>
           </a-col>
         </a-row>
 
-        <!-- Remaining fields below the top row -->
-        <a-form-item label="类型" name="type">
-          <a-select
+        <a-row :gutter="16">
+          <a-col :span="12">
+            <!-- Remaining fields below the top row -->
+            <a-form-item label="应用类型" name="type">
+              <a-select
             v-model="formState.type"
             placeholder="请选择 AI 类型"
             show-search
@@ -217,9 +219,37 @@
               {{ type.name }} ({{ type.uri }})
             </a-option>
           </a-select>
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <!-- New Form Item for Credits Consumed -->
+            <a-form-item label="所需积分" name="creditsConsumed">
+              <a-input-number 
+            v-model="formState.creditsConsumed" 
+                placeholder="输入所需积分，0表示免费" 
+                :min="0" 
+                :precision="0" 
+                style="width: 100%;"
+              />
+            </a-form-item>
+          </a-col>
+        </a-row>
+          <a-form-item label="平台类型" name="platformType">
+          <a-select
+            v-model="formState.platformType"
+            placeholder="请选择平台类型"
+            show-search
+            :filter-option="filterOption"
+            allow-clear
+          >
+            <a-option v-for="type in platformTypes" :key="type" :value="type">
+              {{ type }}
+            </a-option>
+          </a-select>
         </a-form-item>
         <a-form-item label="关联 API" name="apis">
           <a-select
+            :key="apiSelectKey" 
             v-model="formState.apis"
             multiple
             placeholder="选择关联的 API"
@@ -227,19 +257,9 @@
             show-search
             :filter-option="filterOption"
             allow-clear
+            :options="availableApiOptionsForForm" 
           >
-            <a-option 
-                v-for="apiOpt in apiOptions" 
-                :key="apiOpt.value" 
-                :value="apiOpt.value"
-                :label="apiOpt.label" 
-             >
-               {{ apiOpt.label }} 
-             </a-option>
            </a-select>
-          <template #extra>
-            <span style="color: gray; font-size: 12px;">注意：请确保选择的 API 属于相同平台，否则可能导致异常。</span>
-          </template>
         </a-form-item>
         <a-form-item label="标签" name="tags">
           <a-input-tag
@@ -257,30 +277,20 @@
             <a-option value="inactive">Inactive (禁用)</a-option>
           </a-select>
         </a-form-item>
-        <!-- New Form Item for Credits Consumed -->
-        <a-form-item label="所需积分" name="creditsConsumed">
-          <a-input-number 
-            v-model="formState.creditsConsumed" 
-            placeholder="输入所需积分，0表示免费" 
-            :min="0" 
-            :precision="0" 
-            style="width: 100%;"
-          />
-        </a-form-item>
       </a-form>
     </a-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch, reactive } from 'vue';
+import { ref, onMounted, computed, watch, reactive, nextTick } from 'vue';
 import {
   Message, Modal, InputSearch, Row, Col, Button, Table, Space, Popconfirm, Form,
   FormItem, Input, Textarea, Select, Tag, Upload, Image as AImage, InputTag, Spin,
   Option
 } from '@arco-design/web-vue';
 import { IconPlus, IconLoading, IconRefresh } from '@arco-design/web-vue/es/icon';
-import apiService from '../services/apiService';
+import apiService, { getStaticAssetBaseUrl } from '../services/apiService';
 
 // Explicitly rename components if needed or use directly
 const ARow = Row;
@@ -304,7 +314,8 @@ const AButton = Button;
 
 const aiApplications = ref([]);
 const aiTypes = ref([]);
-const apiEntries = ref([]);
+const platformTypes = ref([]);
+const allApiEntries = ref([]); // To store all fetched API entries
 const loading = ref(false);
 const searchName = ref('');
 const filterType = ref(undefined);
@@ -331,6 +342,7 @@ const formState = ref({
   removeCoverImage: false,
   status: 'active',
   creditsConsumed: 0, // Added to formState
+  platformType: null, // Added
 });
 
 // Upload state
@@ -366,15 +378,13 @@ const rules = {
 const getImageUrl = (relativePath) => {
   if (!relativePath) return '';
   
-  // In development, assume backend runs on port 3000
-  // In production, assume files are served from the same origin
-  const backendOrigin = import.meta.env.DEV ? 'http://localhost:3000' : window.location.origin;
+  const staticAssetBase = getStaticAssetBaseUrl();
   
   // Ensure the relative path starts with a slash if it doesn't already
   const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
 
   // Construct the full URL
-  return `${backendOrigin}${path}`;
+  return `${staticAssetBase}${path}`;
 };
 
 // Computed property for filtering data
@@ -406,13 +416,38 @@ const filteredData = computed(() => {
 // Computed options for API select
 const apiOptions = computed(() => {
   // Filter for active APIs
-  const options = apiEntries.value
+  const options = allApiEntries.value
     .filter(api => api.status === 'active') // Only include active APIs
     .map(api => ({
       label: `${api.platformName} (${api.apiUrl})`, // Original label format
       value: api._id,
     }));
   return options;
+});
+
+// Computed property for API selection in the form, filtered by platformType
+const availableApiOptionsForForm = computed(() => {
+  if (!formState.value.platformType) {
+    return []; // No platform type selected for the AI App, so no APIs can be chosen
+  }
+  const filtered = allApiEntries.value
+    .filter(api => api.platformType === formState.value.platformType && api.status === 'active');
+  
+  const mapped = filtered.map((api, index) => {
+      const apiId = api._id;
+      const platformName = api.platformName;
+      const configApiUrl = api.config?.apiUrl;
+      const legacyApiUrl = api.apiUrl; // The top-level one
+      const displayUrl = configApiUrl || legacyApiUrl || 'Config N/A';
+      
+      const option = {
+        label: `${platformName} (${apiId}) - ${displayUrl}`,
+        value: apiId,
+      };
+      return option;
+    });
+  
+  return mapped;
 });
 
 // Generic filter option for selects
@@ -452,7 +487,6 @@ const formatDate = (dateString) => {
 // --- End Revision ---
 
 const fetchAiApplications = async () => {
-  // --- Revision: Remove previous logs --- 
   // console.log("Fetching AI Applications..."); 
   loading.value = true;
   try {
@@ -483,16 +517,26 @@ const fetchAiTypes = async () => {
   }
 };
 
-const fetchApiEntries = async () => {
+const fetchPlatformTypes = async () => {
   try {
-     // --- Revision: Use apiService --- 
-    const response = await apiService.get('/external-apis'); // Correct endpoint
-     // --- End Revision ---
-    apiEntries.value = response.data;
+    const response = await apiService.getApiPlatformTypes();
+    platformTypes.value = response.data;
   } catch (error) {
-     // apiService interceptor should handle detailed error messages
-     console.error('Error fetching API entries:', error);
-    Message.error('获取 API 选项失败'); // Simplified message
+    console.error('Error fetching platform types:', error);
+    Message.error('获取平台类型失败');
+    // Fallback in case of error, ensuring the dropdown is still somewhat usable
+    platformTypes.value = ['ComfyUI', 'OpenAI', 'StabilityAI', 'Midjourney', 'DallE', 'Custom']; 
+  }
+};
+
+const fetchAllApiEntries = async () => {
+  try {
+    const response = await apiService.getApiEntries(); // Uses the correct /api-entries endpoint
+    allApiEntries.value = response.data;
+  } catch (error) {
+    console.error('Error fetching API entries for AiManagement:', error);
+    Message.error('获取可用API列表失败');
+    allApiEntries.value = [];
   }
 };
 
@@ -510,6 +554,7 @@ const resetForm = () => {
     removeCoverImage: false,
     status: 'active',
     creditsConsumed: 0, // Reset creditsConsumed
+    platformType: null, // Reset platformType
   };
   fileList.value = [];
   imageUrl.value = '';
@@ -525,9 +570,10 @@ const showCreateModal = () => {
   modalVisible.value = true;
 };
 
-const showEditModal = (record) => {
+const showEditModal = async (record) => {
   isEditing.value = true;
   resetForm();
+  apiSelectKey.value++; 
 
   // Assign fields from record to the reactive formState
   formState.value._id = record._id;
@@ -536,14 +582,15 @@ const showEditModal = (record) => {
   formState.value.tags = record.tags ? [...record.tags] : [];
   
   formState.value.type = record.type ? record.type._id : null;
-  formState.value.apis = record.apis ? record.apis.map(api => api._id) : [];
+  formState.value.platformType = record.platformType || null; 
+  // formState.value.apis = record.apis ? record.apis.map(api => api._id) : []; // Defer this assignment
 
   formState.value.status = record.status;
-  formState.value.creditsConsumed = record.creditsConsumed === undefined ? 0 : Number(record.creditsConsumed); // Ensure it's a number
+  formState.value.creditsConsumed = record.creditsConsumed === undefined ? 0 : Number(record.creditsConsumed);
   const relativePath = record.coverImageUrl;
   const fullUrl = relativePath ? getImageUrl(relativePath) : null;
   formState.value.coverImageUrl = fullUrl;
-  formState.value.coverImageFile = null;
+  formState.value.coverImageFile = null; 
   formState.value.removeCoverImage = false;
 
   // Update image preview state
@@ -551,6 +598,13 @@ const showEditModal = (record) => {
   fileList.value = imageUrl.value ? [{ uid: '-1', name: 'cover.png', status: 'done', url: imageUrl.value }] : [];
   
   modalVisible.value = true;
+
+  await nextTick(); // Wait for DOM updates, options to compute
+  
+  const apiIds = record.apis ? record.apis.map(api => api._id) : [];
+  formState.value.apis = apiIds;
+
+  formRef.value?.clearValidate(); 
 };
 
 const handleCancel = () => {
@@ -641,6 +695,7 @@ const handleSubmit = async () => {
     formData.append('type', formState.value.type);
     formData.append('status', formState.value.status);
     formData.append('creditsConsumed', formState.value.creditsConsumed === undefined ? 0 : Number(formState.value.creditsConsumed));
+    formData.append('platformType', formState.value.platformType);
 
     // Append array fields: tags and apis
     if (formState.value.tags && Array.isArray(formState.value.tags)) {
@@ -786,13 +841,16 @@ const handleDelete = async (id) => {
 
 const refreshData = async () => {
   await fetchAiApplications();
+  await fetchPlatformTypes();
+  await fetchAllApiEntries();
 };
 
 // Fetch initial data on mount
 onMounted(() => {
   fetchAiApplications();
   fetchAiTypes();
-  fetchApiEntries();
+  fetchPlatformTypes();
+  fetchAllApiEntries();
 });
 
 // Watch filters and refetch applications
@@ -801,6 +859,16 @@ watch([searchName, filterType, filterStatus, filterCredits], (newValues, oldValu
   // No need to refetch from API, filtering is done client-side via computed property
   // If server-side filtering is implemented later, call fetchAiApplications() here
 }, { deep: true });
+
+const apiSelectKey = ref(0); // Key for forcing re-render of API select
+
+// Add a watcher for platformType changes to clear selected APIs and update key
+watch(() => formState.value.platformType, (newPlatformType, oldPlatformType) => {
+  if (newPlatformType !== oldPlatformType) {
+    formState.value.apis = []; // Clear selected APIs if platform type changes
+    apiSelectKey.value++;    // Increment key to force re-render
+  }
+});
 
 </script>
 

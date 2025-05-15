@@ -377,7 +377,7 @@ const handleSubmit = async () => {
 
     isSubmitting.value = true;
     let payload = { 
-        ...articleForm.value, 
+        ...articleForm.value,
         page: props.pageId // Ensure pageId is included
     };
 
@@ -429,9 +429,9 @@ const confirmDeleteArticle = (article) => {
             try {
                 await apiService.delete(`/articles/${article._id}`);
                 Message.success(`文章 “${article.title}” 删除成功`);
-                await fetchArticles();
-            } catch (error) {
-                console.error('Error deleting article:', error);
+                    await fetchArticles();
+                } catch (error) {
+                    console.error('Error deleting article:', error);
                 if (!error.response) {
                     Message.error('删除文章失败，请检查网络。');
                 }

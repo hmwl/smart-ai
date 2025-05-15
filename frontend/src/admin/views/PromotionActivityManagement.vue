@@ -186,7 +186,7 @@
                   label="折扣率 (%)"
                   field="rechargeFullReduction.discountRate"
                   :rules="[{ required: true, message: '折扣率必填'}]"
-                  help="例如输入90表示九折"
+                  tooltip="例如：90表示9折"
                 >
                   <a-input-number
                     v-model="activityForm.rechargeFullReduction.discountRate"
@@ -199,7 +199,7 @@
                   label="赠送积分"
                   field="rechargeFullReduction.giftPoints"
                   :rules="[{ required: true, message: '赠送积分必填'}]"
-                  help="每满足条件赠送的积分数量"
+                  tooltip="每满足条件赠送的积分数量"
                 >
                   <a-input-number
                     v-model="activityForm.rechargeFullReduction.giftPoints"
@@ -212,7 +212,7 @@
                 <a-form-item
                   label="优惠上限金额 (￥)"
                   field="rechargeFullReduction.maxDiscountCapRMB"
-                  help="0表示无上限"
+                  tooltip="0表示无上限"
                 >
                   <a-input-number
                     v-model="activityForm.rechargeFullReduction.maxDiscountCapRMB"
@@ -267,7 +267,7 @@
               label="折扣率 (%)"
               field="usageAppSpecific.discountValue"
               :rules="[{ required: true, message: '折扣率必填'}]"
-              help="例如输入90表示九折"
+              tooltip="例如：90表示9折"
             >
               <a-input-number 
                 v-model="activityForm.usageAppSpecific.discountValue" 
@@ -281,7 +281,7 @@
               label="立减积分"
               field="usageAppSpecific.discountValue"
               :rules="[{ required: true, message: '立减积分必填'}]"
-              help="每次使用立减的积分数量，不能为负"
+              tooltip="每次使用立减的积分数量，不能为负"
             >
               <a-input-number 
                 v-model="activityForm.usageAppSpecific.discountValue" 
@@ -314,7 +314,7 @@
                   label="积分用量门槛"
                   field="usageVolume.usageThresholdCredits" 
                   :rules="[{ required: true, message: '积分用量门槛必填'}]"
-                  help="在选定周期内累计使用的积分量"
+                  tooltip="在选定周期内累计使用的积分量"
                 >
                   <a-input-number 
                     v-model="activityForm.usageVolume.usageThresholdCredits" 
@@ -325,36 +325,37 @@
               </a-col>
             </a-row>
 
-            <a-form-item label="达到门槛后折扣类型" field="usageVolume.discountType" :rules="[{required: true, message: '请选择折扣类型'}]">
+            <a-form-item label="达到门槛后" field="usageVolume.discountType" :rules="[{required: true, message: '请选择折扣类型'}]" tooltip="达到门槛后，后续使用折扣类型">
               <a-radio-group v-model="activityForm.usageVolume.discountType">
-                <a-radio value="percentage">后续使用百分比折扣</a-radio>
-                <a-radio value="fixed_reduction">后续使用固定积分减免</a-radio> 
+                <a-radio value="percentage">百分比折扣</a-radio>
+                <a-radio value="fixed_reduction">固定积分减免</a-radio> 
               </a-radio-group>
             </a-form-item>
 
             <a-form-item 
               v-if="activityForm.usageVolume.discountType === 'percentage'"
-              label="折扣率 (% 针对每次使用)"
+              label="折扣率 (%)"
               field="usageVolume.discountValue"
               :rules="[{ required: true, message: '折扣率必填'}]"
+              tooltip="每次使用立减的折扣率"
             >
               <a-input-number 
                 v-model="activityForm.usageVolume.discountValue" 
-                placeholder="例如: 80 (八折)" 
+                placeholder="例如: 80" 
                 :min="1" :max="100" :precision="0" style="width: 100%;"
               />
             </a-form-item>
 
             <a-form-item 
               v-if="activityForm.usageVolume.discountType === 'fixed_reduction'"
-              label="固定积分减免 (针对每次使用)"
+              label="固定积分减免"
               field="usageVolume.discountValue"
               :rules="[{ required: true, message: '减免积分必填'}]"
-              help="每次使用立减的积分数量"
+              tooltip="每次使用立减的积分数量"
             >
               <a-input-number 
                 v-model="activityForm.usageVolume.discountValue" 
-                placeholder="例如: 50"
+                placeholder="例如: 5"
                 :min="0" :precision="0" style="width: 100%;"
               />
             </a-form-item>

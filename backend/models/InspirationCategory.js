@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
+const generateCustomId = require('../utils/generateCustomId'); // Import the utility
 
 const inspirationCategorySchema = new mongoose.Schema({
+  _id: { // Define custom string ID
+    type: String,
+    default: () => generateCustomId('IC')
+  },
   name: {
     type: String,
     required: true,
@@ -13,7 +18,7 @@ const inspirationCategorySchema = new mongoose.Schema({
     maxlength: [200, '分类简介不能超过200个字符']
   },
   works: [{
-    type: mongoose.Schema.Types.ObjectId,
+    type: String, // Changed from ObjectId to String, as Work._id will also be a string
     ref: 'Work',
   }],
   order: {

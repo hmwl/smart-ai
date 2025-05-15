@@ -91,11 +91,8 @@
         <a-form-item field="name" label="名称">
           <a-input v-model="formState.name" placeholder="请输入 AI 类型名称" />
         </a-form-item>
-        <a-form-item field="uri" label="URI (唯一标识符)">
+        <a-form-item field="uri" label="URI (唯一标识符)" tooltip="URI 必须以字母或下划线开头，且只包含字母、数字、下划线或中划线">
           <a-input v-model="formState.uri" placeholder="例如：text_generation, image_enhancement" />
-           <template #extra>
-             URI 必须以字母或下划线开头，且只包含字母、数字、下划线或中划线。
-           </template>
         </a-form-item>
         <!-- Status Field Added -->
         <a-form-item field="status" label="状态">

@@ -11,7 +11,9 @@
             allow-clear
             style="width: 250px;"
          />
-        <!-- Add Filters later if needed (e.g., by status) -->
+        <a-select v-model="selectedPlatformTypeFilter" placeholder="按平台类型筛选" allow-clear style="width: 180px;">
+            <a-option v-for="ptype in platformTypes" :key="ptype" :value="ptype">{{ ptype }}</a-option>
+        </a-select>
          <a-select v-model="selectedStatus" placeholder="按状态筛选" allow-clear style="width: 150px;">
             <a-option value="active">活动</a-option>
             <a-option value="inactive">禁用</a-option>
@@ -28,18 +30,30 @@
 
     <!-- Table -->
     <a-spin :loading="isLoading" tip="加载 API 列表中..." class="w-full">
-      <a-table :data="filteredApiEntries" :pagination="{ pageSize: 15 }" row-key="_id" stripe :scroll="{ x: 1100 }">
+      <a-table :data="filteredApiEntries" :pagination="{ pageSize: 15 }" row-key="_id" stripe :scroll="{ x: 1250 }">
         <template #columns>
           <a-table-column title="ID" data-index="_id" :width="180">
                <template #cell="{ record }">
                    {{ record._id }}
                </template>
            </a-table-column>
-          <a-table-column title="平台名称" data-index="platformName" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
+          <a-table-column title="平台实例名称" data-index="platformName" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
+          <a-table-column title="平台类型" data-index="platformType" :width="150" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
           <a-table-column title="简介" data-index="description" ellipsis tooltip></a-table-column>
-          <a-table-column title="API 地址" data-index="apiUrl" :width="300" ellipsis tooltip>
+          <a-table-column title="API 地址/关键配置" data-index="apiUrl" :width="300" ellipsis tooltip>
             <template #cell="{ record }">
-              <a :href="record.apiUrl" target="_blank" class="text-blue-600 hover:underline">{{ record.apiUrl }} <icon-launch /></a>
+              <div v-if="record.platformType === 'ComfyUI' && record.config && record.config.apiUrl">
+                <a :href="record.config.apiUrl" target="_blank" class="text-blue-600 hover:underline">{{ record.config.apiUrl }} <icon-launch /></a>
+              </div>
+              <div v-else-if="record.platformType === 'OpenAI' && record.config && record.config.apiKey">
+                API Key: {{ record.config.apiKey.substring(0, 5) }}...{{ record.config.apiKey.slice(-4) }}
+                <br/>
+                <span v-if="record.config.defaultModel" class="text-xs text-gray-500">Model: {{ record.config.defaultModel }}</span>
+              </div>
+               <div v-else-if="record.apiUrl"> <!-- Fallback for older entries or 'Custom' type with main apiUrl -->
+                 <a :href="record.apiUrl" target="_blank" class="text-blue-600 hover:underline">{{ record.apiUrl }} <icon-launch /></a>
+              </div>
+              <span v-else>-</span>
             </template>
           </a-table-column>
           <a-table-column title="状态" data-index="status" :width="100" :sortable="{ sortDirections: ['ascend', 'descend'] }">
@@ -49,7 +63,7 @@
               </a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="使用数" data-index="usageCount" :width="120" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="使用数" data-index="usageCount" :width="100" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <a-tag color="blue" v-if="typeof record.usageCount === 'number'">{{ record.usageCount }}</a-tag>
               <span v-else>-</span>
@@ -79,18 +93,49 @@
       @cancel="handleCancel"
       :confirm-loading="isSubmitting"
       unmount-on-close
-      width="600px"
+      width="650px"
     >
       <a-form ref="apiFormRef" :model="apiForm" :rules="formRules" layout="vertical">
-        <a-form-item field="platformName" label="平台名称">
+        <a-form-item field="platformName" label="平台实例名称">
           <a-input v-model="apiForm.platformName" placeholder="例如：ComfyUI" />
         </a-form-item>
-        <a-form-item field="description" label="简介">
-          <a-textarea v-model="apiForm.description" placeholder="简要描述 API 的功能（可选）" :auto-size="{ minRows: 2, maxRows: 4 }" />
+        
+        <a-form-item field="platformType" label="平台类型">
+          <a-select v-model="apiForm.platformType" placeholder="选择平台类型" @change="handlePlatformTypeChange" allow-clear>
+            <a-option v-for="ptype in platformTypes" :key="ptype" :value="ptype">{{ ptype }}</a-option>
+          </a-select>
         </a-form-item>
-        <a-form-item field="apiUrl" label="API 地址">
-          <a-input v-model="apiForm.apiUrl" placeholder="例如：https://api.example.com/weather" />
+
+        <a-form-item field="description" label="简介 (可选)">
+          <a-textarea v-model="apiForm.description" placeholder="简要描述 API 的功能" :auto-size="{ minRows: 2, maxRows: 4 }" />
         </a-form-item>
+
+        <!-- Dynamic Config Fields -->
+        <div v-if="apiForm.platformType && platformSpecificFields[apiForm.platformType]">
+          <h4 class="text-sm font-medium mb-2 mt-3 text-gray-600">{{ apiForm.platformType }} 特定配置:</h4>
+          <div v-for="field in platformSpecificFields[apiForm.platformType]" :key="field.name">
+            <a-form-item 
+              :field="`config.${field.name}`" 
+              :label="field.label"
+              :rules="field.required ? [{ required: true, message: `${field.label}不能为空` }] : []"
+            >
+              <a-input 
+                v-if="field.type === 'text' || field.type === 'password'"
+                v-model="apiForm.config[field.name]" 
+                :placeholder="field.placeholder"
+                :type="field.type === 'password' ? 'password' : 'text'"
+                allow-clear
+              />
+              <!-- Add other field types like select, number if needed -->
+            </a-form-item>
+          </div>
+        </div>
+        
+        <!-- Fallback API URL for 'Custom' type or older entries without specific config structure -->
+        <a-form-item v-if="!apiForm.platformType || (apiForm.platformType === 'Custom' && !platformSpecificFields[apiForm.platformType]?.some(f => f.name === 'apiUrl'))" field="apiUrl" label="API 地址 (通用)">
+          <a-input v-model="apiForm.apiUrl" placeholder="例如：https://api.example.com/custom_endpoint" />
+        </a-form-item>
+
         <a-form-item field="status" label="状态">
           <a-select v-model="apiForm.status" placeholder="选择状态">
             <a-option value="active">Active (活动)</a-option>
@@ -108,9 +153,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, watch } from 'vue';
 import { 
-    Message, Modal, Table as ATable, TableColumn as ATableColumn, Spin as ASpin, 
+    Message, Modal as AModal, Table as ATable, TableColumn as ATableColumn, Spin as ASpin, 
     Tag as ATag, Button as AButton, Space as ASpace, Form as AForm, FormItem as AFormItem,
     Input as AInput, Textarea as ATextarea, Select as ASelect, Option as AOption, 
     InputSearch as AInputSearch,
@@ -122,6 +167,7 @@ import apiService from '@/admin/services/apiService';
 const apiEntries = ref([]);
 const isLoading = ref(false);
 const searchTerm = ref('');
+const selectedPlatformTypeFilter = ref(undefined);
 const selectedStatus = ref(undefined);
 const modalVisible = ref(false);
 const isEditMode = ref(false);
@@ -130,91 +176,136 @@ const apiFormRef = ref(null);
 const apiForm = ref({});
 const isSubmitting = ref(false);
 
-// Validation Rules
-const formRules = {
-  platformName: [{ required: true, message: '请输入平台名称' }],
-  apiUrl: [
-    { required: true, message: '请输入 API 地址' },
-    { type: 'url', message: '请输入有效的 URL 格式' },
-    { match: /^https?:\/\/.+/, message: 'URL 必须以 http:// 或 https:// 开头' }
+const platformTypes = ref([]);
+
+const platformSpecificFields = {
+  ComfyUI: [
+    { name: 'apiUrl', label: 'ComfyUI 服务器地址', type: 'text', required: true, placeholder: '例如: http://127.0.0.1:8188' }
   ],
-  status: [{ required: true, message: '请选择状态' }],
+  OpenAI: [
+    { name: 'apiKey', label: 'OpenAI API Key', type: 'password', required: true, placeholder: 'sk-...' },
+    { name: 'defaultModel', label: '默认模型 (可选)', type: 'text', placeholder: 'dall-e-3' }
+  ],
+  StabilityAI: [
+    { name: 'apiKey', label: 'StabilityAI API Key', type: 'password', required: true, placeholder: 'sk-...' },
+    { name: 'defaultEngine', label: '默认引擎 (可选)', type: 'text', placeholder: 'stable-diffusion-v1-5' }
+  ],
+  // Custom type might not have predefined fields, or could use the generic apiUrl
+  Custom: [
+     { name: 'customApiUrl', label: '自定义 API URL', type: 'text', required: false, placeholder: 'http://custom.api/endpoint' },
+     { name: 'customApiKey', label: '自定义 API Key (可选)', type: 'password', placeholder: 'your-custom-key' }
+  ]
+  // Midjourney and DallE might be covered by OpenAI or have their own specifics
 };
+
+
+// Validation Rules
+const formRules = computed(() => {
+  const rules = {
+    platformName: [{ required: true, message: '请输入平台实例名称' }],
+    platformType: [{ required: true, message: '请选择平台类型' }],
+    status: [{ required: true, message: '请选择状态' }],
+  };
+
+  if (apiForm.value.platformType && platformSpecificFields[apiForm.value.platformType]) {
+    platformSpecificFields[apiForm.value.platformType].forEach(field => {
+      if (field.required) {
+        rules[`config.${field.name}`] = [{ required: true, message: `${field.label}不能为空` }];
+        if (field.type === 'text' && (field.name.toLowerCase().includes('url') || field.name.toLowerCase().includes('uri'))) {
+           rules[`config.${field.name}`].push(
+            { type: 'url', message: '请输入有效的 URL 格式' },
+            { match: /^https?:\/\/.+/, message: 'URL 必须以 http:// 或 https:// 开头' }
+          );
+        }
+      }
+    });
+  } else if (!apiForm.value.platformType || (apiForm.value.platformType === 'Custom' && !platformSpecificFields[apiForm.value.platformType]?.some(f => f.name === 'apiUrl'))) {
+    // Fallback for generic apiUrl if no platform type selected or Custom without specific apiUrl
+    rules.apiUrl = [
+        { required: true, message: '请输入 API 地址' },
+        { type: 'url', message: '请输入有效的 URL 格式' },
+        { match: /^https?:\/\/.+/, message: 'URL 必须以 http:// 或 https:// 开头' }
+    ];
+  }
+  return rules;
+});
+
 
 // Filtered API Entries
 const filteredApiEntries = computed(() => {
   return apiEntries.value.filter(entry => {
     const term = searchTerm.value.toLowerCase().trim();
     const statusFilter = selectedStatus.value;
+    const platformTypeFilter = selectedPlatformTypeFilter.value;
 
     const matchesSearch = !term || 
-                          entry.platformName.toLowerCase().includes(term) ||
-                          entry.apiUrl.toLowerCase().includes(term);
+                          (entry.platformName && entry.platformName.toLowerCase().includes(term)) ||
+                          (entry.config?.apiUrl && entry.config.apiUrl.toLowerCase().includes(term)) || // Search in config.apiUrl
+                          (entry.apiUrl && entry.apiUrl.toLowerCase().includes(term)); // Search in old apiUrl
     
     const matchesStatus = statusFilter === undefined || statusFilter === '' || entry.status === statusFilter;
+    const matchesPlatformType = platformTypeFilter === undefined || platformTypeFilter === '' || entry.platformType === platformTypeFilter;
 
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesStatus && matchesPlatformType;
   });
 });
 
 // Helper to get initial form values
 const getInitialApiForm = () => ({
   platformName: '',
+  platformType: null,
   description: '',
-  apiUrl: '',
+  apiUrl: '', // For Custom or fallback
+  config: {},
   status: 'active',
 });
 
-// Helper function to format date (reuse if available globally, otherwise define here)
+const handlePlatformTypeChange = (selectedType) => {
+  // Reset config when platform type changes to avoid carrying over old config fields
+  apiForm.value.config = {};
+  // Optionally, pre-fill default values for the new platform type if any
+};
+
+// Helper function to format date
 const formatDate = (dateString) => {
   if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
+// Fetch API Platform Types
+const fetchApiPlatformTypes = async () => {
+  try {
+    const response = await apiService.getApiPlatformTypes();
+    platformTypes.value = response.data;
+  } catch (error) {
+    console.error('Error fetching API platform types:', error);
+    Message.error('获取可用平台类型失败');
+    platformTypes.value = ['ComfyUI', 'OpenAI', 'StabilityAI', 'Midjourney', 'DallE', 'Custom']; // Fallback
+  }
+};
+
 // Fetch API Entries
 const fetchApiEntries = async () => {
   isLoading.value = true;
-  // const accessToken = localStorage.getItem('accessToken');
-  // if (!accessToken) { Message.error('未认证'); isLoading.value = false; return; }
-
   try {
-    // const response = await fetch('/api/external-apis', {
-    //   headers: { 'Authorization': `Bearer ${accessToken}` }
-    // });
-    // if (!response.ok) {
-    //     const errorData = await response.json().catch(() => ({}));
-    //     if (response.status === 401 || response.status === 403) {
-    //          Message.error(`无权限 (${response.status})`);
-    //     } else {
-    //         throw new Error(`获取 API 列表失败: ${response.status} ${errorData.message || ''}`);
-    //     }
-    //     return;
-    // }
-    // apiEntries.value = await response.json();
-    const response = await apiService.get('/external-apis');
+    const response = await apiService.getApiEntries(); // Changed from '/external-apis'
     apiEntries.value = response.data;
   } catch (error) {
-    // Message.error(error.message);
-    // apiService interceptor will handle generic error messages.
-    // Specific messages can be kept if needed, or rely on interceptor.
     console.error('Error fetching API entries:', error);
-    if (!error.response) { // Network or other request setup errors
-        Message.error('获取 API 列表失败，请检查网络连接。');
-    }
-    // For 4xx/5xx errors, the interceptor in apiService should show a message.
-    // If a specific message for this context is needed, it can be added here.
     apiEntries.value = []; 
   } finally {
     isLoading.value = false;
   }
 };
 
-// Refresh function to clear filters and fetch data
+// Refresh function
 const refreshApiEntries = () => {
     searchTerm.value = '';
     selectedStatus.value = undefined;
+    selectedPlatformTypeFilter.value = undefined;
     fetchApiEntries();
+    fetchApiPlatformTypes(); // Also refresh platform types if they could change
 };
 
 // --- Modal Logic ---
@@ -231,8 +322,10 @@ const editApiEntry = (entry) => {
     apiForm.value = { 
         _id: entry._id,
         platformName: entry.platformName,
+        platformType: entry.platformType,
         description: entry.description || '',
-        apiUrl: entry.apiUrl,
+        apiUrl: entry.apiUrl || '', // For fallback/Custom
+        config: entry.config ? { ...entry.config } : {}, // Deep copy config
         status: entry.status,
      }; 
     isEditMode.value = true;
@@ -246,114 +339,89 @@ const handleCancel = () => {
 
 const handleSubmit = async () => {
     const validationResult = await apiFormRef.value?.validate();
-    if (validationResult) return false;
+    if (validationResult) {
+      Message.error('请检查表单输入项是否有效。');
+      return false;
+    }
 
     isSubmitting.value = true;
-    // const accessToken = localStorage.getItem('accessToken');
-    // if (!accessToken) { Message.error('认证令牌丢失'); isSubmitting.value = false; return false; }
-
-    // let url = '/api/external-apis';
-    // let method = 'POST';
-    const payload = { ...apiForm.value };
-    delete payload._id; // Remove frontend ID before sending
-
     try {
-      let response;
-      if (isEditMode.value) {
-          // url = `/api/external-apis/${currentApiEntry.value._id}`;
-          // method = 'PUT';
-          response = await apiService.put(`/external-apis/${currentApiEntry.value._id}`, payload);
-      } else {
-          response = await apiService.post('/external-apis', payload);
-      }
-
-        // const response = await fetch(url, {
-        //     method: method,
-        //     headers: {
-        //         'Authorization': `Bearer ${accessToken}`,
-        //         'Content-Type': 'application/json'
-        //     },
-        //     body: JSON.stringify(payload)
-        // });
-        // if (!response.ok) {
-        //     const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-        //     let errorMessage = `${isEditMode.value ? '更新' : '创建'}失败: ${response.status}`;
-        //     if (errorData.message) {
-        //          errorMessage += ` - ${errorData.message}`;
-        //      }
-        //     throw new Error(errorMessage);
-        // }
-        Message.success(`API 条目 ${isEditMode.value ? '更新' : '创建'}成功！`);
-        await fetchApiEntries();
-        modalVisible.value = false;
-        return true;
-    } catch (error) {
-        // Message.error(error.message);
-        // apiService interceptor should handle most error messages.
-        console.error('Error submitting API entry:', error);
-        // Specific messages can be added here if the interceptor's message is too generic.
-        // For example, if a 409 Conflict has a specific meaning here:
-        if (error.response && error.response.status === 409) {
-            Message.error(`操作失败: ${error.response.data.message || '可能存在重复的API信息'}`);
-        } else if (!error.response) {
-            Message.error('操作失败，请检查网络连接。');
+        // Prepare data, ensure config is only sent if platformType requires it
+        // and apiUrl is handled correctly for 'Custom' or older types.
+        const dataToSubmit = { ...apiForm.value };
+        if (dataToSubmit.platformType && platformSpecificFields[dataToSubmit.platformType]) {
+            // Ensure config object is structured correctly.
+            // If a field defined in platformSpecificFields is not present in apiForm.config, it won't be sent.
+            // If a field is empty but not required, it will be sent as empty.
+        } else if (dataToSubmit.platformType === 'Custom' || !dataToSubmit.platformType) {
+            // For 'Custom' or if platformType is somehow not set, rely on main apiUrl if config.customApiUrl isn't set
+            if (!dataToSubmit.config.customApiUrl && dataToSubmit.apiUrl) {
+                dataToSubmit.config.customApiUrl = dataToSubmit.apiUrl; // Or just send apiUrl as top-level
+            }
         }
-        // The interceptor in apiService.js already shows a generic error for other cases.
-        return false;
+        // Remove top-level apiUrl if platformType uses config for its URL or doesn't need it
+        if (dataToSubmit.platformType && dataToSubmit.platformType !== 'Custom' && platformSpecificFields[dataToSubmit.platformType]?.some(f => f.name.toLowerCase().includes('url'))) {
+            delete dataToSubmit.apiUrl;
+        }
+
+
+        if (isEditMode.value && currentApiEntry.value?._id) {
+            await apiService.updateApiEntry(currentApiEntry.value._id, dataToSubmit);
+            Message.success('API 条目更新成功');
+        } else {
+            await apiService.createApiEntry(dataToSubmit);
+            Message.success('API 条目添加成功');
+        }
+        modalVisible.value = false;
+        fetchApiEntries();
+    } catch (error) {
+        console.error('Error submitting API entry:', error);
+        if (error.response && error.response.data && error.response.data.message) {
+            Message.error(`操作失败: ${error.response.data.message}`);
+        } else {
+            Message.error('操作失败，请稍后重试。');
+        }
     } finally {
         isSubmitting.value = false;
     }
 };
 
-// --- Delete Logic ---
-const confirmDeleteApiEntry = (record) => {
-  if (record.usageCount && record.usageCount > 0) {
-    Message.warning(`该API被 ${record.usageCount} 个应用使用，无法删除`);
+const confirmDeleteApiEntry = (entry) => {
+  if (entry.usageCount && entry.usageCount > 0) {
+    Message.warning(`该API被 ${entry.usageCount} 个应用使用，无法删除`);
     return;
   }
-  Modal.confirm({
+  AModal.confirm({
     title: '确认删除',
-    content: `确定要删除 API " ${record.platformName} " 吗？此操作不可撤销。`,
-    okText: '确认删除',
+    content: `您确定要删除 API 条目 "${entry.platformName}" 吗？此操作不可撤销。`,
+    okText: '删除',
     cancelText: '取消',
     onOk: async () => {
       try {
-        // const accessToken = localStorage.getItem('accessToken');
-        // if (!accessToken) { Message.error('认证令牌丢失'); return; }
-        // const response = await fetch(`/api/external-apis/${record._id}`, {
-        //   method: 'DELETE',
-        //   headers: { 'Authorization': `Bearer ${accessToken}` },
-        // });
-        // if (!response.ok) {
-        //   const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-        //   throw new Error(`删除失败: ${response.status} ${errorData.message || ''}`);
-        // }
-        await apiService.delete(`/external-apis/${record._id}`);
-        Message.success('API 删除成功');
-        fetchApiEntries(); // Refresh the list
+        await apiService.deleteApiEntry(entry._id);
+        Message.success(`API 条目 "${entry.platformName}" 已删除`);
+        fetchApiEntries();
       } catch (error) {
-        // Message.error(error.message);
         console.error('Error deleting API entry:', error);
-        if (!error.response) {
-             Message.error('删除失败，请检查网络连接。');
+         if (error.response && error.response.data && error.response.data.message) {
+            Message.error(`删除失败: ${error.response.data.message}`);
+        } else {
+            Message.error('删除失败，请稍后重试。');
         }
-        // apiService interceptor handles other errors.
       }
     },
   });
 };
 
-// --- Lifecycle Hook ---
 onMounted(() => {
   fetchApiEntries();
+  fetchApiPlatformTypes();
 });
-
 </script>
 
 <style scoped>
-/* Add styles if needed */
-.arco-table-cell .arco-btn-text {
-  padding-left: 2px;
-  padding-right: 2px;
+/* Add any specific styles if needed */
+.arco-table-cell .arco-typography {
+  margin-bottom: 0;
 }
 </style> 

@@ -135,5 +135,6 @@ const handleLogin = async () => {
     transition: background-color 5000s ease-in-out 0s;
     font-family: inherit; /* Keep font consistent */
     font-size: inherit;
+    caret-color: var(--color-text-1); /* Ensure caret color matches text color */
 }
 </style>

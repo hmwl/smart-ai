@@ -4,6 +4,7 @@ const mongoose = require('mongoose');
 const AiApplication = require('../models/AiApplication');
 const AiType = require('../models/AiType'); // Needed for validation
 const ApiEntry = require('../models/ApiEntry'); // Needed for validation
+const { PLATFORM_TYPES } = require('../models/ApiEntry'); // Import PLATFORM_TYPES
 const User = require('../models/User'); // Added User model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
 const authenticateToken = require('../middleware/authenticateToken');
@@ -49,7 +50,7 @@ async function getAiApplication(req, res, next) {
     try {
         aiApp = await AiApplication.findOne({ _id: req.params.id })
                            .populate('type', 'name uri')
-                           .populate('apis', '_id name platformName apiUrl');
+                           .populate('apis', '_id name platformName platformType apiUrl config');
         if (aiApp == null) {
             return res.status(404).json({ message: '找不到指定的 AI 应用' });
         }
@@ -60,24 +61,36 @@ async function getAiApplication(req, res, next) {
     next();
 }
 
-// Helper: Validate if referenced Type and APIs exist
-async function validateReferences(typeId, apiIds) {
+// Helper: Validate if referenced Type and APIs exist AND if APIs match platformType
+async function validateReferencesAndPlatform(typeId, apiIds, appPlatformType) {
     try {
         if (typeId) {
             const typeExists = await AiType.findOne({ _id: typeId });
-            if (!typeExists) return { valid: false, message: `指定的类型 (ID: ${typeId}) 不存在` };
+            if (!typeExists) return { valid: false, message: `指定的AI类型 (ID: ${typeId}) 不存在` };
         }
         if (apiIds && apiIds.length > 0) {
             const validApiIds = apiIds.filter(id => typeof id === 'string' && id.length > 0);
-            const apiCount = await ApiEntry.countDocuments({ _id: { $in: validApiIds } });
-            if (apiCount !== validApiIds.length) {
-                return { valid: false, message: '提供的 API ID 列表中包含不存在的 API' };
+            const associatedApiEntries = await ApiEntry.find({ _id: { $in: validApiIds } }).lean();
+            
+            if (associatedApiEntries.length !== validApiIds.length) {
+                return { valid: false, message: '提供的 API ID 列表中包含不存在的 API 条目' };
+            }
+
+            if (appPlatformType) { // Only validate if appPlatformType is provided
+                for (const apiEntry of associatedApiEntries) {
+                    if (apiEntry.platformType !== appPlatformType) {
+                        return { 
+                            valid: false, 
+                            message: `API 条目 '${apiEntry.platformName}' (类型: ${apiEntry.platformType}) 与应用的平台类型 '${appPlatformType}' 不匹配。` 
+                        };
+                    }
+                }
             }
         }
         return { valid: true };
     } catch (error) {
-         console.error("Reference validation error:", error);
-        return { valid: false, message: '检查关联的类型或 API 时出错' };
+         console.error("Reference and platform validation error:", error);
+        return { valid: false, message: '检查关联的类型、API或平台兼容性时出错' };
     }
 }
 
@@ -88,7 +101,7 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
         // Add population to get type name/uri and basic api info
         const aiApps = await AiApplication.find()
                                         .populate('type', 'name uri') 
-                                        .populate('apis', '_id name platformName apiUrl') // Select necessary fields for list and edit
+                                        .populate('apis', '_id name platformName platformType apiUrl config')
                                         .sort({ name: 1 });
         res.json(aiApps);
     } catch (err) {
@@ -99,20 +112,20 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
 // POST create a new AI Application
 // Use upload.single('coverImage') middleware for the file field
 router.post('/', authenticateToken, isAdmin, upload.single('coverImage'), async (req, res) => {
-    const { name, description, tags, apis, type, status, creditsConsumed } = req.body;
+    const { name, description, tags, apis, type, platformType, status, creditsConsumed } = req.body;
 
     // Basic validation
-    if (!name || !type) {
+    if (!name || !type || !platformType) {
         // If validation fails and a file was uploaded, delete it
         if (req.file) {
             fs.unlink(req.file.path, (err) => { if (err) console.error("Error deleting uploaded file after validation fail:", err); });
         }
-        return res.status(400).json({ message: 'AI 应用名称和类型不能为空' });
+        return res.status(400).json({ message: 'AI 应用名称、类型和平台类型不能为空' });
     }
 
     // Reference validation
-    const parsedApis = apis ? (Array.isArray(apis) ? apis : [apis]) : []; // Ensure apis is an array
-    const refValidation = await validateReferences(type, parsedApis);
+    const parsedApis = apis ? (Array.isArray(apis) ? apis.filter(id => id) : [apis].filter(id=>id)) : [];
+    const refValidation = await validateReferencesAndPlatform(type, parsedApis, platformType);
     if (!refValidation.valid) {
         if (req.file) {
             fs.unlink(req.file.path, (err) => { if (err) console.error("Error deleting file after ref validation fail:", err); });
@@ -124,7 +137,8 @@ router.post('/', authenticateToken, isAdmin, upload.single('coverImage'), async 
     const appData = {
         name,
         description: description || '',
-        tags: tags ? (Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim())) : [],
+        tags: tags ? (Array.isArray(tags) ? tags.filter(t=>t) : tags.split(',').map(t => t.trim()).filter(t=>t)) : [],
+        platformType,
         apis: parsedApis,
         type,
         status: status || 'active',
@@ -166,15 +180,18 @@ router.get('/:id', authenticateToken, isAdmin, getAiApplication, (req, res) => {
 
 // PUT update an AI Application
 router.put('/:id', authenticateToken, isAdmin, getAiApplication, upload.single('coverImage'), async (req, res) => {
-    const { name, description, tags, apis, type, status, creditsConsumed } = req.body;
+    const { name, description, tags, apis, type, platformType, status, creditsConsumed } = req.body;
     const aiApp = res.aiApp; // Get from middleware
     const oldImagePath = aiApp.coverImageUrl ? path.join(__dirname, '..', aiApp.coverImageUrl) : null;
 
     // Reference validation
-    const parsedApis = apis ? (Array.isArray(apis) ? apis : [apis]) : undefined; // Undefined if not provided
-    const effectiveType = type || aiApp.type._id; // Use existing if not provided
+    const parsedApis = apis ? (Array.isArray(apis) ? apis.filter(id => id) : [apis].filter(id=>id)) : [];
+    const effectiveType = type || aiApp.type._id;
     const effectiveApis = parsedApis === undefined ? aiApp.apis.map(a => a._id) : parsedApis;
-    const refValidation = await validateReferences(effectiveType, effectiveApis);
+    const effectivePlatformType = platformType || aiApp.platformType;
+
+    // Validate references against the *final* effective platform type
+    const refValidation = await validateReferencesAndPlatform(effectiveType, effectiveApis, effectivePlatformType);
     if (!refValidation.valid) {
         if (req.file) {
             fs.unlink(req.file.path, (err) => { if (err) console.error("Error deleting new file after ref validation fail:", err); });
@@ -186,8 +203,9 @@ router.put('/:id', authenticateToken, isAdmin, getAiApplication, upload.single('
     if (name !== undefined) aiApp.name = name;
     if (description !== undefined) aiApp.description = description;
     if (status !== undefined) aiApp.status = status;
-    if (tags !== undefined) aiApp.tags = Array.isArray(tags) ? tags : tags.split(',').map(t => t.trim());
+    if (tags !== undefined) aiApp.tags = Array.isArray(tags) ? tags.filter(t=>t) : tags.split(',').map(t => t.trim()).filter(t=>t);
     if (type !== undefined) aiApp.type = type;
+    if (platformType !== undefined) aiApp.platformType = platformType;
     if (parsedApis !== undefined) aiApp.apis = parsedApis;
     if (creditsConsumed !== undefined) aiApp.creditsConsumed = Number(creditsConsumed);
 

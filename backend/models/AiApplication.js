@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const generateCustomId = require('../utils/generateCustomId'); // Import the generator
+const { PLATFORM_TYPES } = require('./ApiEntry'); // Import PLATFORM_TYPES
 
 const aiApplicationSchema = new Schema({
   _id: {
@@ -25,6 +26,11 @@ const aiApplicationSchema = new Schema({
   coverImageUrl: {
     type: String, // 存储上传后的图片访问 URL
     trim: true,
+  },
+  platformType: { // New field
+    type: String,
+    required: [true, '平台类型不能为空'],
+    enum: PLATFORM_TYPES,
   },
   apis: [{
     type: String,
@@ -66,6 +72,7 @@ aiApplicationSchema.pre('save', function (next) {
   if (this.isNew && !this._id) { // Ensure ID is set only for new documents
     this._id = generateCustomId('AI');
   }
+  this.updatedAt = new Date(); // Explicitly set updatedAt on every save
   next();
 });
 

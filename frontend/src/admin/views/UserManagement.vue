@@ -466,14 +466,14 @@ const confirmDeleteUser = (user) => {
         await apiService.delete(`/users/${user._id}`);
         Message.success(`用户 “${user.username}” 删除成功`);
         await fetchUsers(); // Refresh list
-      } catch (error) {
-        console.error('Error deleting user:', error);
+        } catch (error) {
+          console.error('Error deleting user:', error);
         // Message.error(error.message || '删除用户时发生错误');
         if (!error.response) {
             Message.error('删除用户失败，请检查网络连接。');
         }
         // apiService interceptor handles other errors.
-      }
+        }
     }
   });
 };

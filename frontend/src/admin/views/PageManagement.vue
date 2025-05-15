@@ -130,8 +130,8 @@
             </a-col>
         </a-row>
         
-        <a-form-item field="route" label="页面路由" :rules="pageRouteRules" validate-trigger="blur">
-             <a-input v-model="pageForm.route" placeholder="例如: /about-us (必须以 / 开头)" />
+        <a-form-item field="route" label="页面路由" :rules="pageRouteRules" validate-trigger="blur" tooltip="必须以 / 开头">
+             <a-input v-model="pageForm.route" placeholder="例如: /about-us" />
         </a-form-item>
         
          <a-row :gutter="16">
@@ -185,7 +185,7 @@
             </div>
         </a-form-item>
          <a-form-item v-if="pageForm.type === 'collection'" field="content" label="集合描述">
-           <a-textarea v-model="pageForm.content" placeholder="输入此集合的描述信息（可选，可在模板中显示）" :auto-size="{ minRows: 3, maxRows: 6 }"/>
+           <a-textarea v-model="pageForm.content" placeholder="输入此集合的描述信息（可选）" :auto-size="{ minRows: 3, maxRows: 6 }"/>
         </a-form-item>
 
       </a-form>
@@ -402,7 +402,7 @@ const handleCancel = () => {
 const handleSubmit = async () => {
   const isValid = await pageFormRef.value?.validate();
   if (!isValid) {
-    isSubmitting.value = true;
+  isSubmitting.value = true;
     let payload = { ...pageForm.value };
 
     // Ensure content is handled correctly (Quill gives HTML string directly if contentType is html)
@@ -413,20 +413,20 @@ const handleSubmit = async () => {
     // Remove _id from payload if it's for creation, not needed by backend then
     if (!isEditMode.value) {
       delete payload._id;
-    }
+  } 
 
-    try {
+  try {
       let response;
       if (isEditMode.value && currentPage.value?._id) {
         response = await apiService.put(`/pages/${currentPage.value._id}`, payload);
-      } else {
+         } else {
         response = await apiService.post('/pages', payload);
-      }
+    }
 
       Message.success(`页面 ${isEditMode.value ? '更新' : '创建'}成功`);
       modalVisible.value = false;
-      await fetchPages();
-    } catch (error) {
+    await fetchPages(); 
+  } catch (error) {
       console.error('Error submitting page:', error);
       // apiService interceptor should handle most errors.
       // Add specific handling if needed, e.g., for 409 conflict on route name
@@ -438,8 +438,8 @@ const handleSubmit = async () => {
         } else if (!error.response) {
             Message.error('操作失败，请检查网络连接。');
         }
-    } finally {
-      isSubmitting.value = false;
+  } finally {
+    isSubmitting.value = false;
     }
   }
 };
@@ -455,24 +455,24 @@ const confirmDeletePage = (page) => {
     return;
   }
 
-  Modal.confirm({
-    title: '确认删除',
+    Modal.confirm({
+        title: '确认删除',
     content: `确定要删除页面 “${page.name}” (路径: ${page.route}) 吗？此操作不可撤销。`,
-    okText: '确认删除',
-    cancelText: '取消',
-    onOk: async () => {
+        okText: '确认删除',
+        cancelText: '取消',
+        onOk: async () => {
       try {
         await apiService.delete(`/pages/${page._id}`);
         Message.success(`页面 “${page.name}” 删除成功`);
-        await fetchPages();
-      } catch (error) {
-        console.error('Error deleting page:', error);
+                    await fetchPages();
+                } catch (error) {
+                    console.error('Error deleting page:', error);
         if (!error.response) {
             Message.error('删除失败，请检查网络连接。');
-        }
+                }
       }
-    }
-  });
+        }
+    });
 };
 
 // Updated manageList to navigate

@@ -114,7 +114,6 @@
                     @details="handleShowWorkDetails"
                     @edit="handleEditWorkInAllWorks"
                     @deleteFromCategory="() => handleDeleteWorkFromCategoryConfirm(element._id, element.title)"
-                    :show-details-button="false"
                     :show-edit-button="false"
                     :show-delete-button="false" 
                     :show-delete-from-category="selectedCategory && selectedCategory.key !== ALL_WORKS_KEY"
@@ -170,8 +169,9 @@
           <div v-for="work in filteredAllWorksForModal" :key="work._id" class="work-card-wrapper-modal">
             <WorkCard 
               :work="work" 
-              :show-details-button="false" 
+              @details="handleShowWorkDetails"
               :show-edit-button="false"
+              :show-delete-button="false"
               :show-delete-from-category="false" 
               style="box-shadow: var(--shadow-1);" 
               class="modal-work-item-card" 
