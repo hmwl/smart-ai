@@ -43,7 +43,9 @@
                   <a-tag v-if="item.creditsConsumed === 0" color="green" bordered size="small">免费</a-tag>
                   <a-tag v-else-if="item.creditsConsumed > 0" color="gold" bordered size="small">{{ item.creditsConsumed }} 积分</a-tag>
                 </div>
-                <a-button type="primary" @click="handleAppClick(item)" class="app-action-button">查看详情</a-button>
+                <div class="flex w-full justify-center mt-8">
+                  <a-button type="primary" @click="handleAppClick(item)">查看详情</a-button>
+                </div>
               </div>
             </a-card>
           </a-list-item>
@@ -144,7 +146,6 @@ onMounted(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .app-card:hover {
@@ -179,11 +180,6 @@ onMounted(() => {
   justify-content: center;
   color: rgba(255, 255, 255, 0.5);
 }
-
-.app-card .arco-card-meta {
-  padding: 16px;
-}
-
 .app-card .arco-card-meta-title {
   font-size: 18px;
   font-weight: 600;
@@ -196,8 +192,6 @@ onMounted(() => {
 .app-description {
   font-size: 14px;
   color: rgba(255, 255, 255, 0.7);
-  min-height: 42px;
-  line-height: 1.5;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
@@ -208,7 +202,6 @@ onMounted(() => {
 
 .app-card-footer {
   margin-top: auto;
-  padding: 0 16px 16px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -231,5 +224,8 @@ onMounted(() => {
   justify-content: center;
   align-items: center;
   min-height: 200px;
+}
+:deep(.arco-list-bordered){
+  border: unset!important;
 }
 </style>

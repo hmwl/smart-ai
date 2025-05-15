@@ -72,11 +72,12 @@
       </a-layout-sider>
 
       <a-layout-content style="padding: 16px 16px 16px 24px; background: var(--color-bg-1); display: flex; flex-direction: column; overflow-y: hidden;">
-        <div class="flex justify-between items-center mb-4">
-          <a-typography-title :heading="6" style="margin:0;">
+        <div class="flex justify-between items-center gap-6">
+          <a-typography-title :heading="6" class="!m-0">
             {{ selectedCategory ? selectedCategory.name : (treeData.length > 0 ? '请选择分类或"全部"查看作品' : '作品展示区') }}
             <span v-if="selectedCategory && currentWorksToDisplay.length > 0">
               ({{ currentWorksToDisplay.length }} 个作品)
+              
             </span>
           </a-typography-title>
           <a-button 
@@ -89,6 +90,7 @@
             添加作品
           </a-button>
         </div>
+        <p v-if="selectedCategory && selectedCategory.description" class="text-xs text-gray-500 mt-2 mb-4">{{  selectedCategory.description }}</p>
         
         <a-spin :loading="worksLoading" style="width:100%; flex-grow: 1; overflow-y: auto;">
           <div v-if="currentWorksToDisplay.length > 0" class="works-grid-container">

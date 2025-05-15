@@ -81,7 +81,7 @@
                    </a-space>
                 </template>
                  <template #title="nodeData">
-                     <span v-if="nodeData.type === 'divider'" class="divider-title">------</span>
+                     <span v-if="nodeData.type === 'divider'" class="divider-title">------------------------------------------------------------------</span>
                      <span v-else>{{ nodeData.title }}</span>
                  </template>
              </a-tree>

@@ -7,22 +7,24 @@
     </a-page-header>
 
     <div class="inspiration-page-main-content">
-      <a-tabs :active-key="selectedCategoryId" @change="handleCategoryChange" type="rounded" class="mb-6">
-        <a-tab-pane key="all" title="全部"></a-tab-pane>
-        <a-tab-pane v-for="category in categories" :key="category._id" :title="`${category.name} (${category.publicWorkCount})`">
-        </a-tab-pane>
-      </a-tabs>
-
-      <div class="search-and-selected-tags-container mb-6">
+      <div class="flex justify-between items-start">
+        <a-tabs :active-key="selectedCategoryId" @change="handleCategoryChange" type="rounded">
+          <a-tab-pane key="all" title="全部"></a-tab-pane>
+          <a-tab-pane v-for="category in categories" :key="category._id" :title="`${category.name} (${category.publicWorkCount})`"></a-tab-pane>
+        </a-tabs>
         <a-input-search 
-          v-model="searchTerm"
-          placeholder="搜索作品标题、描述、标签..."
-          style="width: 300px; margin-bottom: 10px;"
-          allow-clear
-          @input="debouncedSearchTermChange"
-          @search="fetchWorksFirstPage" 
-          @clear="handleSearchClear"
-        />
+            v-model="searchTerm"
+            placeholder="搜索作品标题、描述、标签..."
+            style="width: 300px;"
+            allow-clear
+            @input="debouncedSearchTermChange"
+            @search="fetchWorksFirstPage" 
+            @clear="handleSearchClear"
+          />
+      </div>
+
+      <div class="search-and-selected-tags-container">
+        
         <!-- Selected Filter Tags Display -->
         <div v-if="selectedFilterTags.length > 0" class="selected-tags-display mt-2">
           <span class="mr-2">筛选标签:</span>
