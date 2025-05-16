@@ -70,22 +70,6 @@
             <div v-if="application.longDescription" v-html="application.longDescription" class="long-description-content"></div>
             <p v-else>暂无详细介绍。</p>
           </a-card>
-
-          <a-card class="details-card apis-card" title="包含的 API 服务" :bordered="false" v-if="application.apis && application.apis.length > 0">
-            <a-list :data-source="application.apis" :bordered="false" size="small">
-              <template #item="{ item: api }">
-                <a-list-item>
-                  <a-list-item-meta :title="api.platformName || '未知API'">
-                    <template #description>
-                      <p><strong>接口地址:</strong> {{ api.apiUrl }}</p>
-                      <p v-if="api.description"><strong>描述:</strong> {{ api.description }}</p>
-                      <p><strong>每次调用消耗:</strong> {{ api.creditsPerCall !== undefined ? api.creditsPerCall : 'N/A' }} 积分</p>
-                    </template>
-                  </a-list-item-meta>
-                </a-list-item>
-              </template>
-            </a-list>
-          </a-card>
         </div>
       </div>
       <a-empty v-else-if="!loading && !errorMsg" description="未找到应用数据" />
@@ -108,6 +92,7 @@ const router = useRouter();
 // Inject isLoggedIn and openLoginModal from ClientLayout
 const isLoggedIn = inject('isLoggedIn');
 const openLoginModal = inject('openLoginModal');
+const refreshUserData = inject('refreshUserData');
 
 const application = ref(null);
 const loading = ref(true);
@@ -180,19 +165,17 @@ const launchApp = async () => {
         // The backend endpoint would be POST /api/auth/client/ai-applications/:id/launch
         const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`);
         
-        Message.success(response.data.message || `应用 "${appName}" 启动成功！已消耗 ${creditsToConsume} 积分。请刷新页面查看最新积分。`);
-        // TODO: Implement a better way to update user credits in the layout
-        // For now, we can prompt the user to refresh or fetch user data again if layout exposes a method
+        Message.success(response.data.message || `应用 "${appName}" 启动成功！已消耗 ${creditsToConsume} 积分。`);
         
-        // Potentially, if the launch implies a redirect or further action:
-        // if (response.data.launchUrl) {
-        //   window.open(response.data.launchUrl, '_blank');
-        // } else {
-        //   // Or navigate to a specific "active session" page for this app if applicable
-        // }
+        if (refreshUserData) { 
+          refreshUserData();
+        }
 
+        // Log ComfyUI /users data if present in response
+        if (response.data && response.data.comfyuiUsersData) {
+        }
+        
       } catch (error) {
-        console.error(`Error launching AI application ${appId.value}:`, error);
         Message.error(error.response?.data?.message || error.message || '启动应用失败');
       }
     },
@@ -338,23 +321,6 @@ onMounted(() => {
   color: var(--dark-text-primary);
   margin-top: 1.5em;
   margin-bottom: 0.5em;
-}
-
-.apis-card .arco-list-item {
-  border-bottom: 1px solid var(--dark-border-color) !important;
-}
-.apis-card .arco-list-item:last-child {
-  border-bottom: none !important;
-}
-.apis-card .arco-list-item-meta-title {
-  color: var(--dark-text-primary);
-  font-size: 15px;
-  margin-bottom: 4px;
-}
-.apis-card .arco-list-item-meta-description p {
-  color: var(--dark-text-secondary);
-  font-size: 13px;
-  margin-bottom: 2px;
 }
 
 .error-display {

@@ -123,10 +123,10 @@
                 <a-button type="text" status="warning" size="mini" @click="showEditModal(record)">编辑</a-button>
                 <a-button type="text" size="mini" disabled>配置</a-button> <!-- Placeholder for config button -->
                 <a-popconfirm
-                  title="确定要删除这个 AI 应用吗？相关的封面图片也会被删除。"
+                  content="确定要删除这个 AI 应用吗？相关的封面图片也会被删除。"
                   ok-text="确定"
                   cancel-text="取消"
-                  @confirm="handleDelete(record._id)"
+                  @ok="handleDelete(record._id)"
                 >
                   <a-button type="text" status="danger" size="mini">删除</a-button>
                 </a-popconfirm>

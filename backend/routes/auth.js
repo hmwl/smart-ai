@@ -8,6 +8,8 @@ const ms = require('ms'); // 用于解析时间字符串，如 '7d'
 const authenticateToken = require('../middleware/authenticateToken'); // 引入认证中间件
 const AiApplication = require('../models/AiApplication'); // Added AiApplication model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
+const ComfyUIService = require('../services/platform_integrations/comfyuiService');
+const OpenAIService = require('../services/platform_integrations/openaiService');
 
 // POST /api/auth/login - 用户登录
 router.post('/login', async (req, res) => {
@@ -467,68 +469,116 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
 // POST /api/client/ai-applications/:id/launch - 客户端用户启动AI应用并扣除积分
 router.post('/client/ai-applications/:id/launch', authenticateToken, async (req, res) => {
+  let consumptionTransactionId = null;
+  const { id: applicationId } = req.params; 
+  const userId = req.user ? req.user.userId : null; 
+
   try {
-    const userId = req.user.userId;
-    const { id: applicationId } = req.params; // AI Application ID from route params
-
-    // 1. Verify user is a client user (not an admin)
     const currentUser = await User.findById(userId);
-    if (!currentUser) {
-      return res.status(404).json({ message: '用户未找到' });
-    }
-    if (currentUser.isAdmin) {
-      return res.status(403).json({ message: '此操作仅限客户端用户' });
-    }
-    if (currentUser.status !== 'active') {
-      return res.status(403).json({ message: '用户账户已被禁用' });
-    }
+    if (!currentUser) return res.status(404).json({ message: '用户未找到' });
+    if (currentUser.isAdmin) return res.status(403).json({ message: '此操作仅限客户端用户' });
+    if (currentUser.status !== 'active') return res.status(403).json({ message: '用户账户已被禁用' });
 
-    // 2. Fetch the AI Application
-    const application = await AiApplication.findById(applicationId);
-    if (!application) {
-      return res.status(404).json({ message: 'AI 应用未找到' });
-    }
-    if (application.status !== 'active') {
-      return res.status(400).json({ message: '此 AI 应用当前不可用' });
-    }
+    const application = await AiApplication.findById(applicationId)
+      .populate('type', 'name uri _id')
+      .populate('apis', 'platformName platformType config apiUrl');
+
+    if (!application) return res.status(404).json({ message: 'AI 应用未找到' });
+    if (application.status !== 'active') return res.status(400).json({ message: '此 AI 应用当前不可用' });
 
     const creditsToConsume = application.creditsConsumed;
+    const balanceBeforeConsumption = currentUser.creditsBalance;
 
-    // 3. Check user's credit balance
-    if (currentUser.creditsBalance < creditsToConsume) {
+    if (balanceBeforeConsumption < creditsToConsume) {
       return res.status(400).json({ message: '积分不足，无法启动应用' });
     }
 
-    // 4. Deduct credits and save user
-    const balanceBefore = currentUser.creditsBalance;
+    // --- Step 1: Deduct Credits and Record Consumption ---
     currentUser.creditsBalance -= creditsToConsume;
     await currentUser.save();
-
-    // 5. Create CreditTransaction record
-    const creditTransaction = new CreditTransaction({
-      user: userId,
-      type: 'consumption',
-      aiApplication: applicationId,
-      creditsChanged: -creditsToConsume,
-      balanceBefore: balanceBefore,
-      balanceAfter: currentUser.creditsBalance,
-      description: `启动AI应用: ${application.name}`,
+    const consumptionTransaction = new CreditTransaction({
+        user: userId,
+        type: 'consumption',
+        aiApplication: applicationId,
+        creditsChanged: -creditsToConsume,
+        balanceBefore: balanceBeforeConsumption,
+        balanceAfter: currentUser.creditsBalance,
+        description: `尝试启动AI应用: ${application.name}`,
     });
-    await creditTransaction.save();
+    await consumptionTransaction.save();
+    consumptionTransactionId = consumptionTransaction._id;
 
-    res.json({
-      message: `应用 "${application.name}" 启动成功！已消耗 ${creditsToConsume} 积分。`,
-      newBalance: currentUser.creditsBalance,
-      transactionId: creditTransaction._id
-    });
+    // --- Step 2: Attempt Service Execution ---
+    let serviceUserMessage = ''; 
+    let serviceDataForClient = null;
+    // let serviceCallSuccessful = false; // Not strictly needed if success path returns directly
 
-  } catch (error) {
-    console.error('Error launching AI application:', error);
-    // Handle specific errors like CastError for invalid ObjectId format
-    if (error.name === 'CastError') {
-        return res.status(400).json({ message: '无效的应用ID格式' });
+    try {
+      if (application.platformType === 'ComfyUI') {
+        const comfyApis = application.apis.filter(api => api.platformType === 'ComfyUI' && api.config && api.config.apiUrl);
+        if (!comfyApis || comfyApis.length === 0) {
+           throw new Error('应用未配置有效ComfyUI API或API信息不完整。');
+        }
+        const selectedApiEntry = comfyApis[Math.floor(Math.random() * comfyApis.length)];
+        const comfyService = new ComfyUIService(selectedApiEntry.config);
+        serviceDataForClient = await comfyService.getUsersInfo(); 
+        serviceUserMessage = `ComfyUI 服务 (${selectedApiEntry.platformName}) 调用成功。`; 
+        // serviceCallSuccessful = true;
+      } else if (application.platformType === 'OpenAI') {
+        const openAiApis = application.apis.filter(api => api.platformType === 'OpenAI' && api.config && api.config.apiKey);
+         if (!openAiApis || openAiApis.length === 0) {
+           throw new Error('应用未配置有效OpenAI API或API信息不完整。');
+        }
+        const selectedApiEntry = openAiApis[Math.floor(Math.random() * openAiApis.length)];
+        const openAiService = new OpenAIService(selectedApiEntry.config);
+        serviceDataForClient = await openAiService.healthCheck(); 
+        serviceUserMessage = `OpenAI 服务 (${selectedApiEntry.platformName}) 调用成功: ${serviceDataForClient.status}`;
+        // serviceCallSuccessful = true;
+      } else {
+        throw new Error(`平台类型 '${application.platformType}' 的服务执行逻辑暂未实现。`);
+      }
+
+      // If all service calls successful
+      return res.json({
+        message: `应用 "${application.name}" 启动成功！已消耗 ${creditsToConsume} 积分。${serviceUserMessage}`,
+        newBalance: currentUser.creditsBalance,
+        transactionId: consumptionTransactionId,
+        comfyuiUsersData: application.platformType === 'ComfyUI' ? serviceDataForClient : null,
+        openAiServiceData: application.platformType === 'OpenAI' ? serviceDataForClient : null
+      });
+
+    } catch (serviceExecutionError) {
+      console.error(`[App Launch ID: ${applicationId}] SERVICE EXECUTION FAILED. Error: ${serviceExecutionError.message}. Initiating refund.`);
+      serviceUserMessage = serviceExecutionError.message; 
+
+      const balanceBeforeRefund = currentUser.creditsBalance;
+      currentUser.creditsBalance += creditsToConsume;
+      await currentUser.save();
+      const refundTransaction = new CreditTransaction({
+        user: userId, type: 'refund', aiApplication: applicationId,
+        creditsChanged: creditsToConsume, balanceBefore: balanceBeforeRefund,
+        balanceAfter: currentUser.creditsBalance,
+        description: `应用启动失败退款 (${application.name}). 原因: ${serviceUserMessage.substring(0, 150)}`, 
+        relatedTransaction: consumptionTransactionId
+      });
+      await refundTransaction.save();
+
+      return res.status(500).json({ 
+        message: `应用 "${application.name}" 启动服务失败，已退还 ${creditsToConsume} 积分。原因: ${serviceUserMessage}`,
+        errorDetail: serviceExecutionError.message, 
+        newBalance: currentUser.creditsBalance,
+        originalTransactionId: consumptionTransactionId,
+        refundTransactionId: refundTransaction._id
+      });
     }
-    res.status(500).json({ message: '启动应用失败，服务器内部错误' });
+  } catch (outerError) {
+    console.error(`[App Launch ID: ${applicationId || 'UNKNOWN'}] CRITICAL error during app launch process: User: ${userId || 'UNKNOWN'}, Error: ${outerError.message}`);
+    if (outerError.name === 'CastError') {
+      return res.status(400).json({ message: '无效的应用ID格式，操作未完成。' });
+    }
+    return res.status(500).json({ 
+        message: `启动应用过程中发生严重错误 (${outerError.message})，请联系管理员检查您的积分状态。`
+    });
   }
 });
 

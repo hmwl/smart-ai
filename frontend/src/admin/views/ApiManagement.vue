@@ -132,7 +132,7 @@
         </div>
         
         <!-- Fallback API URL for 'Custom' type or older entries without specific config structure -->
-        <a-form-item v-if="!apiForm.platformType || (apiForm.platformType === 'Custom' && !platformSpecificFields[apiForm.platformType]?.some(f => f.name === 'apiUrl'))" field="apiUrl" label="API 地址 (通用)">
+        <a-form-item v-if="!apiForm.platformType || !platformSpecificFields[apiForm.platformType]?.some(f => f.name === 'apiUrl')" field="apiUrl" label="API 地址 (通用)">
           <a-input v-model="apiForm.apiUrl" placeholder="例如：https://api.example.com/custom_endpoint" />
         </a-form-item>
 
@@ -190,14 +190,20 @@ const platformSpecificFields = {
     { name: 'apiKey', label: 'StabilityAI API Key', type: 'password', required: true, placeholder: 'sk-...' },
     { name: 'defaultEngine', label: '默认引擎 (可选)', type: 'text', placeholder: 'stable-diffusion-v1-5' }
   ],
-  // Custom type might not have predefined fields, or could use the generic apiUrl
   Custom: [
-     { name: 'customApiUrl', label: '自定义 API URL', type: 'text', required: false, placeholder: 'http://custom.api/endpoint' },
+     { name: 'apiUrl', label: '自定义 API URL', type: 'text', required: true, placeholder: 'http://custom.api/endpoint' },
      { name: 'customApiKey', label: '自定义 API Key (可选)', type: 'password', placeholder: 'your-custom-key' }
   ]
   // Midjourney and DallE might be covered by OpenAI or have their own specifics
 };
 
+const isGenericApiUrlFieldVisible = computed(() => {
+  if (!apiForm.value.platformType) return true; // No type selected, generic field is visible
+  const specificFields = platformSpecificFields[apiForm.value.platformType];
+  // If the platform type has no specific fields defined, or if it does but none of them is named 'apiUrl', the generic field is visible.
+  if (!specificFields) return true;
+  return !specificFields.find(field => field.name === 'apiUrl');
+});
 
 // Validation Rules
 const formRules = computed(() => {
@@ -206,6 +212,15 @@ const formRules = computed(() => {
     platformType: [{ required: true, message: '请选择平台类型' }],
     status: [{ required: true, message: '请选择状态' }],
   };
+
+  // Apply rules for the generic apiUrl field only if it's visible
+  if (isGenericApiUrlFieldVisible.value) {
+    rules.apiUrl = [
+        { required: true, message: '请输入 API 地址' },
+        { type: 'url', message: '请输入有效的 URL 格式' },
+        { match: /^https?:\/\/.+/, message: 'URL 必须以 http:// 或 https:// 开头' }
+    ];
+  }
 
   if (apiForm.value.platformType && platformSpecificFields[apiForm.value.platformType]) {
     platformSpecificFields[apiForm.value.platformType].forEach(field => {
@@ -219,17 +234,9 @@ const formRules = computed(() => {
         }
       }
     });
-  } else if (!apiForm.value.platformType || (apiForm.value.platformType === 'Custom' && !platformSpecificFields[apiForm.value.platformType]?.some(f => f.name === 'apiUrl'))) {
-    // Fallback for generic apiUrl if no platform type selected or Custom without specific apiUrl
-    rules.apiUrl = [
-        { required: true, message: '请输入 API 地址' },
-        { type: 'url', message: '请输入有效的 URL 格式' },
-        { match: /^https?:\/\/.+/, message: 'URL 必须以 http:// 或 https:// 开头' }
-    ];
   }
   return rules;
 });
-
 
 // Filtered API Entries
 const filteredApiEntries = computed(() => {
@@ -346,25 +353,24 @@ const handleSubmit = async () => {
 
     isSubmitting.value = true;
     try {
-        // Prepare data, ensure config is only sent if platformType requires it
-        // and apiUrl is handled correctly for 'Custom' or older types.
-        const dataToSubmit = { ...apiForm.value };
+        const dataToSubmit = JSON.parse(JSON.stringify(apiForm.value)); // Deep copy
+
+        // Ensure the top-level dataToSubmit.apiUrl is correctly populated
         if (dataToSubmit.platformType && platformSpecificFields[dataToSubmit.platformType]) {
-            // Ensure config object is structured correctly.
-            // If a field defined in platformSpecificFields is not present in apiForm.config, it won't be sent.
-            // If a field is empty but not required, it will be sent as empty.
-        } else if (dataToSubmit.platformType === 'Custom' || !dataToSubmit.platformType) {
-            // For 'Custom' or if platformType is somehow not set, rely on main apiUrl if config.customApiUrl isn't set
-            if (!dataToSubmit.config.customApiUrl && dataToSubmit.apiUrl) {
-                dataToSubmit.config.customApiUrl = dataToSubmit.apiUrl; // Or just send apiUrl as top-level
+            const specificPlatformFields = platformSpecificFields[dataToSubmit.platformType];
+            // Check if the platform defines its URL within the 'config' object (e.g., ComfyUI, Custom)
+            const platformDefinesUrlInConfig = specificPlatformFields.find(f => f.name === 'apiUrl');
+
+            if (platformDefinesUrlInConfig && dataToSubmit.config && dataToSubmit.config.apiUrl) {
+                // If so, use this config.apiUrl as the primary top-level apiUrl.
+                dataToSubmit.apiUrl = dataToSubmit.config.apiUrl;
             }
+            // If platformDefinesUrlInConfig is false (e.g., OpenAI, StabilityAI),
+            // dataToSubmit.apiUrl (from the generic apiForm.apiUrl input) is already correctly set.
         }
-        // Remove top-level apiUrl if platformType uses config for its URL or doesn't need it
-        if (dataToSubmit.platformType && dataToSubmit.platformType !== 'Custom' && platformSpecificFields[dataToSubmit.platformType]?.some(f => f.name.toLowerCase().includes('url'))) {
-            delete dataToSubmit.apiUrl;
-        }
-
-
+        // If !dataToSubmit.platformType (no platform type selected),
+        // dataToSubmit.apiUrl (from the generic apiForm.apiUrl input) is also correctly set.
+        
         if (isEditMode.value && currentApiEntry.value?._id) {
             await apiService.updateApiEntry(currentApiEntry.value._id, dataToSubmit);
             Message.success('API 条目更新成功');

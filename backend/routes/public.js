@@ -289,8 +289,8 @@ router.get('/ai-applications/:id', async (req, res) => {
 
     const application = await AiApplication.findOne({ _id: id /*, status: 'active' */ }) // Temporarily allow fetching any status for detail view
       .populate('type', 'name uri _id')
-      .populate('apis', 'platformName apiUrl description creditsPerCall _id') // Populate API details
-      .select('-__v'); // Exclude version key, select all other fields by default
+      // .populate('apis', 'platformName apiUrl description creditsPerCall _id') // Populate API details
+      .select('-__v -apis'); // Exclude version key, select all other fields by default
 
     if (!application) {
       return res.status(404).json({ message: '未找到指定的AI应用' });

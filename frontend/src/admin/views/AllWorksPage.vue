@@ -1,5 +1,5 @@
 <template>
-  <div class="all-works-page p-4">
+  <div class="all-works-page">
     <div class="flex flex-wrap justify-between items-center gap-4 mb-4">
       <h2 class="text-xl font-semibold whitespace-nowrap">所有作品</h2>
       <a-space wrap class="flex-grow justify-end">

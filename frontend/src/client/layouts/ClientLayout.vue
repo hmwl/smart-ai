@@ -240,6 +240,7 @@ onMounted(() => {
 // Provide openLoginModal to child components if needed globally
 provide('isLoggedIn', isLoggedIn);
 provide('openLoginModal', openLoginModal);
+provide('refreshUserData', fetchCurrentUserData);
 </script>
 
 <style scoped>

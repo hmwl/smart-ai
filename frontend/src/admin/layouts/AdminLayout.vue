@@ -38,6 +38,20 @@
             </a-menu-item>
         </a-sub-menu>
 
+        <!-- Works Management Sub-menu -->
+        <a-sub-menu key="works-management-group">
+            <template #icon><icon-book /></template>
+            <template #title>作品管理</template>
+            <a-menu-item key="inspiration-market">
+                <template #icon><icon-bulb /></template>
+                灵感市场
+            </a-menu-item>
+            <a-menu-item key="all-works">
+                <template #icon><icon-select-all /></template>
+                所有作品
+            </a-menu-item>
+        </a-sub-menu>
+
         <!-- Application Management Menu Item -->
         <a-menu-item key="application-management">
           <template #icon><icon-apps /></template>
@@ -77,20 +91,6 @@
             <a-menu-item key="template-management">
                  <template #icon><icon-brush /></template>
                  模板管理
-            </a-menu-item>
-        </a-sub-menu>
-
-        <!-- Works Management Sub-menu -->
-        <a-sub-menu key="works-management-group">
-            <template #icon><icon-book /></template>
-            <template #title>作品管理</template>
-            <a-menu-item key="inspiration-market">
-                <template #icon><icon-bulb /></template>
-                灵感市场
-            </a-menu-item>
-            <a-menu-item key="all-works">
-                <template #icon><icon-select-all /></template>
-                所有作品
             </a-menu-item>
         </a-sub-menu>
         
