@@ -1,5 +1,7 @@
 import { createRouter, createWebHashHistory } from 'vue-router';
 import ClientLayout from '../layouts/ClientLayout.vue';
+// Assuming RouterViewLayout.vue will be created or AiApplicationsPage can act as layout
+import RouterViewLayout from '../layouts/RouterViewLayout.vue'; 
 
 const routes = [
   {
@@ -18,10 +20,26 @@ const routes = [
         redirect: '/inspiration' // Default to InspirationPage
       },
       {
-        path: 'ai-applications',
-        name: 'AiApplications',
-        component: () => import('../views/AiApplicationsPage.vue'),
-        meta: { title: 'AI 应用' }
+        path: 'ai-applications', 
+        component: RouterViewLayout, // Use a layout component with <router-view>
+        // name: 'AiApplicationsRoot', // Optional name for the parent route group
+        redirect: { name: 'AiApplicationsList' }, // Default to list view
+        meta: { title: 'AI 应用' }, // Title for the group, might be overridden by children
+        children: [
+          {
+            path: '', // Path will be /ai-applications
+            name: 'AiApplicationsList',
+            component: () => import('../views/AiApplicationsPage.vue'),
+            meta: { title: 'AI 应用列表' } // More specific title for list
+          },
+          {
+            path: ':id', // Path will be /ai-applications/:id
+            name: 'AiApplicationDetail',
+            component: () => import('../views/AiApplicationDetailPage.vue'),
+            meta: { title: 'AI 应用详情' }, // Title for detail view
+            props: true 
+          }
+        ]
       },
       {
         path: 'inspiration', // Route for Inspiration Gallery / Market
@@ -48,13 +66,6 @@ const routes = [
         name: 'UserCreditTransactions',
         component: () => import('../views/UserCreditTransactionsPage.vue'),
         meta: { requiresAuth: true, title: '消费记录' }
-      },
-      {
-        path: 'ai-applications/:id', // New Detail Route
-        name: 'AiApplicationDetail',
-        component: () => import('../views/AiApplicationDetailPage.vue'),
-        meta: { title: 'AI 应用详情' },
-        props: true // Pass route params as props to the component
       }
     ]
   },

@@ -7,7 +7,7 @@
       <template #extra>
         <div class="flex items-center gap-2">
           <a-button @click="goBack">返回列表</a-button>
-          <a-button type="primary" v-if="application && application.status === 'active'" @click="launchApp">启动应用</a-button>
+          <a-button type="primary" v-if="application && application.status === 'active'" @click="launchApp">执行应用</a-button>
         </div>
       </template>
     </a-page-header>
@@ -138,7 +138,7 @@ const fetchApplicationDetail = async () => {
 };
 
 const goBack = () => {
-  router.push({ name: 'AiApplications' }); // Navigate back to the list page
+  router.push({ name: 'AiApplicationsList' }); // Navigate back to the list page using the correct route name
 };
 
 const launchApp = async () => {
@@ -155,9 +155,9 @@ const launchApp = async () => {
   const creditsToConsume = application.value.creditsConsumed;
 
   Modal.confirm({
-    title: '确认启动应用',
-    content: `启动应用 "${appName}" 将消耗 ${creditsToConsume} 积分。是否继续？`,
-    okText: '确认启动',
+    title: '确认执行应用',
+    content: `执行应用 "${appName}" 将消耗 ${creditsToConsume} 积分。是否继续？`,
+    okText: '确认执行',
     cancelText: '取消',
     onOk: async () => {
       try {
@@ -165,7 +165,7 @@ const launchApp = async () => {
         // The backend endpoint would be POST /api/auth/client/ai-applications/:id/launch
         const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`);
         
-        Message.success(response.data.message || `应用 "${appName}" 启动成功！已消耗 ${creditsToConsume} 积分。`);
+        Message.success(response.data.message || `应用 "${appName}" 执行成功！已消耗 ${creditsToConsume} 积分。`);
         
         if (refreshUserData) { 
           refreshUserData();
@@ -176,11 +176,11 @@ const launchApp = async () => {
         }
         
       } catch (error) {
-        Message.error(error.response?.data?.message || error.message || '启动应用失败');
+        Message.error(error.response?.data?.message || error.message || '执行应用失败');
       }
     },
     onCancel: () => {
-      Message.info('已取消启动应用');
+      Message.info('已取消执行应用');
     }
   });
 };

@@ -4,9 +4,19 @@
       <div class="header-left">
         <router-link to="/" class="logo">APP LOGO</router-link>
         <nav class="main-nav">
-          <router-link to="/inspiration" class="nav-item">灵感市场</router-link>
-          <a href="#" @click.prevent="handleAuthLinkClick($event, '/ai-applications', false)" class="nav-item">AI 应用</a>
-          <a href="#" @click.prevent="handleAuthLinkClick($event, '/creation-history', true)" class="nav-item">创作历史</a>
+          <router-link to="/inspiration" class="nav-item" active-class="active">灵感市场</router-link>
+          <router-link
+            to="/ai-applications"
+            class="nav-item"
+            active-class="active"
+            @click="authGuard($event, '/ai-applications', false)"
+          >AI 应用</router-link>
+          <router-link
+            to="/creation-history"
+            class="nav-item"
+            active-class="active"
+            @click="authGuard($event, '/creation-history', true)"
+          >创作历史</router-link>
         </nav>
       </div>
 
@@ -117,6 +127,14 @@ const loadingUserData = ref(false);
 const clientAccessToken = ref(localStorage.getItem('clientAccessToken'));
 
 const isLoggedIn = computed(() => !!clientAccessToken.value);
+
+const authGuard = (event, path, requiresAuth = false) => {
+  if (requiresAuth && !isLoggedIn.value) {
+    event.preventDefault(); // Prevent router-link navigation
+    openLoginModal();
+  }
+  // If not prevented, router-link will navigate automatically
+};
 
 const fetchCurrentUserData = async () => {
   if (!isLoggedIn.value) {
@@ -294,6 +312,12 @@ provide('refreshUserData', fetchCurrentUserData);
 }
 
 .nav-item.router-link-exact-active {
+  color: var(--custom-accent-color);
+  font-weight: 600;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.active {
   color: var(--custom-accent-color);
   font-weight: 600;
   background-color: rgba(255, 255, 255, 0.1);

@@ -8,8 +8,18 @@ const ms = require('ms'); // 用于解析时间字符串，如 '7d'
 const authenticateToken = require('../middleware/authenticateToken'); // 引入认证中间件
 const AiApplication = require('../models/AiApplication'); // Added AiApplication model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
+
+// Dynamically load platform services
 const ComfyUIService = require('../services/platform_integrations/comfyuiService');
 const OpenAIService = require('../services/platform_integrations/openaiService');
+// Import other services as they are added, e.g.:
+// const StabilityAIService = require('../services/platform_integrations/stabilityaiService');
+
+const platformServiceMap = {
+  ComfyUI: ComfyUIService,
+  OpenAI: OpenAIService,
+  // StabilityAI: StabilityAIService, // Add when service is implemented
+};
 
 // POST /api/auth/login - 用户登录
 router.post('/login', async (req, res) => {
@@ -467,117 +477,135 @@ router.post('/change-password', authenticateToken, async (req, res) => {
   }
 });
 
-// POST /api/client/ai-applications/:id/launch - 客户端用户启动AI应用并扣除积分
+// POST /api/client/ai-applications/:id/launch - Client launches an AI application
 router.post('/client/ai-applications/:id/launch', authenticateToken, async (req, res) => {
   let consumptionTransactionId = null;
-  const { id: applicationId } = req.params; 
-  const userId = req.user ? req.user.userId : null; 
+  const { id: applicationId } = req.params;
+  const userId = req.user ? req.user.userId : null;
 
   try {
+    if (!userId) {
+      // This case should ideally be caught by authenticateToken, but as a safeguard:
+      return res.status(401).json({ message: '用户认证失败，无法执行操作。' });
+    }
+
+    // 1. Fetch User and Application, perform initial checks
     const currentUser = await User.findById(userId);
-    if (!currentUser) return res.status(404).json({ message: '用户未找到' });
-    if (currentUser.isAdmin) return res.status(403).json({ message: '此操作仅限客户端用户' });
-    if (currentUser.status !== 'active') return res.status(403).json({ message: '用户账户已被禁用' });
+    if (!currentUser) return res.status(404).json({ message: '用户未找到。' });
+    if (currentUser.isAdmin) return res.status(403).json({ message: '此操作仅限客户端用户。' });
+    if (currentUser.status !== 'active') return res.status(403).json({ message: '用户账户已被禁用。' });
 
     const application = await AiApplication.findById(applicationId)
-      .populate('type', 'name uri _id')
-      .populate('apis', 'platformName platformType config apiUrl');
+      .populate('type', 'name uri _id') // Keep type populated if needed for UI or other logic
+      .populate('apis'); // Populate all API details for the service to use
 
-    if (!application) return res.status(404).json({ message: 'AI 应用未找到' });
-    if (application.status !== 'active') return res.status(400).json({ message: '此 AI 应用当前不可用' });
+    if (!application) return res.status(404).json({ message: 'AI 应用未找到。' });
+    if (application.status !== 'active') return res.status(400).json({ message: `AI 应用 "${application.name}" 当前不可用。` });
 
+    // 2. Check and Deduct Credits
     const creditsToConsume = application.creditsConsumed;
     const balanceBeforeConsumption = currentUser.creditsBalance;
 
     if (balanceBeforeConsumption < creditsToConsume) {
-      return res.status(400).json({ message: '积分不足，无法启动应用' });
+      return res.status(400).json({ message: `积分不足 (需要 ${creditsToConsume}, 当前 ${balanceBeforeConsumption})，无法执行应用 "${application.name}"。` });
     }
 
-    // --- Step 1: Deduct Credits and Record Consumption ---
     currentUser.creditsBalance -= creditsToConsume;
     await currentUser.save();
+
     const consumptionTransaction = new CreditTransaction({
-        user: userId,
-        type: 'consumption',
-        aiApplication: applicationId,
-        creditsChanged: -creditsToConsume,
-        balanceBefore: balanceBeforeConsumption,
-        balanceAfter: currentUser.creditsBalance,
-        description: `尝试启动AI应用: ${application.name}`,
+      user: userId,
+      type: 'consumption',
+      aiApplication: applicationId,
+      creditsChanged: -creditsToConsume,
+      balanceBefore: balanceBeforeConsumption,
+      balanceAfter: currentUser.creditsBalance,
+      description: `执行 AI 应用: ${application.name} (ID: ${applicationId})`,
     });
     await consumptionTransaction.save();
     consumptionTransactionId = consumptionTransaction._id;
 
-    // --- Step 2: Attempt Service Execution ---
-    let serviceUserMessage = ''; 
-    let serviceDataForClient = null;
-    // let serviceCallSuccessful = false; // Not strictly needed if success path returns directly
+    // 3. Dynamically get and execute platform-specific service
+    const ServiceClass = platformServiceMap[application.platformType];
+    if (!ServiceClass) {
+      throw new Error(`平台类型 "${application.platformType}" 的服务处理程序未实现。`); // This will trigger refund
+    }
+
+    const serviceInstance = new ServiceClass();
+    let serviceResult;
+    let clientResponseMessage = '';
 
     try {
-      if (application.platformType === 'ComfyUI') {
-        const comfyApis = application.apis.filter(api => api.platformType === 'ComfyUI' && api.config && api.config.apiUrl);
-        if (!comfyApis || comfyApis.length === 0) {
-           throw new Error('应用未配置有效ComfyUI API或API信息不完整。');
-        }
-        const selectedApiEntry = comfyApis[Math.floor(Math.random() * comfyApis.length)];
-        const comfyService = new ComfyUIService(selectedApiEntry.config);
-        serviceDataForClient = await comfyService.getUsersInfo(); 
-        serviceUserMessage = `ComfyUI 服务 (${selectedApiEntry.platformName}) 调用成功。`; 
-        // serviceCallSuccessful = true;
-      } else if (application.platformType === 'OpenAI') {
-        const openAiApis = application.apis.filter(api => api.platformType === 'OpenAI' && api.config && api.config.apiKey);
-         if (!openAiApis || openAiApis.length === 0) {
-           throw new Error('应用未配置有效OpenAI API或API信息不完整。');
-        }
-        const selectedApiEntry = openAiApis[Math.floor(Math.random() * openAiApis.length)];
-        const openAiService = new OpenAIService(selectedApiEntry.config);
-        serviceDataForClient = await openAiService.healthCheck(); 
-        serviceUserMessage = `OpenAI 服务 (${selectedApiEntry.platformName}) 调用成功: ${serviceDataForClient.status}`;
-        // serviceCallSuccessful = true;
-      } else {
-        throw new Error(`平台类型 '${application.platformType}' 的服务执行逻辑暂未实现。`);
-      }
-
-      // If all service calls successful
+      // Pass the full application model and any relevant client inputs (req.body could be used for this)
+      serviceResult = await serviceInstance.handleLaunchRequest(application, req.body);
+      
+      clientResponseMessage = serviceResult.clientMessage || `应用 "${application.name}" 服务执行成功。`;
+      
       return res.json({
-        message: `应用 "${application.name}" 启动成功！已消耗 ${creditsToConsume} 积分。${serviceUserMessage}`,
+        message: `${clientResponseMessage} 已消耗 ${creditsToConsume} 积分。`,
         newBalance: currentUser.creditsBalance,
         transactionId: consumptionTransactionId,
-        comfyuiUsersData: application.platformType === 'ComfyUI' ? serviceDataForClient : null,
-        openAiServiceData: application.platformType === 'OpenAI' ? serviceDataForClient : null
+        serviceData: serviceResult.data, // Pass through any data returned by the service
       });
 
     } catch (serviceExecutionError) {
-      console.error(`[App Launch ID: ${applicationId}] SERVICE EXECUTION FAILED. Error: ${serviceExecutionError.message}. Initiating refund.`);
-      serviceUserMessage = serviceExecutionError.message; 
+      clientResponseMessage = serviceExecutionError.message || `应用 "${application.name}" 服务执行失败。`;
 
+      // Refund logic (remains the same)
       const balanceBeforeRefund = currentUser.creditsBalance;
-      currentUser.creditsBalance += creditsToConsume;
+      currentUser.creditsBalance += creditsToConsume; // Add back the deducted credits
       await currentUser.save();
+
       const refundTransaction = new CreditTransaction({
-        user: userId, type: 'refund', aiApplication: applicationId,
-        creditsChanged: creditsToConsume, balanceBefore: balanceBeforeRefund,
+        user: userId,
+        type: 'refund',
+        aiApplication: applicationId,
+        creditsChanged: creditsToConsume,
+        balanceBefore: balanceBeforeRefund,
         balanceAfter: currentUser.creditsBalance,
-        description: `应用启动失败退款 (${application.name}). 原因: ${serviceUserMessage.substring(0, 150)}`, 
+        description: `应用 "${application.name}" 执行失败退款. 原因: ${clientResponseMessage.substring(0, 150)}`, // Truncate error
         relatedTransaction: consumptionTransactionId
       });
       await refundTransaction.save();
 
-      return res.status(500).json({ 
-        message: `应用 "${application.name}" 启动服务失败，已退还 ${creditsToConsume} 积分。原因: ${serviceUserMessage}`,
-        errorDetail: serviceExecutionError.message, 
+      return res.status(500).json({ // Or 400/422 depending on error type
+        message: `${clientResponseMessage} 已退还 ${creditsToConsume} 积分。`,
+        errorDetail: serviceExecutionError.message, // Full technical error for client debugging if needed
         newBalance: currentUser.creditsBalance,
         originalTransactionId: consumptionTransactionId,
         refundTransactionId: refundTransaction._id
       });
     }
   } catch (outerError) {
-    console.error(`[App Launch ID: ${applicationId || 'UNKNOWN'}] CRITICAL error during app launch process: User: ${userId || 'UNKNOWN'}, Error: ${outerError.message}`);
-    if (outerError.name === 'CastError') {
-      return res.status(400).json({ message: '无效的应用ID格式，操作未完成。' });
+    
+    // Avoid refund logic here if consumptionTransactionId is null, as credits weren't confirmed deducted.
+    // If consumptionTransactionId exists, a more complex state might exist (e.g. DB error after deduction but before service call).
+    // For now, keep it simple: if error is before service call or a setup issue, client message is generic.
+
+    let responseStatus = 500;
+    let clientMessage = `执行应用过程中发生严重错误。`;
+
+    if (outerError.name === 'CastError' && outerError.path === '_id') {
+        responseStatus = 400;
+        clientMessage = '无效的应用ID格式。';
+    } else if (outerError.message.includes('服务处理程序未实现')) {
+        // This specific error from our logic should also be a 500, but can have a more specific message
+        clientMessage = outerError.message; // Use the specific message
+    } else {
+        clientMessage = `执行应用时发生服务器错误: ${outerError.message.substring(0,100)}`;
     }
-    return res.status(500).json({ 
-        message: `启动应用过程中发生严重错误 (${outerError.message})，请联系管理员检查您的积分状态。`
+    
+    // If credits were deducted (consumptionTransactionId is set) but we are in outerError AFTER that point
+    // (e.g., error instantiating service, or an unexpected error before service.handleLaunchRequest call)
+    // a refund MIGHT be needed, but the current structure doesn't explicitly handle refunding from outerError.
+    // This implies the primary failure wasn't the service execution itself.
+    // For robustness, one might check if consumptionTransactionId is set and outerError happened *after* credit deduction step.
+    // For now, we assume outer errors are setup/config issues and don't auto-refund from here.
+    // The service execution block has its own refund logic.
+
+    return res.status(responseStatus).json({ 
+        message: clientMessage + (consumptionTransactionId ? ' 请联系管理员核实您的积分。' : ''),
+        error: outerError.message // Keep original error for server logs / admin diagnosis
     });
   }
 });

@@ -8,71 +8,55 @@
  */
 
 class ComfyUIService {
-  constructor(apiConfig) {
-    // apiConfig will be an instance of ApiEntry.config
-    // e.g., { apiUrl: 'http://127.0.0.1:8188' }
-    this.apiUrl = apiConfig.apiUrl;
-    if (!this.apiUrl) {
-      throw new Error('ComfyUI API URL not provided in config.');
-    }
-    console.log(`[ComfyUIService] Initialized for: ${this.apiUrl}`);
+  constructor() {
+    // General initialization, specific API details will be handled per call via application object
   }
 
-  async healthCheck() {
-    console.log(`[ComfyUIService] Performing health check for ${this.apiUrl}`);
-    try {
-      // const response = await fetch(`${this.apiUrl}/health`); 
-      // if (!response.ok) throw new Error(`Health check failed with status ${response.status}`);
-      // const data = await response.json();
-      // console.log(`[ComfyUIService] Health check successful for ${this.apiUrl}`, data);
-      return { status: 'ok', message: 'ComfyUI instance is responsive (simulated health check).' };
-    } catch (error) {
-      console.error(`[ComfyUIService] Health check failed for ${this.apiUrl}: ${error.message}`);
-      const userMessage = `ComfyUI 健康检查失败 (${this.apiUrl})。`;
-      throw new Error(`${userMessage} Details: ${error.message}`);
+  // Main method to be called by the router
+  async handleLaunchRequest(application, clientInputs = {}) {
+    // 1. Validate and select API from application.apis
+    if (!application || !application.apis || !Array.isArray(application.apis)) {
+      throw new Error('无效的应用配置数据，缺少 API 信息。');
     }
-  }
 
-  async getUsersInfo() {
-    const endpoint = `${this.apiUrl}/users`;
-    console.log(`[ComfyUIService] Calling /users endpoint at ${endpoint}`);
+    const comfyApis = application.apis.filter(
+      (api) => api.platformType === 'ComfyUI' && api.config && api.config.apiUrl
+    );
+
+    if (comfyApis.length === 0) {
+      throw new Error('应用 "${application.name}" 未配置有效的 ComfyUI API 地址。');
+    }
+
+    // For simplicity, pick a random API if multiple are configured
+    const selectedApiEntry = comfyApis[Math.floor(Math.random() * comfyApis.length)];
+    const apiUrl = selectedApiEntry.config.apiUrl;
+    const apiName = selectedApiEntry.platformName || apiUrl; // Use platformName if available
+
+
+    // 2. Perform the specific task (currently, /users endpoint as a placeholder)
+    // In the future, this could be decided by application.type.uri or clientInputs
+    const endpoint = `${apiUrl}/users`;
+
     try {
       const response = await fetch(endpoint);
       if (!response.ok) {
-        throw new Error(`ComfyUI /users 接口调用失败: ${response.status} ${response.statusText} (${this.apiUrl})`);
+        // Use the simplified error message style from user's recent changes
+        throw new Error(`任务提交失败: ${response.status} ${response.statusText}`);
       }
       const data = await response.json();
-      console.log(`[ComfyUIService] Successfully fetched /users data from ${this.apiUrl}`);
-      return data; 
+      
+      return {
+        data: data,
+        clientMessage: `任务提交成功`, // Message for client
+      };
     } catch (error) {
-      console.error(`[ComfyUIService] Error fetching /users data from ${this.apiUrl}: ${error.message}`);
-      if (error.message.startsWith('ComfyUI /users 接口调用失败:')) {
-        throw error; 
+      console.error(`[ComfyUIService] Error during /users call for ${apiName} (${apiUrl}): ${error.message}`);
+      if (error.message.startsWith('任务提交失败')) {
+          throw error;
       }
-      throw new Error(`获取 ComfyUI 用户信息失败 (${this.apiUrl}). 原因: ${error.message}`);
+      throw new Error(`${error.message}`);
     }
   }
-
-  async generateTextToImage(prompt, params = {}) {
-    const workflow = params.workflow || "default_t2i_workflow"; 
-    console.log(`[ComfyUIService] Queuing prompt for '${prompt}' with workflow '${workflow}' at ${this.apiUrl}`);
-    // Actual ComfyUI prompt queuing logic would go here
-    // Example: const response = await fetch(`${this.apiUrl}/prompt`, { method: 'POST', body: JSON.stringify(payload) });
-    // if (!response.ok) throw new Error(`ComfyUI prompt queue failed: ${response.status}`);
-    // const data = await response.json();
-    // if (data.error) throw new Error(`ComfyUI error: ${JSON.stringify(data.error)}`);
-    // console.log('[ComfyUIService] Prompt queued successfully:', data.prompt_id);
-    // return { jobId: data.prompt_id, message: '文生图任务已提交至 ComfyUI。' };
-
-    console.log(`[ComfyUIService] Simulating text-to-image for prompt: "${prompt}" at ${this.apiUrl}`);
-    return {
-      success: true,
-      message: '图像生成已模拟排队 (ComfyUI)。',
-      jobId: `comfyui_job_${Date.now()}`,
-    };
-  }
-
-  // Add other methods as needed, e.g., getImageStatus, getGeneratedImage
 }
 
 module.exports = ComfyUIService; 

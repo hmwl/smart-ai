@@ -1,22 +1,62 @@
 <template>
   <div class="user-credit-transactions-page p-4 md:p-6">
-    <a-page-header title="我的消费记录" class="mb-4 site-page-header" @back="() => $router.go(-1)">
+    <a-page-header title="消费记录" class="mb-4 site-page-header" @back="() => $router.go(-1)">
+      <template #subtitle>
+        <p>查看您的积分消费记录</p>
+      </template>
     </a-page-header>
+
+    <!-- Filter Section -->
+      <a-form :model="filterForm" layout="inline">
+        <a-form-item field="type" label="类型">
+          <a-select
+            v-model="filterForm.types" 
+            placeholder="请选择交易类型"
+            multiple
+            allow-clear
+            style="width: 220px;"
+          >
+            <a-option value="consumption">消费</a-option>
+            <a-option value="topup">充值</a-option>
+            <a-option value="refund">退款</a-option>
+            <a-option value="grant">赠送</a-option>
+            <a-option value="adjustment">系统调整</a-option>
+          </a-select>
+        </a-form-item>
+        <a-form-item field="dateRange" label="时间范围">
+          <a-range-picker v-model="filterForm.dateRange" style="width: 260px;" />
+        </a-form-item>
+        <a-form-item>
+          <a-space>
+            <a-button type="primary" html-type="button" @click="applyFilters" :loading="isLoading">搜索</a-button>
+            <a-button @click="resetFilters" :disabled="isLoading">重置</a-button>
+          </a-space>
+        </a-form-item>
+      </a-form>
 
     <a-spin :loading="isLoading" tip="加载消费记录中..." style="width: 100%;">
       <div v-if="!isLoading && transactions.length === 0" class="empty-state mt-6">
-        <a-empty description="暂无消费记录" />
+        <a-empty description="暂无符合条件的消费记录" />
       </div>
       <a-table
-        v-else
+        v-else-if="transactions.length > 0"
         :data="transactions"
-        :pagination="{ pageSize: pagination.pageSize, total: pagination.total, current: pagination.current, onChange: handlePageChange }"
+        :pagination="{
+          pageSize: pagination.pageSize,
+          total: pagination.total,
+          current: pagination.current,
+          onChange: handlePageChange,
+          showTotal: true,
+          showPageSize: true,
+          pageSizeOptions: [15, 30, 50, 100]
+        }"
+        @page-size-change="handlePageSizeChange"
         row-key="_id"
         stripe
         class="mt-4"
       >
         <template #columns>
-          <a-table-column title="流水ID" data-index="_id" :width="180" ellipsis tooltip></a-table-column>
+          <a-table-column title="流水ID" data-index="_id" :width="130" ellipsis tooltip></a-table-column>
           <a-table-column title="类型" data-index="type" :width="100">
             <template #cell="{ record }">
               <a-tag :color="getTransactionTypeColor(record.type)">
@@ -46,7 +86,7 @@
             </template>
           </a-table-column>
           <a-table-column title="变动后余额" data-index="balanceAfter" align="center" :width="120"></a-table-column>
-          <a-table-column title="交易时间" data-index="createdAt" :width="170">
+          <a-table-column title="交易时间" data-index="createdAt" :width="200">
             <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
           </a-table-column>
           <a-table-column title="描述" data-index="description" ellipsis tooltip></a-table-column>
@@ -67,13 +107,27 @@ import {
   Spin as ASpin,
   Tag as ATag,
   Empty as AEmpty,
+  Card as ACard,
+  Form as AForm,
+  FormItem as AFormItem,
+  Select as ASelect,
+  Option as AOption,
+  RangePicker as ARangePicker,
+  Button as AButton,
+  Space as ASpace,
 } from '@arco-design/web-vue';
 
 const transactions = ref([]);
 const isLoading = ref(false);
+
+const filterForm = reactive({
+  types: [], // For multiple select
+  dateRange: [], // [startDate, endDate]
+});
+
 const pagination = reactive({
   current: 1,
-  pageSize: 15, // Adjusted page size for client view
+  pageSize: 15,
   total: 0,
 });
 
@@ -89,7 +143,7 @@ const translateTransactionType = (type) => {
     topup: '充值',
     refund: '退款',
     grant: '赠送',
-    adjustment: '系统调整' // More descriptive for client
+    adjustment: '系统调整' 
   };
   return map[type] || type;
 };
@@ -107,20 +161,33 @@ const getTransactionTypeColor = (type) => {
 
 const fetchUserTransactions = async (page = 1) => {
   isLoading.value = true;
+  const params = {
+    page: page,
+    limit: pagination.pageSize,
+  };
+
+  if (filterForm.types && filterForm.types.length > 0) {
+    params.type = filterForm.types.join(','); // Backend to handle comma-separated list
+  }
+  if (filterForm.dateRange && filterForm.dateRange.length === 2) {
+    // Ensure dates are in YYYY-MM-DD format or ISO string as expected by backend
+    params.startDate = filterForm.dateRange[0]; // Format: 'YYYY-MM-DD' or ISO
+    params.endDate = filterForm.dateRange[1];   // Format: 'YYYY-MM-DD' or ISO
+    // If backend expects full ISO string with time, adjust accordingly
+    // For just date, ensure the backend handles the range inclusively.
+    // Example for full day range if backend needs precise timestamps:
+    // params.startDate = new Date(filterForm.dateRange[0]).setHours(0, 0, 0, 0).toISOString();
+    // params.endDate = new Date(filterForm.dateRange[1]).setHours(23, 59, 59, 999).toISOString();
+  }
+
   try {
-    // The backend needs to automatically filter by the logged-in user
-    // if no specific userId is provided in params.
-    const response = await apiClient.get('/credit-transactions', {
-      params: {
-        page: page,
-        limit: pagination.pageSize,
-        // No userId here, relying on backend to use req.user.userId
-        // Add other filters if needed in future e.g. type, date range
-      }
-    });
+    const response = await apiClient.get('/credit-transactions', { params });
     transactions.value = response.data.transactions || [];
     pagination.total = response.data.total || 0;
     pagination.current = page;
+    if (transactions.value.length === 0 && page === 1 && (filterForm.types.length > 0 || filterForm.dateRange.length > 0)) {
+        Message.info('没有找到符合筛选条件的记录。');
+    }
   } catch (error) {
     Message.error('获取消费记录失败: ' + (error.response?.data?.message || error.message));
     transactions.value = [];
@@ -134,6 +201,23 @@ const handlePageChange = (newPage) => {
   fetchUserTransactions(newPage);
 };
 
+const handlePageSizeChange = (newPageSize) => {
+  pagination.pageSize = newPageSize;
+  fetchUserTransactions(1); // Reset to page 1 when page size changes
+};
+
+const applyFilters = () => {
+  pagination.current = 1;
+  fetchUserTransactions(1);
+};
+
+const resetFilters = () => {
+  filterForm.types = [];
+  filterForm.dateRange = [];
+  pagination.current = 1;
+  fetchUserTransactions(1);
+};
+
 onMounted(() => {
   fetchUserTransactions();
 });
@@ -141,7 +225,7 @@ onMounted(() => {
 
 <style scoped>
 .user-credit-transactions-page {
-  color: #fff;
+  color: var(--color-text-1); /* Adapted for general theme */
 }
 
 .site-page-header {
@@ -151,40 +235,45 @@ onMounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-/* Ensure table text is readable in dark mode */
+.filter-card {
+  /* Same style as page header for consistency or can be different */
+}
+
 :deep(.arco-table) {
-  background-color: var(--custom-bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
+  background-color: var(--color-bg-2);
+  /* border: 1px solid var(--color-border-2); */
+  border-radius: var(--border-radius-medium);
 }
 
 :deep(.arco-table-th) {
-  background-color: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--color-fill-2); /* Slightly different for header */
+  /* border-bottom: 1px solid var(--color-border-2); */
 }
 
 :deep(.arco-table-td) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  /* border-bottom: 1px solid var(--color-border-1); */ /* Lighter border for rows */
 }
 
 :deep(.arco-table-stripe .arco-table-tr:nth-child(even) .arco-table-td) {
-  background-color: rgba(255, 255, 255, 0.02);
+  background-color: var(--color-fill-1); /* Very subtle stripe */
 }
 
 :deep(.arco-table-pagination) {
-  background-color: var(--custom-bg-secondary);
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  background-color: var(--color-bg-2);
+  /* border-top: 1px solid var(--color-border-2); */
 }
 
-.text-green-500 { color: #22c55e; } /* Tailwind green-500 */
-.text-red-500 { color: #ef4444; }   /* Tailwind red-500 */
-.text-gray-500 { color: rgba(255, 255, 255, 0.5); } /* Adjusted for dark mode */
+.text-green-500 { color: rgb(var(--green-6)); } 
+.text-red-500 { color: rgb(var(--red-6)); }   
+.text-gray-500 { color: var(--color-text-3); }
 
 .empty-state {
   display: flex;
   justify-content: center;
   align-items: center;
   min-height: 200px;
+  background-color: var(--color-bg-2);
+  border-radius: var(--border-radius-medium);
 }
 
 .mt-4 {

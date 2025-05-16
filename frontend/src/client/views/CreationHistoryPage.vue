@@ -2,7 +2,7 @@
   <div class="creation-history-page p-4 md:p-6">
     <a-page-header title="创作历史" class="mb-4 site-page-header-responsive">
       <template #subtitle>
-        <p>查看您的AI创作历史记录。</p>
+        <p>查看您的AI创作历史记录</p>
       </template>
     </a-page-header>
 

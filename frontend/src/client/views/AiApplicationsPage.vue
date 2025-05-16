@@ -2,17 +2,22 @@
   <div class="ai-applications-page p-4 md:p-6">
     <a-page-header title="AI 应用中心" class="mb-4 site-page-header-responsive">
       <template #subtitle>
-        <p>探索并使用我们提供的各类 AI 应用。</p>
+        <p>探索并使用我们提供的各类 AI 应用</p>
       </template>
     </a-page-header>
 
+    <a-tabs :active-key="selectedTypeKey" @change="handleTabChange" type="rounded" class="mb-4 type-tabs">
+      <a-tab-pane key="all" title="全部"></a-tab-pane>
+      <a-tab-pane v-for="type in aiTypes" :key="type._id" :title="type.name"></a-tab-pane>
+    </a-tabs>
+
     <a-spin :loading="loading" tip="正在加载 AI 应用..." class="w-full">
       <div v-if="!loading && applications.length === 0" class="empty-state mt-6">
-        <a-empty description="暂无可用的 AI 应用" />
+        <a-empty :description="selectedTypeKey === 'all' ? '暂无可用的 AI 应用' : '该类型下暂无 AI 应用'" />
       </div>
       <a-list
         v-else
-        :grid-props="{ gutter: [24, 24], xs: 1, sm: 1, md: 2, lg: 3, xl: 4, xxl:4 }"
+        :grid-props="{ gutter: [24, 24], xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl:3 }"
         :data="applications"
         class="app-list"
       >
@@ -69,13 +74,18 @@ import {
   Empty as AEmpty,
   Tag as ATag,
   Button as AButton,
-  PageHeader as APageHeader
+  PageHeader as APageHeader,
+  Tabs as ATabs, 
+  TabPane as ATabPane
 } from '@arco-design/web-vue';
 import { IconApps } from '@arco-design/web-vue/es/icon';
 
 const applications = ref([]);
 const loading = ref(false);
 const router = useRouter();
+
+const aiTypes = ref([]);
+const selectedTypeKey = ref('all'); // 'all' or type._id
 
 const getImageUrl = (relativePath) => {
   if (!relativePath) return '';
@@ -84,11 +94,31 @@ const getImageUrl = (relativePath) => {
   return `${staticAssetBase}${path}`;
 };
 
+const fetchAiTypes = async () => {
+  try {
+    const response = await apiClient.get('/public/ai-types/active'); // Ensure this endpoint exists and is public
+    aiTypes.value = response.data || [];
+  } catch (error) {
+    console.error('Error fetching AI types:', error);
+    Message.error('获取 AI 类型失败: ' + (error.response?.data?.message || error.message));
+  }
+};
+
 const fetchApplications = async () => {
   loading.value = true;
+  let apiUrl = '/public/ai-applications/active'; // Base URL for fetching applications
+  const params = {};
+
+  if (selectedTypeKey.value !== 'all') {
+    // If a specific type is selected, add typeId to params
+    // Assumes backend API filters by 'typeId' query parameter
+    params.typeId = selectedTypeKey.value; 
+  }
+  // If selectedTypeKey.value is 'all', no typeId param is sent, so backend returns all active apps.
+
   try {
-    const response = await apiClient.get('/public/ai-applications/active');
-    applications.value = response.data;
+    const response = await apiClient.get(apiUrl, { params });
+    applications.value = response.data.applications;
   } catch (error) {
     console.error('Error fetching active AI applications:', error);
     Message.error('获取 AI 应用列表失败: ' + (error.response?.data?.message || error.message));
@@ -96,6 +126,11 @@ const fetchApplications = async () => {
   } finally {
     loading.value = false;
   }
+};
+
+const handleTabChange = (key) => {
+  selectedTypeKey.value = key;
+  fetchApplications(); // Refetch applications for the newly selected type
 };
 
 const handleAppClick = (app) => {
@@ -116,8 +151,9 @@ const getTagColor = (typeName) => {
   return typeColorMap.get(typeName);
 };
 
-onMounted(() => {
-  fetchApplications();
+onMounted(async () => {
+  await fetchAiTypes(); // Fetch types first, wait for it to complete
+  fetchApplications(); // Then fetch all applications initially (or based on default selectedTypeKey)
 });
 </script>
 
@@ -132,6 +168,23 @@ onMounted(() => {
   border-radius: 4px;
   padding: 16px 24px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.type-tabs .arco-tabs-nav-type-card-gutter .arco-tabs-tab {
+  background-color: var(--custom-bg-tertiary);
+  border-color: var(--dark-border-color);
+  color: var(--dark-text-secondary);
+}
+
+.type-tabs .arco-tabs-nav-type-card-gutter .arco-tabs-tab-active {
+  background-color: var(--custom-accent-color-secondary); /* A slightly different shade for active tab */
+  color: var(--custom-accent-color);
+  font-weight: bold;
+}
+
+.type-tabs .arco-tabs-nav::before {
+  /* Remove default bottom border of tabs nav if not desired */
+  display: none; 
 }
 
 .app-list-item {
@@ -202,21 +255,13 @@ onMounted(() => {
 
 .app-card-footer {
   margin-top: auto;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
+  padding-top: 12px; /* Add some space above the footer content */
 }
 
 .app-info {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-}
-
-.app-action-button {
-  min-width: 90px;
 }
 
 .empty-state {
@@ -227,5 +272,10 @@ onMounted(() => {
 }
 :deep(.arco-list-bordered){
   border: unset!important;
+}
+
+/* Ensure button is centered */
+.flex.w-full.justify-center.mt-8 {
+    margin-top: 1.5rem; /* Adjusted margin for better spacing */
 }
 </style>

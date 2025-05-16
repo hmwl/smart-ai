@@ -2,7 +2,7 @@
   <div class="inspiration-page p-4 md:p-6">
     <a-page-header title="灵感市场" class="mb-4 page-header-custom">
       <template #subtitle>
-        <p>在这里发现和探索由 AI 生成的艺术作品和创意灵感。</p>
+        <p>在这里发现和探索由 AI 生成的艺术作品和创意灵感</p>
       </template>
     </a-page-header>
 

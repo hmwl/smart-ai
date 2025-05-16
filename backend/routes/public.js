@@ -7,6 +7,7 @@ const Menu = require('../models/Menu');
 const Template = require('../models/Template');
 const AiApplication = require('../models/AiApplication');
 const PromotionActivity = require('../models/PromotionActivity'); // For potential future use
+const AiType = require('../models/AiType'); // Import AiType model
 
 // Helper function to populate page routes within menu items
 // Moved from menus.js
@@ -264,42 +265,76 @@ router.get('/menus/lookup', async (req, res) => {
     }
 });
 
-// GET /api/public/ai-applications/active - Get active AI applications for client display
-router.get('/ai-applications/active', async (req, res) => {
+// GET /api/public/ai-types/active - Get all active AI types for client display
+router.get('/ai-types/active', async (req, res) => {
   try {
-    const activeApplications = await AiApplication.find({ status: 'active' })
-      .populate('type', 'name uri _id') // Populate type with specific fields
-      .select('name description coverImageUrl type tags creditsConsumed createdAt') // Select fields needed for client display
-      .sort({ createdAt: -1 }); // Or sort by name, etc.
+    const activeTypes = await AiType.find({ status: 'active' })
+                                    .select('_id name uri') // Select only needed fields
+                                    .sort({ name: 1 }); // Optional: sort by name
 
-    res.json(activeApplications);
+    // No need to check if activeTypes is null, find returns [] if no documents match
+    res.json(activeTypes);
   } catch (error) {
-    console.error('Error fetching active AI applications for public:', error);
-    res.status(500).json({ message: 'Failed to retrieve AI applications' });
+    console.error('Error fetching active AI types:', error);
+    res.status(500).json({ message: '获取 AI 类型列表失败，服务器内部错误。' });
   }
 });
 
-// GET /api/public/ai-applications/:id - Get a single active AI application by ID
+// GET /api/public/ai-applications/active - Get all active AI applications (or filtered by type)
+router.get('/ai-applications/active', async (req, res) => {
+  try {
+    const { typeId, tags, name, page = 1, limit = 20 } = req.query;
+    let query = { status: 'active' };
+
+    if (typeId) {
+      query.type = typeId; // Assuming AiApplication model has a 'type' field referencing AiType _id
+    }
+    if (tags) {
+      query.tags = { $in: tags.split(',').map(tag => tag.trim()) };
+    }
+    if (name) {
+      query.name = { $regex: name, $options: 'i' }; // Case-insensitive name search
+    }
+
+    const applications = await AiApplication.find(query)
+      .populate('type', 'name uri _id') // Populate type details
+      .sort({ createdAt: -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit));
+      
+    const totalApplications = await AiApplication.countDocuments(query);
+
+    res.json({ 
+        applications, 
+        totalPages: Math.ceil(totalApplications / parseInt(limit)),
+        currentPage: parseInt(page),
+        totalApplications
+    });
+  } catch (error) {
+    console.error('Error fetching active AI applications:', error);
+    res.status(500).json({ message: '获取 AI 应用列表失败' });
+  }
+});
+
+// GET /api/public/ai-applications/:id - Get a single AI application by ID
 router.get('/ai-applications/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    // Removed ObjectId validation: if (!mongoose.Types.ObjectId.isValid(id)) {
-    //   return res.status(400).json({ message: '无效的应用ID格式' });
-    // }
-
-    const application = await AiApplication.findOne({ _id: id /*, status: 'active' */ }) // Temporarily allow fetching any status for detail view
+    const application = await AiApplication.findOne({ _id: id /*, status: 'active' */ })
       .populate('type', 'name uri _id')
-      // .populate('apis', 'platformName apiUrl description creditsPerCall _id') // Populate API details
-      .select('-__v -apis'); // Exclude version key, select all other fields by default
+      // .populate('apis', 'platformName description creditsPerCall _id') // No sensitive API details for public endpoint
+      .select('-__v'); // Exclude version key, select all other fields by default
 
     if (!application) {
-      return res.status(404).json({ message: '未找到指定的AI应用' });
+      return res.status(404).json({ message: 'AI 应用未找到' });
     }
-
     res.json(application);
-  } catch (error) {
-    console.error(`Error fetching AI application by ID ${req.params.id}:`, error);
-    res.status(500).json({ message: '获取AI应用详情失败' });
+  } catch (err) {
+    if (err.name === 'CastError') {
+        return res.status(400).json({ message: '无效的应用ID格式' });
+    }
+    console.error(`Error fetching AI application ${req.params.id}:`, err);
+    res.status(500).json({ message: '获取应用详情失败' });
   }
 });
 
