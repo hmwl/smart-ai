@@ -8,11 +8,6 @@
             </template>
         </a-page-header>
        <a-space>
-         <!-- Status Filter -->
-         <a-select v-model="selectedStatus" placeholder="按状态筛选" allow-clear style="width: 150px;" :disabled="!pageId">
-           <a-option value="published">已发布</a-option>
-           <a-option value="draft">草稿</a-option>
-         </a-select>
          <!-- Search Input -->
          <a-input-search 
              v-model="searchTerm" 
@@ -21,6 +16,11 @@
              style="width: 200px;"
              :disabled="!pageId" 
           />
+         <!-- Status Filter -->
+         <a-select v-model="selectedStatus" placeholder="按状态筛选" allow-clear style="width: 150px;" :disabled="!pageId">
+           <a-option value="published">已发布</a-option>
+           <a-option value="draft">草稿</a-option>
+         </a-select>
          <!-- Action Buttons -->
         <a-button type="primary" @click="openCreateModal" :disabled="!pageId">
              <template #icon><icon-plus /></template> 创建文章

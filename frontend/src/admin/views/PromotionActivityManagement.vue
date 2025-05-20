@@ -3,7 +3,7 @@
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">活动管理</h2>
       <a-space>
-        <a-input v-model="filters.name" placeholder="活动名称" allow-clear style="width: 180px;" @change="queryWithFilters" />
+        <a-input-search v-model="filters.name" placeholder="活动名称" allow-clear style="width: 180px;" @change="queryWithFilters" />
         <a-select v-model="filters.effectiveStatus" placeholder="状态" allow-clear style="width: 130px;" @change="queryWithFilters">
           <a-option value="not_started">未开始</a-option>
           <a-option value="ongoing">进行中</a-option>

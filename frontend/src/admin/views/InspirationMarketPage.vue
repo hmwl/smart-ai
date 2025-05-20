@@ -3,6 +3,12 @@
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">灵感市场</h2>
       <a-space>
+        <a-input-search 
+          v-model="workSearchTermOnPage" 
+          placeholder="搜索作品名称..." 
+          allow-clear
+          style="width: 220px;"
+        />
         <a-select v-model="selectedWorkType" placeholder="筛选作品类型" allow-clear style="width: 150px;">
           <a-option value="image">图片</a-option>
           <a-option value="audio">音频</a-option>
@@ -31,12 +37,6 @@
           @change="debouncedFetchMainPageWorks"
         >
         </a-select>
-        <a-input-search 
-          v-model="workSearchTermOnPage" 
-          placeholder="搜索作品名称..." 
-          allow-clear
-          style="width: 220px;"
-        />
         <a-button @click="refreshData" :loading="categoriesLoading || worksLoading">
           <template #icon><icon-refresh /></template> 刷新
         </a-button>

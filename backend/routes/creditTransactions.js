@@ -19,22 +19,60 @@ const platformNames = {
 // GET Credit Transactions (Protected - Admin can see all/filter, User sees own)
 router.get('/', authenticateToken, async (req, res) => {
 
-    const { page = 1, limit = 20, userId: queryUserId, type, startDate, endDate, sort = '-createdAt' } = req.query;
-    const query = {};
-    const currentUser = req.user; // From authenticateToken { userId, username, isAdmin, ... }
+    const { page = 1, limit = 20, userId: userIdSearchTerm, transactionId, type, startDate, endDate, sort = '-createdAt' } = req.query;
+    let query = {};
+    const currentUser = req.user; 
+    const pageInt = parseInt(page);
+    const limitInt = parseInt(limit);
 
     // --- Build Filter Query ---
-    if (currentUser.isAdmin) {
-        // Admin can filter by a specific userId if provided
-        if (queryUserId) {
-            query.user = queryUserId;
-        }
-        // Admin can also see all transactions if no queryUserId is specified
-    } else {
-        // Non-admin user: ALWAYS filter by their own userId
+
+    // Rule for non-admin: always filter by their own userId
+    if (!currentUser.isAdmin) {
         query.user = currentUser.userId;
     }
-    
+
+    // 1. Handle Transaction ID Search (if provided)
+    if (transactionId) { 
+        // Assuming CreditTransaction._id is a string (e.g., "CTnPMMhg") based on provided example.
+        // If it could be a Mongo ObjectId OR a custom string, this logic might need to be more robust.
+        query._id = transactionId;
+    }
+
+    // 2. Handle User Search (for admins, if userIdSearchTerm is provided)
+    // This search is ANDed with transactionId if both are provided.
+    if (currentUser.isAdmin && userIdSearchTerm) {
+        const userSearchConditions = [
+            { username: new RegExp(userIdSearchTerm, 'i') }, // Search by username
+            { _id: userIdSearchTerm } // Search by User._id (assuming it can be a string like USE3ecxQ)
+        ];
+        // If User._id could be a mix of Mongo ObjectIds and custom strings, the following would be more robust:
+        // const userSearchConditions = [
+        //     { username: new RegExp(userIdSearchTerm, 'i') }
+        // ];
+        // if (mongoose.Types.ObjectId.isValid(userIdSearchTerm)) {
+        //     userSearchConditions.push({ _id: mongoose.Types.ObjectId(userIdSearchTerm) });
+        // } else {
+        //     userSearchConditions.push({ _id: userIdSearchTerm }); // For custom string IDs
+        // }
+
+        try {
+            const matchedUsers = await User.find({ $or: userSearchConditions }).select('_id').lean();
+            if (matchedUsers.length > 0) {
+                // If query.user is already set (by non-admin), this logic path (isAdmin && userIdSearchTerm) shouldn't be hit.
+                // So, we can directly assign.
+                query.user = { $in: matchedUsers.map(u => u._id) };
+            } else {
+                // Admin searched for a user, and no user matched. This means the overall query should yield no results.
+                return res.json({ transactions: [], total: 0, currentPage: pageInt, totalPages: 0 });
+            }
+        } catch (userSearchError) {
+            console.error('Error searching users for credit transaction filter:', userSearchError);
+            return res.status(500).json({ message: '搜索用户信息时出错' });
+        }
+    }
+
+    // 3. Handle other filters (type, date) - these are ANDed with previous conditions
     if (type) {
         query.type = type;
     }
@@ -53,20 +91,20 @@ router.get('/', authenticateToken, async (req, res) => {
 
     try {
         const transactions = await CreditTransaction.find(query)
-            .populate('user', 'username email _id') // Populate user with specific fields
-            .populate('aiApplication', 'name _id') // Populate AI application with specific fields
-            .populate('promotionActivity', 'name _id') // Populate Promotion Activity with name and ID
-            .sort(sort) // Sort based on query param, default to newest first
-            .skip((page - 1) * limit)
-            .limit(parseInt(limit));
+            .populate('user', 'username email _id') 
+            .populate('aiApplication', 'name _id') 
+            .populate('promotionActivity', 'name _id') 
+            .sort(sort) 
+            .skip((pageInt - 1) * limitInt)
+            .limit(limitInt);
 
         const total = await CreditTransaction.countDocuments(query);
 
         res.json({
             transactions,
             total,
-            currentPage: parseInt(page),
-            totalPages: Math.ceil(total / limit)
+            currentPage: pageInt,
+            totalPages: Math.ceil(total / limitInt)
         });
 
     } catch (err) {
