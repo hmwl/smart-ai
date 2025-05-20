@@ -98,12 +98,28 @@ async function validateReferencesAndPlatform(typeId, apiIds, appPlatformType) {
 // GET all AI Applications
 router.get('/', authenticateToken, isAdmin, async (req, res) => {
     try {
-        // Add population to get type name/uri and basic api info
-        const aiApps = await AiApplication.find()
-                                        .populate('type', 'name uri') 
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 15; // Default limit
+        const skip = (page - 1) * limit;
+
+        // Build query object for potential filtering (if needed in future)
+        let query = {};
+        // Example: if (req.query.name) query.name = new RegExp(req.query.name, 'i');
+        
+        const totalRecords = await AiApplication.countDocuments(query);
+        const aiApps = await AiApplication.find(query)
+                                        .populate('type', 'name uri')
                                         .populate('apis', '_id name platformName platformType apiUrl config')
-                                        .sort({ name: 1 });
-        res.json(aiApps);
+                                        .sort({ name: 1 })
+                                        .skip(skip)
+                                        .limit(limit);
+        
+        res.json({
+            data: aiApps,
+            totalRecords: totalRecords,
+            currentPage: page,
+            totalPages: Math.ceil(totalRecords / limit)
+        });
     } catch (err) {
         res.status(500).json({ message: '获取 AI 应用列表失败: ' + err.message });
     }

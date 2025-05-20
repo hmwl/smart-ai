@@ -61,8 +61,10 @@
         :loading="loading"
         rowKey="_id"
         stripe  
-        :pagination="{ pageSize: 15 }" 
-        :scroll="{ x: 1380 }" 
+        :pagination="pagination" 
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
+        :scroll="{ x: 'max-content' }" 
       >
         <template #columns>
           <!-- Revision: Add ID column -->
@@ -486,6 +488,83 @@ const formatDate = (dateString) => {
 };
 // --- End Revision ---
 
+const defaultApiOptions = ref([]);
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
+
+// --- Computed Properties ---
+// ... existing code ...
+// Fetch all data (AI applications, types, and platform types)
+const fetchData = async () => {
+  loading.value = true;
+  try {
+    // Fetch AI Types and Platform Types first (or in parallel)
+    const [typesResponse, platformTypesResponse] = await Promise.all([
+      apiService.get('/ai-types'), // Assuming this fetches ALL active types for dropdowns
+      apiService.getApiPlatformTypes()
+    ]);
+    aiTypes.value = typesResponse.data || [];
+    platformTypes.value = platformTypesResponse.data || [];
+
+    // Fetch AI Applications with pagination
+    const appParams = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // query: searchName.value || undefined, // If backend supports server-side filtering for these
+      // type: filterType.value || undefined,
+      // status: filterStatus.value || undefined,
+      // credits: filterCredits.value, // Note: 0 is a valid value, undefined for no filter
+    };
+    const applicationsResponse = await apiService.get('/ai-applications', { params: appParams });
+    if (applicationsResponse.data && applicationsResponse.data.data) {
+      aiApplications.value = applicationsResponse.data.data;
+      pagination.total = applicationsResponse.data.totalRecords;
+    } else {
+      aiApplications.value = applicationsResponse.data || []; // Fallback
+      pagination.total = applicationsResponse.data?.length || 0;
+    }
+
+  } catch (error) {
+    Message.error('加载 AI 应用数据失败: ' + (error.response?.data?.message || error.message));
+    aiApplications.value = [];
+    aiTypes.value = [];
+    platformTypes.value = [];
+    pagination.total = 0;
+  } finally {
+    loading.value = false;
+  }
+};
+
+const refreshData = () => {
+  searchName.value = '';
+  filterType.value = undefined;
+  filterStatus.value = undefined;
+  filterCredits.value = undefined;
+  pagination.current = 1; // Reset to first page
+  fetchData();
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchData(); // Refetch data for the new page
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchData(); // Refetch data with new page size
+};
+
+// Function to get image URL, assuming it's served from backend/uploads or a similar public path
+// ... existing code ...
+
 const fetchAiApplications = async () => {
   // console.log("Fetching AI Applications..."); 
   loading.value = true;
@@ -839,27 +918,6 @@ const handleDelete = async (id) => {
   }
 };
 
-const refreshData = async () => {
-  await fetchAiApplications();
-  await fetchPlatformTypes();
-  await fetchAllApiEntries();
-};
-
-// Fetch initial data on mount
-onMounted(() => {
-  fetchAiApplications();
-  fetchAiTypes();
-  fetchPlatformTypes();
-  fetchAllApiEntries();
-});
-
-// Watch filters and refetch applications
-watch([searchName, filterType, filterStatus, filterCredits], (newValues, oldValues) => {
-
-  // No need to refetch from API, filtering is done client-side via computed property
-  // If server-side filtering is implemented later, call fetchAiApplications() here
-}, { deep: true });
-
 const apiSelectKey = ref(0); // Key for forcing re-render of API select
 
 // Add a watcher for platformType changes to clear selected APIs and update key
@@ -868,6 +926,12 @@ watch(() => formState.value.platformType, (newPlatformType, oldPlatformType) => 
     formState.value.apis = []; // Clear selected APIs if platform type changes
     apiSelectKey.value++;    // Increment key to force re-render
   }
+});
+
+// Lifecycle hook to fetch initial data
+onMounted(() => {
+  fetchData(); // Fetch AI Applications, AI Types, and Platform Types
+  fetchAllApiEntries(); // Fetch all API entries for the form select
 });
 
 </script>

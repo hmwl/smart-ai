@@ -85,20 +85,20 @@
             />
           </div>
         </div>
-        <a-empty v-else description="暂无作品数据，尝试调整筛选或添加新作品。" />
-        <a-pagination 
-            v-if="pagination.total > pagination.pageSize"
-            :total="pagination.total"
-            :current="pagination.current"
-            :page-size="pagination.pageSize"
-            show-total
-            show-jumper
-            show-page-size
-            :page-size-options="[10, 20, 50, 100]"
-            @change="handlePageChange"
-            @page-size-change="handlePageSizeChange"
-            style="margin-top: 20px; text-align: right;" 
-        />
+        <a-empty v-else description="暂无作品数据，尝试调整筛选或添加新作品." />
+        <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+          <a-pagination 
+              :total="pagination.total"
+              :current="pagination.current"
+              :page-size="pagination.pageSize"
+              show-total
+              :show-jumper="false"
+              show-page-size
+              :page-size-options="[10, 15, 20, 50, 100]" 
+              @change="handlePageChange"
+              @page-size-change="handlePageSizeChange"
+          />
+        </div>
       </a-spin>
     </div>
 
@@ -113,6 +113,11 @@
         <a-form-item field="title" label="标题" :rules="[{required: true, message: '请输入作品标题'}]">
           <a-input v-model="workForm.title" placeholder="请输入作品标题" />
         </a-form-item>
+        
+        <a-form-item v-if="!editWorkId" label="创作者 (默认当前用户)">
+          <a-input v-model="workForm.creatorUsername" disabled />
+        </a-form-item>
+
         <a-form-item field="type" label="类型" :rules="[{required: true, message: '请选择作品类型'}]">
           <a-select v-model="workForm.type" placeholder="请选择作品类型">
             <a-option value="image">图片</a-option>
@@ -201,7 +206,7 @@ const tagsLoading = ref(false);
 
 const pagination = reactive({
   current: 1,
-  pageSize: 10,
+  pageSize: 15,
   total: 0,
 });
 
@@ -216,6 +221,8 @@ const workForm = reactive({
   prompt: '',
   tags: [],
   status: 'private',
+  creatorId: null,
+  creatorUsername: '',
   workFile: null, 
   fileList: [],
   sourceUrl: null, 
@@ -223,11 +230,42 @@ const workForm = reactive({
 });
 const editWorkId = ref(null);
 
+const currentUser = computed(() => {
+  const userInfoString = localStorage.getItem('userInfo');
+  if (userInfoString) {
+    try {
+      const userInfo = JSON.parse(userInfoString);
+      // Ensure the userInfo object has id (not _id) and username
+      if (userInfo && userInfo.id && userInfo.username) {
+        return {
+          _id: userInfo.id,
+          username: userInfo.username
+        };
+      }
+    } catch (e) {
+      console.error('Failed to parse userInfo from localStorage:', e);
+    }
+  }
+  return null;
+});
+
 const fetchCreators = async () => {
   creatorsLoading.value = true;
   try {
-    const response = await apiService.get('/users');
-    creatorsList.value = response.data.map(user => ({ _id: user._id, username: user.username }));
+    // The /users endpoint now returns a paginated response.
+    // For fetching all users for a dropdown, we might need a dedicated non-paginated endpoint 
+    // or fetch with a very large limit if the number of users isn't excessively large.
+    // For now, let's assume we want all users for the dropdown, so we'll fetch page 1 with a large limit.
+    // A better long-term solution might be a dedicated endpoint or server-side search/filter for users.
+    const response = await apiService.get('/users', { params: { page: 1, limit: 1000 } }); // Fetch up to 1000 users
+    
+    if (response.data && response.data.data) {
+        creatorsList.value = response.data.data.map(user => ({ _id: user._id, username: user.username }));
+    } else {
+        creatorsList.value = [];
+        Message.error('获取创作者列表失败: 响应数据格式不正确或无数据'); 
+        console.warn('Unexpected response structure or no data from /users:', response.data);
+    }
   } catch (error) {
     Message.error('获取创作者列表失败: ' + (error.response?.data?.message || error.message));
   } finally {
@@ -320,10 +358,26 @@ const handleEditWork = (work) => {
   workForm.title = work.title;
   workForm.type = work.type;
   workForm.prompt = work.prompt;
-  // Ensure workForm.tags is an array of strings for a-select multiple
   workForm.tags = work.tags ? [...work.tags] : []; 
   workForm.status = work.status;
-  workForm.sourceUrl = work.sourceUrl; 
+  workForm.sourceUrl = work.sourceUrl;
+  // When editing, DO NOT default creator. Store existing creator info if available.
+  // Assuming work.creator might be populated or just an ID from your API.
+  // If work.creator is an object: workForm.creatorId = work.creator?._id; workForm.creatorUsername = work.creator?.username;
+  // If work.creator is just an ID string: workForm.creatorId = work.creator; workForm.creatorUsername = 'Existing Creator'; // You might need to fetch username if only ID is present
+  // For simplicity, if creator isn't part of work object directly or populated, we clear it or show placeholder.
+  // This part depends on how your `work` object is structured when passed to `handleEditWork`.
+  // For now, we'll clear them for edit, as the main goal is defaulting for NEW.
+  // Or, better, we should probably fetch the full work details if creator info isn't readily available.
+  // For this example, let's assume creator is not directly editable here and we show a placeholder or existing.
+  // If the work object contains creator info:
+  if (work.creator) {
+    workForm.creatorId = typeof work.creator === 'string' ? work.creator : work.creator._id;
+    workForm.creatorUsername = typeof work.creator === 'string' ? 'N/A (ID only)' : work.creator.username;
+  } else {
+    workForm.creatorId = null;
+    workForm.creatorUsername = 'N/A';
+  }
   workForm.replaceFile = false; 
   workForm.workFile = null; 
   workForm.fileList = [];
@@ -350,12 +404,14 @@ const handleDeleteWorkConfirm = (workId) => {
 const closeCreateWorkModal = () => {
   showCreateWorkModal.value = false;
   editWorkId.value = null;
-  workFormRef.value?.resetFields(); // Reset form validation and fields
+  workFormRef.value?.resetFields(); 
   workForm.title = '';
   workForm.type = '';
   workForm.prompt = '';
   workForm.tags = [];
   workForm.status = 'private';
+  workForm.creatorId = null; // Reset
+  workForm.creatorUsername = ''; // Reset
   workForm.workFile = null;
   workForm.fileList = [];
   workForm.sourceUrl = null;
@@ -453,12 +509,13 @@ const handleSaveWork = async () => {
   formData.append('title', workForm.title || '');
   formData.append('type', workForm.type);
   formData.append('prompt', workForm.prompt || '');
-  
-  // Backend expects tags as a JSON string array of tag names
   formData.append('tags', JSON.stringify(workForm.tags)); 
-  
   formData.append('status', workForm.status);
   
+  if (!editWorkId.value && workForm.creatorId) { // Only for new works
+    formData.append('creator', workForm.creatorId);
+  }
+
   // Only append file if it's a new work or if replaceFile is checked for an existing work
   if (workForm.workFile && (!editWorkId.value || workForm.replaceFile)) {
     formData.append('workFile', workForm.workFile);
@@ -498,6 +555,20 @@ const predefinedTagsOptionsForFilter = computed(() =>
 const predefinedTagsOptionsForForm = computed(() => 
   predefinedTagsList.value.map(tag => ({ label: tag.name, value: tag.name }))
 );
+
+watch(showCreateWorkModal, (isOpening) => {
+  if (isOpening && !editWorkId.value) { // Only for new works
+    const user = currentUser.value; // Get the value once
+    if (user && user._id && user.username) { // Check if user and its properties exist
+      workForm.creatorId = user._id;
+      workForm.creatorUsername = user.username;
+    } else {
+      workForm.creatorId = null;
+      workForm.creatorUsername = '未指定';
+      Message.warning('无法获取当前登录用户信息或用户信息不完整，创作者将不会被默认设置。'); // Changed to Message.warning and improved message
+    }
+  }
+});
 
 </script>
 

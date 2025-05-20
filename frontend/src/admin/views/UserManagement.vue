@@ -29,9 +29,12 @@
     <a-spin :loading="isLoading" tip="加载用户列表中..." class="w-full">
       <a-table
         :data="filteredUsers"
-        :pagination="{ pageSize: 15 }" 
+        :pagination="pagination"
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
         row-key="_id"
         stripe
+        :scroll="{ x: 'max-content' }"
       >
         <template #columns>
            <a-table-column title="ID" data-index="_id" :width="180">
@@ -39,8 +42,8 @@
                    {{ record._id }}
                </template>
            </a-table-column>
-           <a-table-column title="用户名" data-index="username" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
-           <a-table-column title="邮箱" data-index="email">
+           <a-table-column title="用户名" data-index="username" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200"></a-table-column>
+           <a-table-column title="邮箱" data-index="email" :width="200">
               <template #cell="{ record }">
                 {{ record.email || '-' }} <!-- Display dash if no email -->
               </template>
@@ -52,7 +55,7 @@
                 </a-tag>
               </template>
            </a-table-column>
-           <a-table-column title="管理员" data-index="isAdmin" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+           <a-table-column title="管理员" data-index="isAdmin" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="100">
              <template #cell="{ record }">
                 <a-tag :color="record.isAdmin ? 'blue' : 'gray'">{{ record.isAdmin ? '是' : '否' }}</a-tag>
              </template>
@@ -63,18 +66,18 @@
                 {{ typeof record.creditsBalance === 'number' ? record.creditsBalance : '-' }}
              </template>
            </a-table-column>
-           <a-table-column title="注册时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+           <a-table-column title="注册时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
                 {{ formatDate(record.createdAt) }}
              </template>
            </a-table-column>
-            <a-table-column title="上次登录" data-index="lastLoginAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+            <a-table-column title="上次登录" data-index="lastLoginAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
                 {{ record.lastLoginAt ? formatDate(record.lastLoginAt) : '从未登录' }}
              </template>
            </a-table-column>
            <!-- TODO: Add Actions column (Edit, Delete, Change Status) -->
-           <a-table-column title="操作" :width="150">
+           <a-table-column title="操作" :width="150" fixed="right">
              <template #cell="{ record }">
                 <a-button type="text" status="warning" size="mini" @click="editUser(record)">编辑</a-button>
                 <a-tooltip 
@@ -149,7 +152,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import {
     Message,
     Modal,
@@ -184,6 +187,15 @@ const isSubmitting = ref(false);
 const searchTerm = ref('');
 const selectedStatus = ref(undefined); // Filter state for status (undefined means all)
 const selectedIsAdmin = ref(undefined); // Filter state for isAdmin (undefined means all)
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
 
 // Computed property to count admin users
 const adminUsersCount = computed(() => {
@@ -261,59 +273,30 @@ const filteredUsers = computed(() => {
 // Fetch users function
 const fetchUsers = async () => {
   isLoading.value = true;
-  // const accessToken = localStorage.getItem('accessToken');
-  // let isAdmin = false;
-  // const userInfoString = localStorage.getItem('userInfo');
-  // if (userInfoString) {
-  //     try {
-  //         isAdmin = JSON.parse(userInfoString).isAdmin;
-  //     } catch (e) {
-  //         console.error('Failed to parse userInfo', e);
-  //         Message.error('本地用户信息错误，请重新登录。');
-  //         // localStorage.clear(); window.location.reload(); // Let apiService handle this
-  //         isLoading.value = false;
-  //         return;
-  //     }
-  // }
-
-  // if (!accessToken || !isAdmin) {
-  //     Message.error('未授权或非管理员，无法访问用户列表。请以管理员身份登录。');
-  //     isLoading.value = false;
-  //     // localStorage.clear(); window.location.reload(); // Let apiService handle this
-  //     return;
-  // }
-
   try {
-    // const response = await fetch('/api/users', {
-    //   method: 'GET',
-    //   headers: {
-    //     'Authorization': `Bearer ${accessToken}`,
-    //     'Content-Type': 'application/json'
-    //   }
-    // });
-
-    // if (!response.ok) {
-    //   const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-    //   if (response.status === 401 || response.status === 403) {
-    //     Message.error(`认证失败或无权限 (${response.status})，请重新登录。`);
-    //     // localStorage.clear(); window.location.reload(); // Let apiService handle this
-    //   } else {
-    //     throw new Error(`获取用户列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
-    //   }
-    //   return;
-    // }
-
-    // const data = await response.json();
-    const response = await apiService.get('/users');
-    users.value = response.data;
-
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // query: searchTerm.value || undefined, // If backend supports generic search
+      // status: selectedStatus.value || undefined,
+      // isAdmin: selectedIsAdmin.value, // Note: undefined might be treated differently by backend than false
+    };
+    const response = await apiService.get('/users', { params });
+    if (response.data && response.data.data) { // Assuming paginated response
+      users.value = response.data.data;
+      pagination.total = response.data.totalRecords;
+    } else {
+      // Fallback for non-paginated or unexpected response structure
+      users.value = response.data || [];
+      pagination.total = response.data?.length || 0;
+    }
   } catch (error) {
     console.error('Error fetching users:', error);
-    // Message.error(error.message || '加载用户列表时出错'); // apiService interceptor will handle
     if (!error.response) {
         Message.error('加载用户列表失败，请检查网络连接。');
     }
-    users.value = []; // Clear users on error
+    users.value = [];
+    pagination.total = 0;
   } finally {
     isLoading.value = false;
   }
@@ -324,7 +307,19 @@ const refreshUsers = () => {
     searchTerm.value = '';
     selectedStatus.value = undefined;
     selectedIsAdmin.value = undefined;
+    pagination.current = 1; // Reset to first page
     fetchUsers();
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchUsers();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchUsers();
 };
 
 // --- Modal Logic ---
@@ -448,7 +443,7 @@ const confirmDeleteUser = (user) => {
 
   Modal.confirm({
     title: '确认删除',
-    content: `确定要删除用户 “${user.username}” 吗？此操作不可撤销。`,
+    content: `确定要删除用户 " ${user.username} " 吗？此操作不可撤销。`,
     okText: '确认删除',
     cancelText: '取消',
     onOk: async () => {
@@ -464,7 +459,7 @@ const confirmDeleteUser = (user) => {
         //   throw new Error(`删除用户失败: ${errorData.message || response.status}`);
         // }
         await apiService.delete(`/users/${user._id}`);
-        Message.success(`用户 “${user.username}” 删除成功`);
+        Message.success(`用户 " ${user.username} " 删除成功`);
         await fetchUsers(); // Refresh list
         } catch (error) {
           console.error('Error deleting user:', error);

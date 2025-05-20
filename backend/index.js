@@ -60,10 +60,14 @@ const paymentConfigRoutes = require('./routes/paymentConfig'); // Added for paym
 // Import new routes for Works and Inspiration Categories
 const worksRoutes = require('./routes/works');
 const inspirationCategoriesRoutes = require('./routes/inspirationCategories');
-const publicInspirationMarketRoutes = require('./routes/publicInspirationMarketRoutes'); // Added for public market
+const publicMarketRoutes = require('./routes/publicMarket'); // Added for public market
 
 // Import the new tags router
 const tagsRouter = require('./routes/tags');
+
+// Import new Enum routes
+const enumTypesRoutes = require('./routes/enumTypes');
+const enumConfigsRoutes = require('./routes/enumConfigs');
 
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
@@ -84,11 +88,13 @@ app.use('/api/promotion-activities', promotionActivityRoutes);
 // Mount new routes WITH AUTHENTICATION for admin
 app.use('/api/works', authenticateToken, isAdmin, worksRoutes);
 app.use('/api/inspiration-categories', authenticateToken, isAdmin, inspirationCategoriesRoutes);
+app.use('/api/enum-types', authenticateToken, isAdmin, enumTypesRoutes);
+app.use('/api/enum-configs', authenticateToken, isAdmin, enumConfigsRoutes);
 
 // Mount public routes
 app.use('/api/public', publicRoutes); // Restore public routes
 app.use('/api/public/payment-config', paymentConfigRoutes); // Added for payment config
-app.use('/api/public/market', publicInspirationMarketRoutes); // Added for public market
+app.use('/api/public/market', publicMarketRoutes); // Added for public market
 
 // Mount the new tags router
 app.use('/api/tags', tagsRouter);

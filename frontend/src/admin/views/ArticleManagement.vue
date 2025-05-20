@@ -35,10 +35,12 @@
     <a-spin :loading="isLoading" tip="加载文章列表中..." class="w-full">
        <a-table
         :data="filteredArticles"
-        :pagination="{ pageSize: 15 }" 
+        :pagination="pagination" 
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
         row-key="_id"
         stripe
-        :scroll="{ x: 1200 }" 
+        :scroll="{ x: 'max-content' }" 
       >
         <template #columns>
           <a-table-column title="ID" data-index="_id" :width="180">
@@ -47,11 +49,11 @@
             </template>
           </a-table-column>
            <a-table-column title="标题" data-index="title" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="300"></a-table-column>
-           <a-table-column title="Slug" data-index="slug" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+           <a-table-column title="Slug" data-index="slug" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
             <template #cell="{ record }">
-                 <a :href="`/articles/${record.slug}`" target="_blank" title="查看页面">
+                 <a-link :href="`/articles/${record.slug}`" target="_blank" title="查看页面">
                     {{ record.slug }} <icon-launch />
-                 </a>
+                 </a-link>
              </template>
            </a-table-column>
            <a-table-column title="作者" data-index="author" :width="120" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
@@ -144,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, reactive } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css';
@@ -189,6 +191,15 @@ const selectedStatus = ref(undefined); // Filter state for status
 const selectedPageId = ref(null);
 const collectionPages = ref([]);
 const isPagesLoading = ref(false);
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
 
 // Quill Editor options (can share or redefine)
 const editorOptions = {
@@ -265,18 +276,32 @@ const fetchCollectionPages = async () => {
 
 // Fetch articles for the current page
 const fetchArticles = async () => {
-  if (!props.pageId) return;
-  isLoading.value = true;
-
-  try {
-    const response = await apiService.get('/articles', { params: { pageId: props.pageId } });
-    articles.value = response.data;
-  } catch (error) {
-    console.error('Error fetching articles:', error);
-    if (!error.response) {
-        Message.error('加载文章列表失败，请检查网络。');
-    }
+  if (!props.pageId) {
     articles.value = [];
+    pagination.total = 0;
+    isLoading.value = false;
+    return;
+  }
+  isLoading.value = true;
+  try {
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // query: searchTerm.value || undefined, // If backend supports generic search for articles
+      // status: selectedStatus.value || undefined,
+    };
+    const response = await apiService.get(`/pages/${props.pageId}/articles`, { params });
+    if (response.data && response.data.data) { // Assuming paginated response
+      articles.value = response.data.data;
+      pagination.total = response.data.totalRecords;
+    } else {
+      articles.value = response.data || []; // Fallback for non-paginated
+      pagination.total = response.data?.length || 0;
+    }
+  } catch (error) {
+    Message.error(`获取文章列表失败: ${error.response?.data?.message || error.message}`);
+    articles.value = [];
+    pagination.total = 0;
   } finally {
     isLoading.value = false;
   }
@@ -308,12 +333,24 @@ const filteredArticles = computed(() => {
   });
 });
 
-// Refresh articles for current page and clear search/filter
+// Refresh articles and clear search/filters
 const refreshArticles = () => {
-    if (!props.pageId) return;
-    searchTerm.value = '';
-    selectedStatus.value = undefined;
-    fetchArticles();
+  if (!props.pageId) return;
+  searchTerm.value = '';
+  selectedStatus.value = undefined;
+  pagination.current = 1; // Reset to first page
+  fetchArticles();
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchArticles();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchArticles();
 };
 
 // Watcher for pageId prop changes (if the component might be reused without unmounting)
@@ -422,13 +459,13 @@ const handleSubmit = async () => {
 const confirmDeleteArticle = (article) => {
     Modal.confirm({
         title: '确认删除',
-        content: `确定要删除文章 “${article.title}” 吗？此操作不可撤销。`,
+        content: `确定要删除文章 " ${article.title} " 吗？此操作不可撤销。`,
         okText: '确认删除',
         cancelText: '取消',
         onOk: async () => {
             try {
                 await apiService.delete(`/articles/${article._id}`);
-                Message.success(`文章 “${article.title}” 删除成功`);
+                Message.success(`文章 " ${article.title} " 删除成功`);
                     await fetchArticles();
                 } catch (error) {
                     console.error('Error deleting article:', error);

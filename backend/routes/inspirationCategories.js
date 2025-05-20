@@ -68,12 +68,83 @@ router.get('/', async (req, res) => {
 // GET /api/inspiration-categories/:id - Get a specific category (populated with work details)
 router.get('/:id', async (req, res) => {
     try {
-        const category = await InspirationCategory.findById(req.params.id).populate('works');
-        if (!category) return res.status(404).json({ message: 'Category not found' });
-        
-        const categoryJson = category.toJSON();
-        categoryJson.workCount = category.works ? category.works.length : 0;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 15;
+        const skip = (page - 1) * limit;
+        const searchTerm = req.query.search ? req.query.search.trim() : '';
+        const workTypeFilter = req.query.workType ? req.query.workType.trim() : '';
+        const creatorIdFilter = req.query.creatorId ? req.query.creatorId.trim() : '';
+        const tagsFilter = req.query.tags ? req.query.tags.split(',').map(tag => tag.trim()).filter(tag => tag) : [];
 
+        const categoryData = await InspirationCategory.findById(req.params.id);
+        if (!categoryData) return res.status(404).json({ message: 'Category not found' });
+
+        let baseWorkQuery = {
+            _id: { $in: categoryData.works }, // Works belonging to this category
+            status: 'public_market' 
+        };
+
+        const filterOrConditions = [];
+
+        if (searchTerm) {
+            const searchRegex = new RegExp(searchTerm, 'i');
+            filterOrConditions.push({ title: searchRegex });
+            filterOrConditions.push({ prompt: searchRegex });
+            filterOrConditions.push({ tags: searchRegex });
+        }
+
+        if (workTypeFilter) {
+            filterOrConditions.push({ type: workTypeFilter });
+        }
+
+        if (creatorIdFilter) {
+            filterOrConditions.push({ creator: creatorIdFilter });
+        }
+
+        if (tagsFilter.length > 0) {
+            // For OR logic, if any of the tags match
+            filterOrConditions.push({ tags: { $in: tagsFilter } });
+        }
+
+        let finalWorkQuery;
+        if (filterOrConditions.length > 0) {
+            finalWorkQuery = {
+                ...baseWorkQuery, // Contains _id: { $in: categoryData.works } and status: 'public_market'
+                $or: filterOrConditions
+            };
+        } else {
+            finalWorkQuery = { ...baseWorkQuery }; // No filters, just base conditions
+        }       
+
+        const totalWorks = await Work.countDocuments(finalWorkQuery);
+        
+        // Fetch the ordered work IDs from the category first
+        let orderedWorkIdsInCategory = categoryData.works.map(w => w.toString());
+
+        // If there are filters, we need to find which of these orderedWorkIds still match
+        if (filterOrConditions.length > 0 || searchTerm) { // searchTerm implies filterOrConditions will be populated
+            const matchingFilteredWorks = await Work.find(finalWorkQuery).select('_id').lean();
+            const matchingFilteredWorkIds = matchingFilteredWorks.map(w => w._id.toString());
+            // Intersect orderedWorkIdsInCategory with matchingFilteredWorkIds, preserving order of orderedWorkIdsInCategory
+            orderedWorkIdsInCategory = orderedWorkIdsInCategory.filter(id => matchingFilteredWorkIds.includes(id));
+        }
+        
+        // Now apply pagination to the (potentially filtered) ordered list of IDs
+        const paginatedWorkIds = orderedWorkIdsInCategory.slice(skip, skip + limit);
+
+        // Fetch the actual work details for the paginated IDs, maintaining their order
+        const worksMap = new Map();
+        const workDetails = await Work.find({ _id: { $in: paginatedWorkIds } })
+            .populate('creator', 'username avatar')
+            .lean();
+        workDetails.forEach(work => worksMap.set(work._id.toString(), work));
+        
+        const works = paginatedWorkIds.map(id => worksMap.get(id)).filter(Boolean); // filter(Boolean) removes undefined if any ID wasn't found
+        
+        const categoryJson = categoryData.toJSON();
+        categoryJson.works = works; 
+        categoryJson.totalWorks = totalWorks; // This total is based on filters, not just total in category
+        
         res.json(categoryJson);
     } catch (error) {
         res.status(500).json({ message: 'Error fetching category', error: error.message });
@@ -100,15 +171,22 @@ router.put('/:id', async (req, res) => {
     if (description !== undefined) category.description = description;
     if (order !== undefined) category.order = order;
     
-    let worksChanged = false;
-    if (JSON.stringify(oldWorkIds.sort()) !== JSON.stringify(newWorkIds.sort())) {
-        category.works = newWorkIds;
-        worksChanged = true;
+    // Check if the order or content of works has changed
+    const oldWorkIdsStringified = JSON.stringify(oldWorkIds);
+    const newWorkIdsStringified = JSON.stringify(newWorkIds);
+
+    if (oldWorkIdsStringified !== newWorkIdsStringified) {
+        category.works = newWorkIds; // Save the new order
     }
     
     await category.save();
 
-    if (worksChanged) {
+    // Check if the set of works has changed (for status updates)
+    // We create sorted copies for this comparison.
+    const oldWorkIdsSorted = [...oldWorkIds].sort();
+    const newWorkIdsSorted = [...newWorkIds].sort();
+
+    if (JSON.stringify(oldWorkIdsSorted) !== JSON.stringify(newWorkIdsSorted)) {
       // Works added to this category
       const addedToThisCategory = newWorkIds.filter(id => !oldWorkIds.includes(id));
       if (addedToThisCategory.length > 0) {

@@ -4,7 +4,7 @@
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">消费记录</h2>
       <a-space>
-        <a-input v-model="filters.userId" placeholder="用户ID" allow-clear style="width: 180px;" />
+        <a-input-search v-model="filters.userId" placeholder="搜索用户ID" allow-clear style="width: 250px;" />
         <a-select v-model="filters.type" placeholder="交易类型" allow-clear style="width: 130px;">
           <a-option value="consumption">消费</a-option>
           <a-option value="topup">充值</a-option>
@@ -23,12 +23,15 @@
       </a-space>
     </div>
 
-    <a-spin :loading="isLoading" tip="加载交易流水中...">
+    <a-spin :loading="isLoading" tip="加载交易流水中..." class="w-full">
       <a-table
         :data="transactions"
-        :pagination="{ pageSize: 20, total: pagination.total, current: pagination.current, onChange: handlePageChange }"
+        :pagination="pagination"
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
         row-key="_id"
         stripe
+        :scroll="{ x: 'max-content' }"
       >
         <template #columns>
           <a-table-column title="流水ID" data-index="_id" :width="120">
@@ -57,7 +60,6 @@
           </a-table-column>
           <a-table-column title="活动" :width="180">
             <template #cell="{ record }">
-              <!-- Placeholder: Backend needs to provide promotionActivityId or promotionActivity.name -->
               <span v-if="record.promotionActivity && record.promotionActivity.name">
                 {{ record.promotionActivity.name }}
               </span>
@@ -75,10 +77,10 @@
             </template>
           </a-table-column>
           <a-table-column title="变动后余额" data-index="balanceAfter" align="center" :width="130" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
-          <a-table-column title="交易时间" data-index="createdAt" :width="180">
+          <a-table-column title="描述" data-index="description" ellipsis tooltip :width="200"></a-table-column>
+          <a-table-column title="交易时间" data-index="createdAt" :width="180" fixed="right">
             <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
           </a-table-column>
-          <a-table-column title="描述" data-index="description" ellipsis tooltip></a-table-column>
         </template>
       </a-table>
     </a-spin>
@@ -109,8 +111,11 @@ const transactions = ref([]);
 const isLoading = ref(false);
 const pagination = reactive({
   current: 1,
-  pageSize: 20,
+  pageSize: 15,
   total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
 });
 const filters = reactive({
   userId: '',
@@ -148,7 +153,7 @@ const getTransactionTypeColor = (type) => {
   return map[type] || 'gray';
 };
 
-const fetchCreditTransactions = async (page = 1, pageSize = 20) => {
+const fetchCreditTransactions = async (page = 1, pageSize = pagination.pageSize) => {
   isLoading.value = true;
   const params = { page: page, limit: pageSize };
   if (filters.userId) params.userId = filters.userId;
@@ -200,7 +205,14 @@ const refreshTransactions = () => {
 };
 
 const handlePageChange = (newPage) => {
-  fetchCreditTransactions(newPage, pagination.pageSize);
+  pagination.current = newPage;
+  fetchCreditTransactions(pagination.current, pagination.pageSize);
+};
+
+const handlePageSizeChange = (newPageSize) => {
+  pagination.pageSize = newPageSize;
+  pagination.current = 1; // Reset to first page
+  fetchCreditTransactions(pagination.current, pagination.pageSize);
 };
 
 onMounted(() => {

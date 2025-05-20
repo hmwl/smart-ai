@@ -24,7 +24,15 @@
     </div>
 
     <a-spin :loading="isLoading" tip="加载模板列表中..." class="w-full">
-       <a-table :data="filteredTemplates" :pagination="{ pageSize: 10 }" row-key="_id" stripe :scroll="{ x: 1000 }">
+       <a-table 
+        :data="filteredTemplates" 
+        :pagination="pagination" 
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
+        row-key="_id" 
+        stripe 
+        :scroll="{ x: 'max-content' }" 
+       >
         <template #columns>
           <a-table-column title="ID" data-index="_id" :width="180">
             <template #cell="{ record }">
@@ -126,7 +134,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import { 
     Message, Modal, Spin as ASpin, Button as AButton, Select as ASelect, 
     Option as AOption, Space as ASpace, Form as AForm, FormItem as AFormItem, 
@@ -139,6 +147,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconInfoCircle } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
+import apiService from '../services/apiService';
 
 const templates = ref([]);
 const isLoading = ref(false);
@@ -152,6 +161,15 @@ const currentTemplate = ref(null);
 const templateFormRef = ref(null);
 const templateForm = ref({});
 const isSubmitting = ref(false);
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15, // Standardized
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
 
 // Filtered templates based on search term AND type filter
 const filteredTemplates = computed(() => {
@@ -185,19 +203,26 @@ const formatDate = (dateString) => {
 // Fetch templates function
 const fetchTemplates = async () => {
   isLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-  // TODO: Add proper auth check
-  if (!accessToken) { Message.error('未认证'); isLoading.value = false; return; }
-
   try {
-    const response = await fetch('/api/templates', {
-      headers: { 'Authorization': `Bearer ${accessToken}` }
-    });
-    if (!response.ok) throw new Error(`获取模板列表失败: ${response.status}`);
-    templates.value = await response.json();
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // query: searchTerm.value || undefined, // If backend supports generic search
+      // type: selectedType.value || undefined,
+    };
+    const response = await apiService.get('/templates', { params }); // Using apiService
+    if (response.data && response.data.data) { // Assuming paginated response
+      templates.value = response.data.data;
+      pagination.total = response.data.totalRecords;
+    } else {
+      templates.value = response.data || []; // Fallback for non-paginated
+      pagination.total = response.data?.length || 0;
+    }
   } catch (error) {
-    Message.error(error.message);
-    templates.value = []; 
+    // Error handling simplified due to apiService
+    console.error('Error fetching templates:', error);
+    templates.value = [];
+    pagination.total = 0;
   } finally {
     isLoading.value = false;
   }
@@ -207,7 +232,19 @@ const fetchTemplates = async () => {
 const refreshTemplates = () => {
     searchTerm.value = '';
     selectedType.value = undefined;
+    pagination.current = 1; // Reset to first page
     fetchTemplates();
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchTemplates();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchTemplates();
 };
 
 // --- Modal Logic --- 

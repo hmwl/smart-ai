@@ -2,7 +2,7 @@
   <a-card hoverable class="work-card transition-shadow duration-200 ease-in-out hover:shadow-lg">
     <template #cover>
       <div
-        class="work-thumbnail-wrapper bg-[var(--color-fill-2)]"
+        class="work-thumbnail-wrapper bg-[var(--color-fill-2)] cursor-pointer"
         :style="{
           height: '204px',
           overflow: work.type === 'image' && work.sourceUrl ? 'hidden' : 'visible',
@@ -12,6 +12,7 @@
           justifyContent: work.type === 'image' && work.sourceUrl ? 'flex-start' : 'center',
           backgroundColor: (work.type !== 'image' || !work.sourceUrl) ? 'var(--color-fill-1)' : 'transparent'
         }"
+        @click="emitDetails"
       >
         <img
           v-if="work.type === 'image' && work.sourceUrl"
@@ -77,7 +78,7 @@
             <a-tag v-if="(work.tags || []).length > 3" size="small" class="mr-1 mb-1">...</a-tag>
         </div>
         <a-typography-paragraph :ellipsis="{ rows: 1, showTooltip: true }" class="text-xs mb-0 flex justify-between">
-          <p class="text-xs">ID: {{ work._id.slice(-6) }}</p>
+          <p class="text-xs">ID: {{ work._id }}</p>
           <p class="text-xs">时间: {{ formatDate(work.createdAt) }}</p>
         </a-typography-paragraph>
       </template>

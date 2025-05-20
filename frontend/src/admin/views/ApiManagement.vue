@@ -30,7 +30,15 @@
 
     <!-- Table -->
     <a-spin :loading="isLoading" tip="加载 API 列表中..." class="w-full">
-      <a-table :data="filteredApiEntries" :pagination="{ pageSize: 15 }" row-key="_id" stripe :scroll="{ x: 1250 }">
+      <a-table 
+        :data="filteredApiEntries" 
+        :pagination="pagination" 
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
+        row-key="_id" 
+        stripe 
+        :scroll="{ x: 'max-content' }" 
+      >
         <template #columns>
           <a-table-column title="ID" data-index="_id" :width="180">
                <template #cell="{ record }">
@@ -39,7 +47,7 @@
            </a-table-column>
           <a-table-column title="平台实例名称" data-index="platformName" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
           <a-table-column title="平台类型" data-index="platformType" :width="150" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
-          <a-table-column title="简介" data-index="description" ellipsis tooltip></a-table-column>
+          <a-table-column title="简介" data-index="description" ellipsis tooltip :width="250"></a-table-column>
           <a-table-column title="API 地址/关键配置" data-index="apiUrl" :width="300" ellipsis tooltip>
             <template #cell="{ record }">
               <div v-if="record.platformType === 'ComfyUI' && record.config && record.config.apiUrl">
@@ -153,7 +161,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, reactive } from 'vue';
 import { 
     Message, Modal as AModal, Table as ATable, TableColumn as ATableColumn, Spin as ASpin, 
     Tag as ATag, Button as AButton, Space as ASpace, Form as AForm, FormItem as AFormItem,
@@ -177,6 +185,15 @@ const apiForm = ref({});
 const isSubmitting = ref(false);
 
 const platformTypes = ref([]);
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
 
 const platformSpecificFields = {
   ComfyUI: [
@@ -296,11 +313,34 @@ const fetchApiPlatformTypes = async () => {
 const fetchApiEntries = async () => {
   isLoading.value = true;
   try {
-    const response = await apiService.getApiEntries(); // Changed from '/external-apis'
-    apiEntries.value = response.data;
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // query: searchTerm.value || undefined, 
+      // platformType: selectedPlatformTypeFilter.value || undefined,
+      // status: selectedStatus.value || undefined,
+    };
+    // Ensure apiService.getApiEntries or its underlying call (e.g., apiService.get('/api-entries')) handles these params
+    const response = await apiService.getApiEntries(params); 
+    if (response.data && response.data.data && typeof response.data.totalRecords === 'number') { // Check for paginated structure
+      apiEntries.value = response.data.data;
+      pagination.total = response.data.totalRecords;
+    } else if (Array.isArray(response.data)) { // Fallback if it returns a simple array
+      apiEntries.value = response.data;
+      pagination.total = response.data.length;
+      // Consider logging a warning here if pagination was expected but not received
+      // console.warn("fetchApiEntries received a flat array, expected paginated response.");
+    } else {
+      // Handle other unexpected structures
+      console.error("fetchApiEntries received an unexpected response structure:", response.data);
+      apiEntries.value = [];
+      pagination.total = 0;
+    }
   } catch (error) {
     console.error('Error fetching API entries:', error);
     apiEntries.value = []; 
+    pagination.total = 0;
+    // Message.error might be handled by apiService interceptor
   } finally {
     isLoading.value = false;
   }
@@ -311,8 +351,20 @@ const refreshApiEntries = () => {
     searchTerm.value = '';
     selectedStatus.value = undefined;
     selectedPlatformTypeFilter.value = undefined;
+    pagination.current = 1; // Reset to first page
     fetchApiEntries();
-    fetchApiPlatformTypes(); // Also refresh platform types if they could change
+    fetchApiPlatformTypes(); 
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchApiEntries();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchApiEntries();
 };
 
 // --- Modal Logic ---

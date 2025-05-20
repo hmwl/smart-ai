@@ -10,9 +10,27 @@ const isAdmin = require('../middleware/isAdmin');
 // GET all templates
 router.get('/', authenticateToken, isAdmin, async (req, res) => {
     try {
-        const templates = await Template.find().sort({ type: 1, name: 1 }).lean();
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 15;
+        const skip = (page - 1) * limit;
+
+        // Add filtering capabilities (example by name or type)
+        let query = {};
+        if (req.query.name) {
+            query.name = new RegExp(req.query.name, 'i'); // Case-insensitive search
+        }
+        if (req.query.type && ['single', 'list', 'item'].includes(req.query.type)) {
+            query.type = req.query.type;
+        }
+
+        const totalRecords = await Template.countDocuments(query);
+        const templates = await Template.find(query)
+                                      .sort({ type: 1, name: 1 })
+                                      .skip(skip)
+                                      .limit(limit)
+                                      .lean(); // Use .lean() for performance and easy modification
         
-        // For each template, calculate its usage count by Pages
+        // For each template in the current page, calculate its usage count by Pages
         const templatesWithUsage = await Promise.all(templates.map(async (template) => {
             const usageCount = await Page.countDocuments({
                 $or: [
@@ -21,10 +39,15 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
                     { templateItem: template._id }
                 ]
             });
-            return { ...template, usageCount };
+            return { ...template, usageCount }; // Add usageCount to the lean object
         }));
         
-        res.json(templatesWithUsage);
+        res.json({
+            data: templatesWithUsage,
+            totalRecords: totalRecords,
+            currentPage: page,
+            totalPages: Math.ceil(totalRecords / limit)
+        });
     } catch (error) {
         console.error('Error fetching templates:', error);
         res.status(500).json({ message: 'Error fetching templates', error: error.message });

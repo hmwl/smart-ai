@@ -40,24 +40,27 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
     // }
 
     // 添加分页和排序
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 15; // Default limit
-    const skip = (page - 1) * limit;
+    const pageQuery = parseInt(req.query.page) || 1;
+    const limitQuery = parseInt(req.query.limit) || 15; // Default limit
+    const skip = (pageQuery - 1) * limitQuery;
     const sortField = req.query.sortField || 'createdAt';
     const sortOrder = req.query.sortOrder === 'ascend' ? 1 : -1;
 
-    const query = { page: pageId };
+    const query = { page: pageId }; // This 'page' refers to the parent Page ID, not pagination page.
 
+    const totalRecords = await Article.countDocuments(query);
     const articles = await Article.find(query)
                                   .sort({ [sortField]: sortOrder })
                                   .skip(skip)
-                                  .limit(limit);
+                                  .limit(limitQuery);
                                   // .populate('page', 'name route'); // Optionally populate parent page info
 
-    // Optionally get total count for pagination
-    // const totalCount = await Article.countDocuments(query);
-
-    res.json(articles); // Send back list (and maybe totalCount)
+    res.json({
+        data: articles,
+        totalRecords: totalRecords,
+        currentPage: pageQuery,
+        totalPages: Math.ceil(totalRecords / limitQuery)
+    }); 
 
   } catch (err) {
     console.error("Error fetching articles:", err);

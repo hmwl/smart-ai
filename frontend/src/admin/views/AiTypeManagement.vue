@@ -2,7 +2,7 @@
   <div>
     <!-- Toolbar -->
     <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold">AI 类型管理</h2>
+      <h2 class="text-xl font-semibold">类型管理</h2>
       <a-space>
         <!-- Search Input -->
         <a-input-search
@@ -31,7 +31,9 @@
       <a-table 
         :data="filteredData" 
         :loading="loading" 
-        :pagination="{ pageSize: 15 }" 
+        :pagination="pagination" 
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
         row-key="_id" 
         stripe 
         :scroll="{ x: 'max-content' }"
@@ -45,20 +47,20 @@
           <a-table-column title="名称" data-index="name" key="name" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
           <a-table-column title="URI" data-index="uri" key="uri" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
           <!-- Status Column Added -->
-          <a-table-column title="状态" data-index="status" key="status" :width="100" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="状态" data-index="status" key="status" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <a-tag :color="record.status === 'active' ? 'green' : 'red'">
                 {{ record.status === 'active' ? '活动' : '禁用' }}
               </a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="使用数" data-index="usageCount" key="usageCount" :width="120" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="使用数" data-index="usageCount" key="usageCount" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <a-tag color="arcoblue" v-if="typeof record.usageCount === 'number'">{{ record.usageCount }}</a-tag>
               <span v-else>-</span>
             </template>
           </a-table-column>
-          <a-table-column title="创建时间" data-index="createdAt" key="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="创建时间" data-index="createdAt" key="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
               <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
           </a-table-column>
           <!-- Actions Updated -->
@@ -133,6 +135,15 @@ const isEditing = ref(false);
 const currentAiType = ref(null); // Stores the full object being edited
 const formRef = ref(null);
 
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
+
 // --- Helper Functions ---
 const getInitialFormState = () => ({
   _id: null, // Keep track of ID for editing
@@ -184,11 +195,25 @@ const formatDate = (dateString) => {
 const fetchAiTypes = async () => {
   loading.value = true;
   try {
-    const response = await apiService.get('/ai-types'); // Ensure endpoint is correct
-    aiTypes.value = response.data || []; // Handle potential empty response
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+    };
+    // Ensure endpoint is correct and supports pagination
+    const response = await apiService.get('/ai-types', { params }); 
+    if (response.data && response.data.data) {
+      aiTypes.value = response.data.data;
+      pagination.total = response.data.totalRecords;
+      // pagination.current can be updated if backend confirms the page, but usually it's driven by frontend request
+    } else {
+      // If backend returns flat array for non-paginated endpoint, handle gracefully or log error
+      aiTypes.value = response.data || []; 
+      pagination.total = response.data?.length || 0; // Basic fallback for non-paginated
+    }
   } catch (error) {
     Message.error('获取 AI 类型列表失败: ' + (error.response?.data?.message || error.message));
-    aiTypes.value = []; // Clear data on error
+    aiTypes.value = [];
+    pagination.total = 0;
   } finally {
     loading.value = false;
   }
@@ -198,7 +223,19 @@ const fetchAiTypes = async () => {
 const refreshAiTypes = () => {
     searchTerm.value = '';
     selectedStatus.value = '';
+    pagination.current = 1; // Reset to first page
     fetchAiTypes();
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchAiTypes();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchAiTypes();
 };
 
 // --- Modal Logic Updated ---

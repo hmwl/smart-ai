@@ -144,6 +144,53 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
+// IMPORTANT: Define more specific routes before general ones
+
+// GET /api/pages/:pageId/articles - 获取指定集合页面的文章列表 (管理员)
+// Placeholder for the actual route definition if it exists later in the file or to ensure its position
+// The actual implementation for this route should be here.
+// router.get('/:pageId/articles', authenticateToken, isAdmin, async (req, res) => { ... });
+// If the route is already defined below, this comment serves as a structural guide.
+// We will assume the full definition as previously seen is intended to be here:
+router.get('/:pageId/articles', authenticateToken, isAdmin, async (req, res) => {
+    const pageId = req.params.pageId;
+    try {
+        const parentPage = await Page.findOne({ _id: pageId });
+        if (!parentPage) {
+            return res.status(404).json({ message: '指定的父页面不存在 (pre-check)' });
+        }
+        if (parentPage.type !== 'collection') {
+            return res.status(400).json({ message: '指定的父页面不是集合类型，无法获取文章' });
+        }
+
+        const pageQuery = parseInt(req.query.page) || 1;
+        const limitQuery = parseInt(req.query.limit) || 15;
+        const skip = (pageQuery - 1) * limitQuery;
+        
+        const sortField = req.query.sortField || 'createdAt';
+        const sortOrder = req.query.sortOrder === 'ascend' ? 1 : -1;
+        
+        const query = { page: pageId }; 
+
+        const totalRecords = await Article.countDocuments(query);
+        const articles = await Article.find(query)
+            .sort({ [sortField]: sortOrder })
+            .skip(skip)
+            .limit(limitQuery);
+
+        res.json({
+            data: articles,
+            totalRecords: totalRecords,
+            currentPage: pageQuery,
+            totalPages: Math.ceil(totalRecords / limitQuery)
+        });
+
+    } catch (err) {
+        console.error(`Error fetching articles for page ${pageId}:`, err);
+        res.status(500).json({ message: '获取文章列表失败: ' + err.message });
+    }
+});
+
 // GET /api/pages/:id - 获取单个页面信息 (管理员) - uses getPage middleware
 router.get('/:id', authenticateToken, isAdmin, getPage, (req, res) => {
   res.json(res.page);
@@ -255,30 +302,8 @@ router.delete('/:id', authenticateToken, isAdmin, getPage, async (req, res) => {
   }
 });
 
-// --- Public Routes (Now handled by /api/public/ and /api/menus) ---
-
-// // GET public page data by route (e.g., /api/public/pages/lookup?route=/about)
-// // Moved to routes/public.js
-
-// // GET public navigation links by location (e.g., /api/public/pages/navigation?location=header)
-// // This functionality is now replaced by /api/public/menus/lookup
-// router.get('/public/navigation', async (req, res) => {
-//     const location = req.query.location;
-//     if (!location || !['header', 'footer', 'none'].includes(location)) {
-//         return res.status(400).json({ message: 'Valid location query parameter (header, footer, none) is required.' });
-//     }
-
-//     try {
-//         // Find active pages matching the location, select relevant fields, sort if needed
-//         const pages = await Page.find({ location: location, status: 'active' })
-//                                 .select('name type route externalUrl') // Select only needed fields
-//                                 .sort({ createdAt: 1 }); // Example sort
-
-//         res.json(pages);
-//     } catch (error) {
-//         console.error(`Error fetching navigation for location ${location}:`, error);
-//         res.status(500).json({ message: 'Error fetching navigation data', error: error.message });
-//     }
-// });
+// GET /api/pages/route/:route(*) - 获取公共可访问的页面通过路由
+// THIS ROUTE MUST BE AFTER ADMIN SPECIFIC :id routes to avoid conflict
+// router.get('/route/:route(*)', async (req, res) => { ... }); // Assuming this route exists further down
 
 module.exports = router; 

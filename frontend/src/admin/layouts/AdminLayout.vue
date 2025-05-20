@@ -1,5 +1,5 @@
 <template>
-  <a-layout class="admin-layout" style="min-height: 100vh;">
+  <a-layout class="admin-layout" style="height: 100vh; overflow: hidden;">
     <a-layout-sider
       breakpoint="lg"
       collapsible
@@ -30,7 +30,11 @@
             </a-menu-item>
             <a-menu-item key="ai-type-management">
                 <template #icon><icon-tag /></template>
-                AI 类型管理
+                类型管理
+            </a-menu-item>
+            <a-menu-item key="enum-config-management">
+                <template #icon><icon-settings /></template>
+                枚举管理
             </a-menu-item>
             <a-menu-item key="ai-app-management">
                 <template #icon><icon-code-square /></template>
@@ -107,12 +111,12 @@
         </a-button>
       </div>
     </a-layout-sider>
-    <a-layout style="width: 100%; overflow-x: hidden; flex-grow: 1; padding: 20px 40px;">
+    <a-layout style="width: 100%; height: 100%; overflow: auto;">
       <a-layout-header style="padding-left: 20px; background: var(--color-bg-2); border-bottom: 1px solid var(--color-border);">
         <!-- Can add breadcrumbs or user info here -->
          <span class="text-lg font-semibold">后台管理系统</span>
       </a-layout-header>
-      <a-layout-content class="p-4" style="overflow-y: auto; height: 0;">
+      <a-layout-content class="p-4" style="background: var(--color-bg-1); padding: 20px; border-radius: 4px; box-shadow: 0 2px 8px rgba(0,0,0,0.09);">
         <router-view />
       </a-layout-content>
       <a-layout-footer style="text-align: center; font-size: 12px; color: var(--color-text-3);">
@@ -167,6 +171,7 @@ const targetSelectedKey = computed(() => {
       'PromotionActivityManagement': 'promotion-activity-management',
       'InspirationMarket': 'inspiration-market',
       'AllWorks': 'all-works',
+      'EnumConfigManagement': 'enum-config-management',
   };
   let selected = keyMap[route.name] || 'user-management';
   
@@ -183,7 +188,7 @@ watch(targetSelectedKey, (newKey) => {
   if (['page-management', 'menu-management', 'template-management'].includes(newKey)) {
     keysToOpen.push('website-management');
   }
-  if (['api-management', 'ai-type-management', 'ai-app-management'].includes(newKey)) {
+  if (['api-management', 'ai-type-management', 'enum-config-management', 'ai-app-management'].includes(newKey)) {
       keysToOpen.push('ai-management-group');
   }
   if (['credit-transactions', 'credit-settings', 'promotion-activity-management'].includes(newKey)) {
@@ -219,6 +224,7 @@ const onClickMenuItem = (key) => {
     'promotion-activity-management': { name: 'PromotionActivityManagement' },
     'inspiration-market': { name: 'InspirationMarket' },
     'all-works': { name: 'AllWorks' },
+    'enum-config-management': { name: 'EnumConfigManagement' },
   };
   if (routeMap[key]) {
     router.push(routeMap[key]);

@@ -29,17 +29,20 @@
     <a-spin :loading="isLoading" tip="加载应用列表中..." class="w-full">
       <a-table
         :data="filteredApplications"
-        :pagination="{ pageSize: 15 }"
+        :pagination="pagination"
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
         row-key="_id"
         stripe
+        :scroll="{ x: 'max-content' }" 
       >
         <template #columns>
-           <a-table-column title="ID" data-index="_id" :width="220">
+           <a-table-column title="ID" data-index="_id" :width="120">
                <template #cell="{ record }">
                    {{ record._id }}
                </template>
            </a-table-column>
-           <a-table-column title="名称" data-index="name" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
+           <a-table-column title="名称" data-index="name" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200"></a-table-column>
            <a-table-column title="类型" data-index="type" :width="100" :sortable="{ sortDirections: ['ascend', 'descend'] }">
                <template #cell="{ record }">
                    <a-tag 
@@ -49,7 +52,7 @@
                    </a-tag>
                </template>
            </a-table-column>
-           <a-table-column title="所属人" data-index="owner.username" >
+           <a-table-column title="所属人" data-index="owner.username" :width="120">
                <template #cell="{ record }">
                     {{ record.owner?.username || '未知' }} <!-- Handle case where owner might not be populated -->
                </template>
@@ -61,12 +64,12 @@
                 </a-tag>
               </template>
            </a-table-column>
-           <a-table-column title="创建时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+           <a-table-column title="创建时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
                 {{ formatDate(record.createdAt) }}
              </template>
            </a-table-column>
-            <a-table-column title="最后更新" data-index="updatedAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+            <a-table-column title="最后更新" data-index="updatedAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
                 {{ formatDate(record.updatedAt) }}
              </template>
@@ -120,7 +123,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, computed, reactive } from 'vue';
 import {
     Message,
     Table as ATable,
@@ -141,6 +144,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
+import apiService from '../services/apiService';
 
 const applications = ref([]);
 const isLoading = ref(false);
@@ -155,6 +159,15 @@ const currentApp = ref(null);
 const appFormRef = ref(null);
 const appForm = ref({});
 const isSubmitting = ref(false);
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
 
 // Filtered applications based on search term AND filters
 const filteredApplications = computed(() => {
@@ -189,51 +202,34 @@ const formatDate = (dateString) => {
 
 const fetchApplications = async () => {
   isLoading.value = true;
-  const accessToken = localStorage.getItem('accessToken');
-
-  // Basic check if admin (ideally verify token validity too)
-  const userInfoString = localStorage.getItem('userInfo');
-  let isAdmin = false;
-   if (userInfoString) {
-      try { isAdmin = JSON.parse(userInfoString).isAdmin; } catch (e) { /* ignore */ }
-  }
-  if (!accessToken || !isAdmin) {
-      Message.error('未授权或非管理员。');
-      isLoading.value = false;
-      // Consider redirecting or using global logout
-      localStorage.clear(); window.location.reload();
-      return;
-  }
-
   try {
-    // Admin endpoint fetches all applications
-    const response = await fetch('/api/applications', { // Same endpoint, but admin gets all
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({ message: '无法解析错误信息' }));
-      if (response.status === 401 || response.status === 403) {
-        Message.error(`认证失败或无权限 (${response.status})，请重新登录。`);
-        localStorage.clear(); window.location.reload();
-      } else {
-        throw new Error(`获取应用列表失败: ${response.status} - ${errorData.message || '未知错误'}`);
-      }
-      return;
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // You might want to pass current filters (searchTerm, selectedType, selectedStatus) to backend for server-side filtering
+      // name: searchTerm.value || undefined, 
+      // type: selectedType.value || undefined,
+      // status: selectedStatus.value || undefined,
+    };
+    const response = await apiService.get('/applications', { params }); // Using apiService
+    if (response.data && response.data.data) { // Assuming paginated response
+      applications.value = response.data.data;
+      pagination.total = response.data.totalRecords;
+    } else {
+      // Fallback for non-paginated or unexpected response structure
+      applications.value = response.data || [];
+      pagination.total = response.data?.length || 0;
+      // console.warn('Received non-standard paginated response for applications');
     }
-
-    const data = await response.json();
-    applications.value = data;
-    // console.log('Fetched applications (admin):', data);
-
   } catch (error) {
+    // Error handling is simplified as apiService interceptor should handle common cases like auth
     console.error('Error fetching applications:', error);
-    Message.error(error.message || '加载应用列表时出错');
-    applications.value = []; // Clear on error
+    if (!error.response) { // Network or other non-HTTP errors
+        Message.error('加载应用列表失败，请检查网络连接或联系管理员。');
+    }
+    // Specific error messages can still be shown if needed, but apiService might already do it.
+    applications.value = [];
+    pagination.total = 0;
   } finally {
     isLoading.value = false;
   }
@@ -244,7 +240,19 @@ const refreshApplications = () => {
     searchTerm.value = '';
     selectedType.value = undefined;
     selectedStatus.value = undefined;
+    pagination.current = 1; // Reset to first page
     fetchApplications();
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchApplications();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchApplications();
 };
 
 // --- Modal Logic ---

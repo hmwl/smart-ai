@@ -291,4 +291,7 @@ router.post('/batch-update-status', async (req, res) => {
   }
 });
 
+// GET /api/works/inspiration-market - Get all works for the inspiration market (paginated, searchable)
+// router.get('/inspiration-market', async (req, res) => { ... }); // Entire route commented out or deleted
+
 module.exports = router;

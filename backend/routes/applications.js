@@ -43,13 +43,39 @@ async function getApplication(req, res, next) {
 // 管理员获取所有，普通用户获取自己的
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+    const skip = (page - 1) * limit;
+
     let query = {};
     if (!req.user.isAdmin) {
       query.owner = req.user.userId; // 普通用户只能查询自己的
     }
-    // 可添加分页、排序、过滤 (按类型、状态等)
-    const applications = await Application.find(query).populate('owner', 'username email'); // 填充 owner 信息
-    res.json(applications);
+
+    // Optional: Add more filtering based on query params from frontend
+    if (req.query.name) {
+        query.name = new RegExp(req.query.name, 'i');
+    }
+    if (req.query.type) {
+        query.type = req.query.type;
+    }
+    if (req.query.status) {
+        query.status = req.query.status;
+    }
+
+    const totalRecords = await Application.countDocuments(query);
+    const applications = await Application.find(query)
+                                      .populate('owner', 'username email') // 填充 owner 信息
+                                      .sort({ createdAt: -1 }) // Default sort
+                                      .skip(skip)
+                                      .limit(limit);
+    
+    res.json({
+        data: applications,
+        totalRecords: totalRecords,
+        currentPage: page,
+        totalPages: Math.ceil(totalRecords / limit)
+    });
   } catch (err) {
     res.status(500).json({ message: '获取应用列表失败: ' + err.message });
   }

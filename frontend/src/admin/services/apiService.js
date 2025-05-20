@@ -109,8 +109,8 @@ apiService.getInspirationCategories = (params) => { // params: { populateWorks: 
 };
 
 // Get a single category by ID
-apiService.getInspirationCategoryById = (id) => {
-  return apiService.get(`/inspiration-categories/${id}`);
+apiService.getInspirationCategoryById = (id, options) => {
+  return apiService.get(`/inspiration-categories/${id}`, options);
 };
 
 // Create a new category
@@ -200,5 +200,55 @@ apiService.deleteApiEntry = (id) => {
 apiService.getApiPlatformTypes = () => {
   return apiService.get('/api-entries/platform-types');
 };
+
+// --- Enum Type Service Methods ---
+apiService.getEnumTypes = (params) => { // No specific params mentioned, but good to have for future
+  return apiService.get('/enum-types', { params });
+};
+
+apiService.getEnumTypeById = (id) => {
+  return apiService.get(`/enum-types/${id}`);
+};
+
+apiService.createEnumType = (data) => { // data: { name, platform, status? }
+  return apiService.post('/enum-types', data);
+};
+
+apiService.updateEnumType = (id, data) => { // data: { name?, platform?, status? }
+  return apiService.put(`/enum-types/${id}`, data);
+};
+
+apiService.deleteEnumType = (id) => {
+  return apiService.delete(`/enum-types/${id}`);
+};
+
+// --- Enum Config Service Methods ---
+apiService.getEnumConfigs = (params) => { 
+  // params: { platform, enumTypeId, name, status, page, limit }
+  return apiService.get('/enum-configs', { params });
+};
+
+apiService.getEnumConfigById = (id) => {
+  return apiService.get(`/enum-configs/${id}`);
+};
+
+apiService.createEnumConfig = (data) => { 
+  // data: { name, enumType (ID), translation?, description?, platform, status? }
+  return apiService.post('/enum-configs', data);
+};
+
+apiService.updateEnumConfig = (id, data) => { 
+  // data: { name?, enumType? (ID), translation?, description?, platform?, status?, isUsed? }
+  return apiService.put(`/enum-configs/${id}`, data);
+};
+
+apiService.deleteEnumConfig = (id) => {
+  return apiService.delete(`/enum-configs/${id}`);
+};
+
+// It's also useful to have a way to fetch the PLATFORM_TYPES if not already available
+// The backend route was /api-entries/platform-types. We can reuse getApiPlatformTypes
+// or decide if a dedicated one under /enum-types or /enum-configs is needed.
+// For now, components needing platform types can use the existing getApiPlatformTypes.
 
 export default apiService; 

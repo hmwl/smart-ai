@@ -16,9 +16,33 @@ const SINGLE_CREDIT_SETTING_ID = 'global_credit_settings'; // ID for credit sett
 // GET /api/users - 获取所有用户列表 (需要管理员权限)
 router.get('/', authenticateToken, isAdmin, async (req, res) => {
   try {
-    // 实际应用中需要添加分页、排序、过滤和权限检查
-    const users = await User.find().select('-passwordHash'); // 查询所有用户，但不返回 passwordHash
-    res.json(users);
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 15;
+    const skip = (page - 1) * limit;
+
+    // Add filtering capabilities (example by username or status)
+    let query = {};
+    if (req.query.username) {
+        query.username = new RegExp(req.query.username, 'i'); // Case-insensitive search
+    }
+    if (req.query.status && ['active', 'disabled'].includes(req.query.status)) {
+        query.status = req.query.status;
+    }
+    // TODO: Add filtering by isAdmin if needed
+
+    const totalRecords = await User.countDocuments(query);
+    const users = await User.find(query)
+                            .select('-passwordHash') // Exclude password hash
+                            .sort({ createdAt: -1 }) // Sort by creation date, newest first
+                            .skip(skip)
+                            .limit(limit);
+
+    res.json({
+        data: users,
+        totalRecords: totalRecords,
+        currentPage: page,
+        totalPages: Math.ceil(totalRecords / limit)
+    });
   } catch (err) {
     console.error('Error fetching users:', err);
     res.status(500).json({ message: '获取用户列表失败' });

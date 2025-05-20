@@ -72,6 +72,12 @@ const routes = [
     meta: { title: 'API 管理' }
   },
   {
+    path: '/enum-configs',
+    name: 'EnumConfigManagement',
+    component: () => import('../views/EnumConfigManagement.vue'),
+    meta: { title: '枚举配置管理', requiresAuth: true }
+  },
+  {
     path: '/credits',
     name: 'CreditTransactionManagement',
     component: () => import('../views/CreditsManagement.vue'),

@@ -3,6 +3,34 @@
     <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">灵感市场</h2>
       <a-space>
+        <a-select v-model="selectedWorkType" placeholder="筛选作品类型" allow-clear style="width: 150px;">
+          <a-option value="image">图片</a-option>
+          <a-option value="audio">音频</a-option>
+          <a-option value="video">视频</a-option>
+          <a-option value="model">模型</a-option>
+        </a-select>
+        <a-select 
+          v-model="selectedCreatorId" 
+          placeholder="筛选创作者" 
+          allow-clear 
+          show-search
+          :filter-option="creatorFilterOption" 
+          style="width: 180px;" 
+          :loading="usersLoading"
+        >
+          <a-option v-for="user in userList" :key="user._id" :value="user._id">{{ user.username }}</a-option>
+        </a-select>
+        <a-select 
+          v-model="selectedTagsOnPage" 
+          placeholder="筛选标签 (可多选)" 
+          allow-clear 
+          multiple
+          style="width: 200px;"
+          :options="tagOptionsForSelect"
+          :loading="tagsLoading"
+          @change="debouncedFetchMainPageWorks"
+        >
+        </a-select>
         <a-input-search 
           v-model="workSearchTermOnPage" 
           placeholder="搜索作品名称..." 
@@ -94,11 +122,11 @@
         
         <a-spin :loading="worksLoading" style="width:100%; flex-grow: 1; overflow-y: auto;">
           <div v-if="currentWorksToDisplay.length > 0" class="works-grid-container">
-             <a-alert v-if="selectedCategory && selectedCategory.key !== ALL_WORKS_KEY && worksOfSelectedCategory.length > 0" type="info" closable style="margin-bottom: 16px;">
-                当前分类共 {{ worksOfSelectedCategory.length }} 个作品。您可以拖拽作品调整顺序。
+             <a-alert v-if="selectedCategory && selectedCategory.key !== ALL_WORKS_KEY && worksOfSelectedCategory.length > 0 && !worksPagination.disabled" type="info" closable style="margin-bottom: 16px;">
+                当前分类共 {{ worksPagination.total }} 个作品。您可以拖拽当前页的作品调整顺序。
              </a-alert>
-             <a-alert v-else-if="selectedCategory && selectedCategory.key === ALL_WORKS_KEY && allWorksForPageDisplay.length > 0" type="info" closable style="margin-bottom: 16px;">
-                共 {{ allWorksForPageDisplay.length }} 个作品。
+             <a-alert v-else-if="selectedCategory && selectedCategory.key === ALL_WORKS_KEY && allWorksForPageDisplay.length > 0 && !worksPagination.disabled" type="info" closable style="margin-bottom: 16px;">
+                共 {{ worksPagination.total }} 个作品。
              </a-alert>
             <draggable 
               v-model="draggableWorksModel" 
@@ -129,6 +157,20 @@
             :description="emptyStateDescription"
           />
            <a-empty v-else-if="categoriesLoading || worksLoading" description="加载中..."/>
+           <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+             <a-pagination
+              v-if="!worksLoading && worksPagination.total > 0 && !worksPagination.disabled"
+              :current="worksPagination.current"
+              :page-size="worksPagination.pageSize"
+              :total="worksPagination.total"
+              :page-size-options="worksPagination.pageSizeOptions"
+              show-total
+              show-page-size
+              :show-jumper="false"
+              @change="handleWorksPageChange"
+              @page-size-change="handleWorksPageSizeChange"
+            />
+          </div>
         </a-spin>
       </a-layout-content>
     </a-layout>
@@ -158,17 +200,56 @@
       class="add-works-to-category-modal"
     >
       <a-alert type="info" style="margin-bottom: 16px;">点击作品卡片下方的按钮，将其添加或移出当前分类。作品本身不会被删除。</a-alert>
-      <a-input-search 
-        placeholder="搜索所有作品标题、ID、标签..." 
-        v-model="allWorksSearchTermInModal" 
-        @input="debouncedFetchAllWorksForModal" 
-        @clear="fetchAllWorksForModal" 
-        style="margin-bottom: 16px; width: 300px;"
-        allow-clear
-      />
+      
+      <a-space style="margin-bottom: 16px; display: flex; flex-wrap: wrap;">
+        <a-input-search 
+          placeholder="搜索所有作品..." 
+          v-model="allWorksSearchTermInModal" 
+          style="width: 250px;"
+          allow-clear
+          @input="debouncedFetchAllWorksForModal" 
+          @clear="debouncedFetchAllWorksForModal"
+        />
+        <a-select 
+          v-model="addWorksModalSelectedType" 
+          placeholder="筛选作品类型" 
+          allow-clear 
+          style="width: 150px;"
+          @change="() => { addWorksModalPagination.current = 1; fetchAllWorksForModal(); }"
+        >
+          <a-option value="image">图片</a-option>
+          <a-option value="audio">音频</a-option>
+          <a-option value="video">视频</a-option>
+          <a-option value="model">模型</a-option>
+        </a-select>
+        <a-select 
+          v-model="addWorksModalSelectedCreatorId" 
+          placeholder="筛选创作者" 
+          allow-clear 
+          show-search
+          :filter-option="creatorFilterOption" 
+          style="width: 180px;" 
+          :loading="usersLoading" 
+          @change="() => { addWorksModalPagination.current = 1; fetchAllWorksForModal(); }"
+        >
+          <a-option v-for="user in userList" :key="user._id" :value="user._id">{{ user.username }}</a-option>
+        </a-select>
+        <a-select 
+          v-model="addWorksModalSelectedTags" 
+          placeholder="筛选标签 (可多选)" 
+          allow-clear 
+          multiple 
+          style="width: 200px;"
+          :options="tagOptionsForSelect"
+          :loading="tagsLoading"
+          @change="() => { addWorksModalPagination.current = 1; fetchAllWorksForModal(); }"
+        >
+        </a-select>
+      </a-space>
+
       <a-spin :loading="allWorksLoading" style="width:100%; min-height: 200px;"> 
-        <div v-if="filteredAllWorksForModal.length > 0" class="works-grid modal-works-grid">
-          <div v-for="work in filteredAllWorksForModal" :key="work._id" class="work-card-wrapper-modal">
+        <div v-if="allWorksForModal.length > 0" class="works-grid modal-works-grid">
+          <div v-for="work in allWorksForModal" :key="work._id" class="work-card-wrapper-modal">
             <WorkCard 
               :work="work" 
               @details="handleShowWorkDetails"
@@ -194,8 +275,24 @@
             </a-button>
           </div>
         </div>
-        <a-empty v-else-if="!allWorksLoading && allWorksForModal.length === 0" description="没有可供选择的作品。请先在'所有作品'页面添加作品。" style="margin-top: 20px;"/>
-        <a-empty v-else-if="!allWorksLoading && filteredAllWorksForModal.length === 0 && allWorksSearchTermInModal" description="没有匹配搜索条件的作品。" style="margin-top: 20px;"/>
+        <a-empty v-else-if="!allWorksLoading && (allWorksSearchTermInModal || addWorksModalSelectedType || addWorksModalSelectedCreatorId || addWorksModalSelectedTags)" description="没有匹配筛选条件的作品。" style="margin-top: 20px;"/>
+        <a-empty v-else-if="!allWorksLoading && allWorksForModal.length === 0" description="没有可供选择的作品。请先在'所有作品'页面添加作品或尝试其他筛选。" style="margin-top: 20px;"/>
+        <a-empty v-else-if="allWorksLoading" description="加载中..." style="margin-top: 20px;"/>
+        
+        <div style="display: flex; justify-content: flex-end; margin-top: 20px;">
+          <a-pagination
+              v-if="!allWorksLoading && addWorksModalPagination.total > 0"
+              :current="addWorksModalPagination.current"
+              :page-size="addWorksModalPagination.pageSize"
+              :total="addWorksModalPagination.total"
+              :page-size-options="addWorksModalPagination.pageSizeOptions"
+              show-total
+              show-page-size
+              :show-jumper="false" 
+              @change="handleModalWorksPageChange"
+              @page-size-change="handleModalWorksPageSizeChange"
+          />
+        </div>
       </a-spin>
     </a-modal>
 
@@ -214,7 +311,7 @@ import {
     Layout as ALayout, LayoutSider as ALayoutSider, LayoutContent as ALayoutContent,
     Button as AButton, Modal as AModal, Form as AForm, FormItem as AFormItem, Input as AInput, TypographyTitle as ATypographyTitle,
     Tree as ATree, Spin as ASpin, Empty as AEmpty, Space as ASpace, Tooltip as ATooltip, Popconfirm as APopconfirm, Message, Alert as AAlert,
-    InputSearch as AInputSearch, Transfer as ATransfer
+    InputSearch as AInputSearch, Transfer as ATransfer, Pagination as APagination, Select as ASelect, Option as AOption
 } from '@arco-design/web-vue';
 import { IconPlus, IconEdit, IconDelete, IconPlusCircle, IconRefresh, IconCheckCircleFill } from '@arco-design/web-vue/es/icon';
 import apiService from '../services/apiService';
@@ -231,6 +328,13 @@ const categoriesLoading = ref(false);
 const selectedCategoryKeys = ref([]);
 const selectedCategory = ref(null);
 const workSearchTermOnPage = ref('');
+const selectedWorkType = ref(null);
+const selectedCreatorId = ref(null);
+const userList = ref([]);
+const usersLoading = ref(false);
+const predefinedTagsList = ref([]);
+const tagsLoading = ref(false);
+const selectedTagsOnPage = ref([]);
 
 const worksOfSelectedCategory = ref([]);
 const allWorksForPageDisplay = ref([]);
@@ -253,19 +357,29 @@ const workForDetailModal = ref(null);
 const totalWorksCount = ref(0);
 const categorySiderRef = ref(null);
 
-const filteredAllWorksForModal = computed(() => {
-  if (!allWorksSearchTermInModal.value) {
-    return allWorksForModal.value;
-  }
-  const searchTerm = allWorksSearchTermInModal.value.toLowerCase();
-  return allWorksForModal.value.filter(work => {
-    return (
-      (work.title && work.title.toLowerCase().includes(searchTerm)) ||
-      (work._id && work._id.toLowerCase().includes(searchTerm)) ||
-      (work.tags && work.tags.some(tag => tag.toLowerCase().includes(searchTerm)))
-    );
-  });
+// Pagination state for works list
+const worksPagination = reactive({
+  current: 1,
+  pageSize: 15, // Standardized
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100], // Standardized
+  disabled: false, // To disable pagination when no category or "All" with client-side pagination
 });
+
+// New state for modal filters and pagination
+const addWorksModalPagination = reactive({
+  current: 1,
+  pageSize: 12, 
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [12, 24, 48, 96], 
+});
+const addWorksModalSelectedType = ref(null);
+const addWorksModalSelectedCreatorId = ref(null);
+const addWorksModalSelectedTags = ref([]);
 
 const treeData = computed(() => {
   const staticAllCategory = {
@@ -379,63 +493,76 @@ const fetchAllWorksForPageDisplay = async () => {
     if (!selectedCategory.value || selectedCategory.value.key !== ALL_WORKS_KEY) return;
     if (worksLoading.value) return; 
     worksLoading.value = true;
-    let aggregatedWorks = [];
+    worksPagination.disabled = false;
+
     try {
-        if (categories.value.length > 0) {
-            const categoryWorkPromises = categories.value.map(cat =>
-                apiService.getInspirationCategoryById(cat._id)
-                    .then(response => response.data.works || [])
-                    .catch(err => {
-                        console.error(`Failed to fetch works for category ${cat._id}:`, err);
-                        return [];
-                    })
-            );
-            const results = await Promise.all(categoryWorkPromises);
-            results.forEach(workList => {
-                if (Array.isArray(workList)) {
-                    aggregatedWorks.push(...workList);
-                }
-            });
-        }
-        const uniqueWorksMap = new Map();
-        aggregatedWorks.forEach(work => {
-            if (work && work._id) { 
-                 uniqueWorksMap.set(work._id, work);
-            }
-        });
-        allWorksForPageDisplay.value = Array.from(uniqueWorksMap.values());
-        totalWorksCount.value = allWorksForPageDisplay.value.length;
+        const params = {
+            page: worksPagination.current,
+            limit: worksPagination.pageSize,
+            search: workSearchTermOnPage.value || undefined,
+            workType: selectedWorkType.value || undefined,
+            creatorId: selectedCreatorId.value || undefined,
+            tags: selectedTagsOnPage.value.length > 0 ? selectedTagsOnPage.value.join(',') : undefined,
+        };
+        const response = await apiService.get('/public/market/works', { params }); 
+        allWorksForPageDisplay.value = response.data.works || [];
+        worksPagination.total = response.data.total || 0; // Backend uses 'total', not 'totalWorks'
+        totalWorksCount.value = response.data.total || 0; 
+
     } catch (error) {
-        // Message.error already handled by apiService interceptor for most cases
         allWorksForPageDisplay.value = [];
+        worksPagination.total = 0;
         totalWorksCount.value = 0; 
+        // Error message handled by apiService interceptor
     } finally {
         worksLoading.value = false;
     }
 };
 
-const fetchWorksForCategory = async (categoryId) => {
+const fetchWorksForCategory = async (categoryId, page = worksPagination.current, limit = worksPagination.pageSize) => {
     if (!categoryId || categoryId === ALL_WORKS_KEY) {
-        if (categoryId === ALL_WORKS_KEY) await fetchAllWorksForPageDisplay();
-        else worksOfSelectedCategory.value = [];
+        if (categoryId === ALL_WORKS_KEY) {
+            selectedCategory.value = { key: ALL_WORKS_KEY, _id: ALL_WORKS_KEY, name: '全部' };
+            await fetchAllWorksForPageDisplay(); 
+        } else {
+             worksOfSelectedCategory.value = [];
+             worksPagination.total = 0;
+             selectedCategory.value = null;
+             worksPagination.disabled = true;
+        }
         return;
     }
     worksLoading.value = true;
+    worksPagination.disabled = false;
     try {
-        const response = await apiService.getInspirationCategoryById(categoryId);
+        const params = { 
+            page,
+            limit,
+            search: workSearchTermOnPage.value || undefined,
+            workType: selectedWorkType.value || undefined,
+            creatorId: selectedCreatorId.value || undefined,
+            tags: selectedTagsOnPage.value.length > 0 ? selectedTagsOnPage.value.join(',') : undefined,
+        };
+        const response = await apiService.getInspirationCategoryById(categoryId, { params });
         const categoryData = response.data;
+        
         const foundCategoryInList = categories.value.find(c => c._id === categoryId);
         if (foundCategoryInList) {
              selectedCategory.value = { ...foundCategoryInList, ...categoryData, key: categoryId, name: categoryData.name };
         } else {
              selectedCategory.value = { ...categoryData, key: categoryId };
         }
-        worksOfSelectedCategory.value = categoryData.works || [];
+        worksOfSelectedCategory.value = categoryData.works || []; // Assuming backend returns paginated works
+        worksPagination.current = page;
+        worksPagination.pageSize = limit;
+        worksPagination.total = categoryData.totalWorks || 0; // Assuming backend returns totalWorks
+
         const catInList = categories.value.find(c => c._id === categoryId);
-        if (catInList) catInList.workCount = worksOfSelectedCategory.value.length;
+        if (catInList) catInList.workCount = worksPagination.total; // Update overall count for the category in the tree
+
     } catch (error) {
-        // Message.error already handled by apiService interceptor for most cases
         worksOfSelectedCategory.value = [];
+        worksPagination.total = 0;
     } finally {
         worksLoading.value = false;
     }
@@ -450,22 +577,72 @@ const refreshData = async () => {
     worksLoading.value = false;
 };
 
-onMounted(() => { fetchCategories(false); });
+const fetchUserListForFilter = async () => {
+  usersLoading.value = true;
+  try {
+    const response = await apiService.get('/users', { params: { page: 1, limit: 1000 } }); 
+    if (response.data && response.data.data) {
+        userList.value = response.data.data.map(user => ({ 
+            _id: user._id, 
+            username: user.username, 
+            nickname: user.nickname // Keep nickname in the data structure if needed elsewhere
+        }));
+    } else {
+        userList.value = [];
+        Message.error('获取创作者列表失败: 响应数据格式不正确或无数据');
+    }
+  } catch (error) {
+    console.error("Failed to fetch user list for filter:", error);
+    Message.error('获取创作者列表失败: ' + (error.response?.data?.message || error.message));
+    userList.value = [];
+  } finally {
+    usersLoading.value = false;
+  }
+};
+
+const fetchTags = async () => {
+  tagsLoading.value = true;
+  try {
+    const response = await apiService.get('/tags');
+    predefinedTagsList.value = response.data || [];
+  } catch (error) {
+    Message.error('获取标签列表失败: ' + (error.response?.data?.message || error.message));
+    predefinedTagsList.value = [];
+  } finally {
+    tagsLoading.value = false;
+  }
+};
+
+const creatorFilterOption = (inputValue, option) => {
+  // option.children[0].children is the text content of the a-option
+  // Ensure robust access to text content
+  const textContent = option.children && option.children.length > 0 && option.children[0].children 
+                      ? String(option.children[0].children)
+                      : '';
+  return textContent.toLowerCase().includes(inputValue.toLowerCase());
+};
+
+onMounted(() => { 
+  fetchCategories(false); 
+  fetchUserListForFilter(); 
+  fetchTags();
+});
 
 watch(selectedCategoryKeys, async (newKeys) => {
     if (newKeys && newKeys.length > 0) {
         const keyToSelect = newKeys[0];
+        workSearchTermOnPage.value = ''; 
+        selectedWorkType.value = null;
+        selectedCreatorId.value = null;
+        selectedTagsOnPage.value = [];
+        worksPagination.current = 1; 
+
         if (keyToSelect === ALL_WORKS_KEY) {
-            const allNode = treeData.value.find(n => n.key === ALL_WORKS_KEY);
-            selectedCategory.value = allNode ? { ...allNode, _id: ALL_WORKS_KEY, name: allNode.title } : { key: ALL_WORKS_KEY, _id: ALL_WORKS_KEY, name: '全部' };
-            await fetchAllWorksForPageDisplay();
-            worksOfSelectedCategory.value = [];
+            await fetchWorksForCategory(ALL_WORKS_KEY);
         } else {
             const categoryToSelect = categories.value.find(c => c._id === keyToSelect);
             if(categoryToSelect) {
-                 selectedCategory.value = { ...categoryToSelect, key: categoryToSelect._id };
-                 fetchWorksForCategory(keyToSelect);
-                 allWorksForPageDisplay.value = [];
+                 await fetchWorksForCategory(keyToSelect, worksPagination.current, worksPagination.pageSize);
             } else if (!categoriesLoading.value) {
                 handleCategorySelect([ALL_WORKS_KEY], { node: treeData.value.find(n => n.key === ALL_WORKS_KEY) });
             }
@@ -570,8 +747,24 @@ const handleCategoryDrop = async ({ dragNode, dropNode, dropPosition }) => {
 
 const openAddWorksToCategoryModal = async () => {
     if (!selectedCategory.value || !selectedCategory.value._id || selectedCategory.value.key === ALL_WORKS_KEY) return;
-    currentCategoryWorkIds.value = worksOfSelectedCategory.value.map(w => w._id);
-    allWorksSearchTermInModal.value = ''; 
+    
+    allWorksSearchTermInModal.value = '';
+    addWorksModalSelectedType.value = null;
+    addWorksModalSelectedCreatorId.value = null;
+    addWorksModalSelectedTags.value = [];
+    addWorksModalPagination.current = 1;
+    addWorksModalPagination.pageSize = 12; 
+    addWorksModalPagination.total = 0;
+    allWorksForModal.value = [];
+
+    try {
+        const categoryDetails = await apiService.getInspirationCategoryById(selectedCategory.value._id, { params: { limit: 0 } }); 
+        currentCategoryWorkIds.value = categoryDetails.data.works.map(w => typeof w === 'string' ? w : w._id);
+    } catch(error) {
+        Message.error('无法获取当前分类的完整作品列表。');
+        currentCategoryWorkIds.value = worksOfSelectedCategory.value.map(w => w._id); 
+    }
+    
     await fetchAllWorksForModal(); 
     showAddWorksToCategoryModal.value = true;
 };
@@ -579,16 +772,28 @@ const openAddWorksToCategoryModal = async () => {
 const fetchAllWorksForModal = async () => {
     allWorksLoading.value = true;
     try {
-        const params = { limit: 1000 };
-        const response = await apiService.getWorks(params);
+        const params = { 
+            limit: addWorksModalPagination.pageSize,
+            page: addWorksModalPagination.current,
+            search: allWorksSearchTermInModal.value || undefined,
+            type: addWorksModalSelectedType.value || undefined, 
+            creator: addWorksModalSelectedCreatorId.value || undefined, 
+            tags: addWorksModalSelectedTags.value.length > 0 ? addWorksModalSelectedTags.value.join(',') : undefined,
+        };
+        const response = await apiService.getWorks(params); 
         allWorksForModal.value = Array.isArray(response.data?.works) ? response.data.works : [];
-    } catch (error) { /* Handled by interceptor */ 
+        addWorksModalPagination.total = response.data?.totalWorks || 0;
+    } catch (error) { 
         allWorksForModal.value = [];
+        addWorksModalPagination.total = 0;
     } finally {
         allWorksLoading.value = false;
     }
 };
-const debouncedFetchAllWorksForModal = debounce(() => { fetchAllWorksForModal(); }, 300);
+const debouncedFetchAllWorksForModal = debounce(() => { 
+    addWorksModalPagination.current = 1; 
+    fetchAllWorksForModal(); 
+}, 300);
 
 const isWorkSelectedForCategory = (workId) => currentCategoryWorkIds.value.includes(workId);
 
@@ -602,12 +807,12 @@ const handleAddWorksToCategoryModalOk = async () => {
     if (!selectedCategory.value || !selectedCategory.value._id || selectedCategory.value.key === ALL_WORKS_KEY) return;
     try {
         await apiService.updateInspirationCategory(selectedCategory.value._id, {
-            works: currentCategoryWorkIds.value
+            works: currentCategoryWorkIds.value 
         });
         Message.success(`作品已成功更新到分类 "${selectedCategory.value.name}"`);
         showAddWorksToCategoryModal.value = false;
-        await fetchWorksForCategory(selectedCategory.value._id);
-        if (selectedCategoryKeys.value[0] === ALL_WORKS_KEY) await fetchAllWorksForPageDisplay();
+        await fetchWorksForCategory(selectedCategory.value._id, worksPagination.current, worksPagination.pageSize); 
+        await fetchCategories(); 
     } catch (error) { /* Handled by interceptor */ }
 };
 
@@ -651,6 +856,108 @@ const handleDeleteWorkFromCategoryConfirm = (workId, workTitle) => {
         },
     });
 };
+
+// Add handlers for pagination
+const handleWorksPageChange = (page) => {
+  worksPagination.current = page;
+  if (selectedCategory.value && selectedCategory.value.key !== ALL_WORKS_KEY) {
+    fetchWorksForCategory(selectedCategory.value._id, worksPagination.current, worksPagination.pageSize);
+  } else if (selectedCategory.value && selectedCategory.value.key === ALL_WORKS_KEY) {
+    fetchAllWorksForPageDisplay(); // Fetch new page for "All" works
+  }
+};
+
+const handleWorksPageSizeChange = (pageSize) => {
+  worksPagination.pageSize = pageSize;
+  worksPagination.current = 1; // Reset to first page
+  if (selectedCategory.value && selectedCategory.value.key !== ALL_WORKS_KEY) {
+    fetchWorksForCategory(selectedCategory.value._id, worksPagination.current, worksPagination.pageSize);
+  } else if (selectedCategory.value && selectedCategory.value.key === ALL_WORKS_KEY) {
+    fetchAllWorksForPageDisplay(); // Fetch new page size for "All" works
+  }
+};
+
+// Watch for search term changes to re-fetch "All" works if it's the current view
+watch(workSearchTermOnPage, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+    worksPagination.current = 1; // Reset to first page on new search
+    if (selectedCategory.value && selectedCategory.value.key === ALL_WORKS_KEY) {
+      debouncedFetchAllWorksForPageDisplay();
+    } else if (selectedCategory.value && selectedCategory.value.key !== ALL_WORKS_KEY) {
+      debouncedFetchWorksForSelectedCategory();
+    }
+  }
+});
+
+// Watch for work type filter changes
+watch(selectedWorkType, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+    debouncedFetchMainPageWorks();
+  }
+});
+
+// Watch for creator filter changes
+watch(selectedCreatorId, (newValue, oldValue) => {
+  if (newValue !== oldValue) {
+    debouncedFetchMainPageWorks();
+  }
+});
+
+const debouncedFetchAllWorksForPageDisplay = debounce(() => {
+    if (selectedCategory.value && selectedCategory.value.key === ALL_WORKS_KEY) {
+        fetchAllWorksForPageDisplay();
+    }
+}, 300);
+
+const debouncedFetchWorksForSelectedCategory = debounce(() => {
+    if (selectedCategory.value && selectedCategory.value.key !== ALL_WORKS_KEY) {
+        fetchWorksForCategory(selectedCategory.value._id, worksPagination.current, worksPagination.pageSize);
+    }
+}, 300);
+
+// Pagination handlers for the modal
+const handleModalWorksPageChange = (page) => {
+  addWorksModalPagination.current = page;
+  fetchAllWorksForModal();
+};
+
+const handleModalWorksPageSizeChange = (pageSize) => {
+  addWorksModalPagination.pageSize = pageSize;
+  addWorksModalPagination.current = 1; 
+  fetchAllWorksForModal();
+};
+
+// Watchers for modal filters
+watch(allWorksSearchTermInModal, () => { 
+    debouncedFetchAllWorksForModal();
+});
+watch(addWorksModalSelectedType, () => { 
+    addWorksModalPagination.current = 1;
+    fetchAllWorksForModal();
+});
+watch(addWorksModalSelectedCreatorId, () => { 
+    addWorksModalPagination.current = 1;
+    fetchAllWorksForModal();
+});
+watch(addWorksModalSelectedTags, () => {
+    addWorksModalPagination.current = 1;
+    fetchAllWorksForModal();
+});
+
+// Computed property for tag select options
+const tagOptionsForSelect = computed(() => 
+  predefinedTagsList.value.map(tag => ({ label: tag.name, value: tag.name }))
+);
+
+// Define the new debounced function for main page filter changes
+const debouncedFetchMainPageWorks = debounce(() => {
+  worksPagination.current = 1; // Reset to first page
+  if (selectedCategory.value && selectedCategory.value.key === ALL_WORKS_KEY) {
+    fetchAllWorksForPageDisplay();
+  } else if (selectedCategory.value && selectedCategory.value._id && selectedCategory.value.key !== ALL_WORKS_KEY) {
+    fetchWorksForCategory(selectedCategory.value._id, worksPagination.current, worksPagination.pageSize);
+  }
+}, 300);
 
 </script>
 

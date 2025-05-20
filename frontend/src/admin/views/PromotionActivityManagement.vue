@@ -27,12 +27,12 @@
         @change="handleTableChange"
         row-key="_id"
         stripe
-        :scroll="{ x: 1300 }"
+        :scroll="{ x: 'max-content' }"
       >
         <template #columns>
           <a-table-column title="ID" data-index="_id" :width="120" fixed="left"></a-table-column>
           <a-table-column title="活动名称" data-index="name" :width="200" ellipsis tooltip></a-table-column>
-          <a-table-column title="活动时间" :width="280">
+          <a-table-column title="活动时间" :width="350">
             <template #cell="{ record }">
               {{ formatDate(record.startTime) }} - {{ formatDate(record.endTime) }}
             </template>
@@ -388,6 +388,8 @@ const serverPagination = reactive({
   pageSize: 15,
   total: 0,
   showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
 });
 
 const filters = reactive({
@@ -403,6 +405,8 @@ const paginationStateForTable = computed(() => ({
   pageSize: serverPagination.pageSize,
   total: serverPagination.total,
   showTotal: serverPagination.showTotal,
+  showPageSize: serverPagination.showPageSize,
+  pageSizeOptions: serverPagination.pageSizeOptions,
 }));
 
 const handleTableChange = (page, sorter, filters) => {

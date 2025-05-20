@@ -29,13 +29,15 @@
     <a-spin :loading="isLoading" tip="加载页面列表中..." class="w-full">
        <a-table
         :data="filteredPages"
-        :pagination="{ pageSize: 15 }"
+        :pagination="pagination"
+        @page-change="handlePageChange"
+        @page-size-change="handlePageSizeChange"
         row-key="_id"
         stripe
-        :scroll="{ x: 1300 }" 
+        :scroll="{ x: 'max-content' }" 
       >
         <template #columns>
-           <a-table-column title="ID" data-index="_id" :width="220" fixed="left">
+           <a-table-column title="ID" data-index="_id" :width="220">
                <template #cell="{ record }">
                    {{ record._id }}
                </template>
@@ -195,7 +197,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { QuillEditor } from '@vueup/vue-quill'
 import '@vueup/vue-quill/dist/vue-quill.snow.css';
@@ -244,6 +246,15 @@ const isSubmitting = ref(false);
 // Template State
 const allTemplates = ref([]);
 const isTemplatesLoading = ref(false);
+
+const pagination = reactive({
+  current: 1,
+  pageSize: 15,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [10, 15, 20, 50, 100],
+});
 
 // Define pageRouteRules
 const pageRouteRules = computed(() => [
@@ -346,25 +357,48 @@ const formatDate = (dateString) => {
 const fetchPages = async () => {
   isLoading.value = true;
   try {
-    const response = await apiService.get('/pages');
-    pages.value = response.data;
-  } catch (error) {
-    console.error('Error fetching pages:', error);
-    if (!error.response) {
-        Message.error('获取页面列表失败，请检查网络连接。');
+    const params = {
+      page: pagination.current,
+      limit: pagination.pageSize,
+      // query: searchTerm.value || undefined, // If backend supports generic search
+      // type: selectedType.value || undefined,
+      // status: selectedStatus.value || undefined,
+    };
+    const response = await apiService.get('/pages', { params }); // Ensure this is the correct endpoint
+    if (response.data && response.data.data) { // Assuming paginated response
+        pages.value = response.data.data;
+        pagination.total = response.data.totalRecords;
+    } else {
+        pages.value = response.data || []; // Fallback for non-paginated
+        pagination.total = response.data?.length || 0;
     }
-    pages.value = []; // Clear on error
+  } catch (error) {
+    Message.error('获取页面列表失败: ' + (error.response?.data?.message || error.message));
+    pages.value = [];
+    pagination.total = 0;
   } finally {
     isLoading.value = false;
   }
 };
 
-// Refresh pages and clear search/filters
 const refreshPages = () => {
     searchTerm.value = '';
     selectedType.value = undefined;
     selectedStatus.value = undefined;
+    pagination.current = 1; // Reset to first page
     fetchPages();
+    fetchTemplates(); // Also refresh templates
+};
+
+const handlePageChange = (page) => {
+  pagination.current = page;
+  fetchPages();
+};
+
+const handlePageSizeChange = (pageSize) => {
+  pagination.pageSize = pageSize;
+  pagination.current = 1; // Reset to first page
+  fetchPages();
 };
 
 // --- Modal Logic ---
@@ -457,13 +491,13 @@ const confirmDeletePage = (page) => {
 
     Modal.confirm({
         title: '确认删除',
-    content: `确定要删除页面 “${page.name}” (路径: ${page.route}) 吗？此操作不可撤销。`,
+    content: `确定要删除页面 " ${page.name} " (路径: ${page.route}) 吗？此操作不可撤销。`,
         okText: '确认删除',
         cancelText: '取消',
         onOk: async () => {
       try {
         await apiService.delete(`/pages/${page._id}`);
-        Message.success(`页面 “${page.name}” 删除成功`);
+        Message.success(`页面 " ${page.name} " 删除成功`);
                     await fetchPages();
                 } catch (error) {
                     console.error('Error deleting page:', error);

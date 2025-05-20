@@ -61,68 +61,104 @@ router.get('/inspiration-categories', async (req, res) => {
 // GET /api/public/market/works - Get public works with filtering and pagination
 router.get('/works', async (req, res) => {
   try {
-    const { category_id, page = 1, limit = 12, search, tags: tagsQuery } = req.query;
-    const queryOptions = { status: 'public_market' };
-    let categoryWorksIds = null;
+    const { category_id, page = 1, limit = 12, search, tags: tagsQuery, workType, creatorId } = req.query;
+    const pageInt = parseInt(page);
+    const limitInt = parseInt(limit);
+    const skip = (pageInt - 1) * limitInt;
+
+    const baseQueryConditions = { status: 'public_market' };
+    const filterOrConditions = [];
+    let categoryWorkOrder = null; // To store the order of work IDs from the category
 
     if (category_id && category_id !== 'all') {
       const category = await InspirationCategory.findById(category_id);
-      if (category) {
-        categoryWorksIds = category.works.map(id => id.toString());
-        queryOptions._id = { $in: categoryWorksIds };
+      if (category && category.works) {
+        categoryWorkOrder = category.works.map(id => id.toString());
+        baseQueryConditions._id = { $in: categoryWorkOrder }; // Filter by works in this category
       } else {
-        // Category not found, return empty results for this category_id
-        return res.json({ works: [], total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 });
+        return res.json({ works: [], total: 0, page: pageInt, limit: limitInt, totalPages: 0 });
       }
     }
 
     if (search) {
       const searchRegex = { $regex: search, $options: 'i' };
-      if (!queryOptions.$or) queryOptions.$or = [];
-      queryOptions.$or.push(
-        { title: searchRegex },
-        { prompt: searchRegex },
-        { tags: searchRegex } 
-      );
+      filterOrConditions.push({ title: searchRegex });
+      filterOrConditions.push({ prompt: searchRegex });
+      filterOrConditions.push({ tags: searchRegex });
     }
 
-    // Add tag filtering
     if (tagsQuery) {
       const parsedTagsArray = tagsQuery.split(',').map(tag => tag.trim()).filter(tag => tag);
       if (parsedTagsArray.length > 0) {
-        queryOptions.tags = { $all: parsedTagsArray };
+        filterOrConditions.push({ tags: { $in: parsedTagsArray } });
       }
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    if (workType) {
+      filterOrConditions.push({ type: workType });
+    }
 
-    const worksQuery = Work.find(queryOptions)
-      .sort({ createdAt: -1 }) // Default sort, can be made configurable
-      .skip(skip)
-      .limit(parseInt(limit));
-      // .populate('creator', 'username profilePicture'); // Example if creator population is needed
+    if (creatorId) {
+      filterOrConditions.push({ creator: creatorId });
+    }
 
-    const works = await worksQuery.exec();
-    const total = await Work.countDocuments(queryOptions);
+    let finalQuery;
+    if (filterOrConditions.length > 0) {
+      finalQuery = { $and: [baseQueryConditions, { $or: filterOrConditions }] };
+    } else {
+      finalQuery = { ...baseQueryConditions };
+    }
+
+    let works = [];
+    let total = 0;
+
+    // Fetch all works matching the filters (without DB-level pagination if category order is needed)
+    const allFilteredWorks = await Work.find(finalQuery)
+                                       .populate('creator', 'username profilePicture')
+                                       .lean(); // Use lean for potentially large results before sorting
+
+    if (categoryWorkOrder) {
+      // If category order is specified, sort the filtered works according to that order
+      const workMap = new Map(allFilteredWorks.map(w => [w._id.toString(), w]));
+      const orderedFilteredWorks = categoryWorkOrder
+        .map(id => workMap.get(id)) // Map to actual work objects
+        .filter(Boolean);           // Remove any undefined (if a work in category.works was filtered out)
+      
+      total = orderedFilteredWorks.length;
+      works = orderedFilteredWorks.slice(skip, skip + limitInt);
+    } else {
+      // If no specific category order (e.g., "all" works or category has no works array),
+      // apply default sorting (e.g., by creation date) and pagination at DB level.
+      total = await Work.countDocuments(finalQuery); // Get total count first
+      works = await Work.find(finalQuery)
+                        .sort({ createdAt: -1 }) // Default sort for non-category specific views
+                        .skip(skip)
+                        .limit(limitInt)
+                        .populate('creator', 'username profilePicture')
+                        .lean();
+    }
 
     const worksWithFullUrls = works.map(work => {
-      const workObj = work.toObject();
+      // const workObj = work.toObject(); // Not needed if .lean() is used
+      const workObj = work; 
       if (workObj.sourceUrl) {
         workObj.sourceUrl = getFullUrl(req, workObj.sourceUrl);
       }
-      if (workObj.thumbnailUrl) { // Assuming thumbnailUrl might exist
+      if (workObj.thumbnailUrl) {
         workObj.thumbnailUrl = getFullUrl(req, workObj.thumbnailUrl);
       }
-      // Add any other URL transformations if needed
+      if (workObj.creator && workObj.creator.profilePicture) {
+        workObj.creator.profilePicture = getFullUrl(req, workObj.creator.profilePicture);
+      }
       return workObj;
     });
 
     res.json({
       works: worksWithFullUrls,
       total,
-      page: parseInt(page),
-      limit: parseInt(limit),
-      totalPages: Math.ceil(total / parseInt(limit)),
+      page: pageInt,
+      limit: limitInt,
+      totalPages: Math.ceil(total / limitInt),
     });
 
   } catch (error) {
@@ -164,6 +200,10 @@ router.get('/tags', async (req, res) => {
       const activeTagsArray = active_tags.split(',').map(tag => tag.trim()).filter(tag => tag);
       if (activeTagsArray.length > 0) {
         // This ensures that the works we are analyzing for tag counts *already* match these active_tags
+        // For OR logic with other filters, this needs careful consideration.
+        // The current logic for /tags endpoint is for tag cloud generation, which might need to reflect
+        // the main list's filtering logic (AND or OR) if desired for consistency.
+        // For now, assuming /tags should count tags from works matching *all* active_tags.
         if (!matchConditions.tags) matchConditions.tags = {};
         matchConditions.tags.$all = activeTagsArray; 
       }
@@ -199,4 +239,4 @@ router.get('/tags', async (req, res) => {
 
 // More public routes will be added here for works...
 
-module.exports = router;
+module.exports = router; 
