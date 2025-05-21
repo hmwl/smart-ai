@@ -246,6 +246,23 @@ apiService.deleteEnumConfig = (id) => {
   return apiService.delete(`/enum-configs/${id}`);
 };
 
+// --- AI Application Form Config Service Methods ---
+apiService.saveAppFormConfig = (payload) => {
+  if (!payload || !payload.applicationId || !payload.formSchema) {
+    return Promise.reject(new Error('Application ID and Form Schema are required for saving.'));
+  }
+  // Using POST to create or update the form configuration for a specific application.
+  // Alternatively, PUT could be used if the resource is always expected to exist or for full replacement.
+  return apiService.post(`/ai-applications/${payload.applicationId}/form-config`, payload.formSchema);
+};
+
+apiService.getAppFormConfig = (applicationId) => {
+  if (!applicationId) {
+    return Promise.reject(new Error('Application ID is required for loading form config.'));
+  }
+  return apiService.get(`/ai-applications/${applicationId}/form-config`);
+};
+
 // It's also useful to have a way to fetch the PLATFORM_TYPES if not already available
 // The backend route was /api-entries/platform-types. We can reuse getApiPlatformTypes
 // or decide if a dedicated one under /enum-types or /enum-configs is needed.

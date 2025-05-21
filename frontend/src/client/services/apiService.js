@@ -98,4 +98,12 @@ apiClient.getPublicMarketTags = (params) => {
   return apiClient.get('/public/market/tags', { params }); // Path relative to API_BASE_PATH ('/api')
 };
 
+// Method to get enum configurations by EnumType ID
+apiClient.getEnumConfigsByType = (enumTypeId) => {
+  if (!enumTypeId) {
+    return Promise.reject(new Error('Enum Type ID is required to fetch enum configs.'));
+  }
+  return apiClient.get(`/public/enum-types/${enumTypeId}/configs`); // Example: GET /api/public/enum-types/ETXYZ123/configs
+};
+
 export default apiClient; 

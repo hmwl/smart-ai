@@ -41,6 +41,10 @@ const aiApplicationSchema = new Schema({
     ref: 'AiType', // 关联到 AI 类型模型
     required: [true, 'AI 应用类型不能为空'],
   },
+  formSchema: {
+    type: Schema.Types.Mixed, // To store potentially complex/nested JSON for form structure
+    default: null // Or {} if you prefer an empty object as default
+  },
   status: {
     type: String,
     enum: ['active', 'inactive', 'archived'],

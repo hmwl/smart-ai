@@ -68,6 +68,7 @@ const tagsRouter = require('./routes/tags');
 // Import new Enum routes
 const enumTypesRoutes = require('./routes/enumTypes');
 const enumConfigsRoutes = require('./routes/enumConfigs');
+const publicEnumApiRoutes = require('./routes/publicEnumApi'); // Import new public enum API
 
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
@@ -95,6 +96,7 @@ app.use('/api/enum-configs', authenticateToken, isAdmin, enumConfigsRoutes);
 app.use('/api/public', publicRoutes); // Restore public routes
 app.use('/api/public/payment-config', paymentConfigRoutes); // Added for payment config
 app.use('/api/public/market', publicMarketRoutes); // Added for public market
+app.use('/api/public', publicEnumApiRoutes); // Mount the new public enum API
 
 // Mount the new tags router
 app.use('/api/tags', tagsRouter);

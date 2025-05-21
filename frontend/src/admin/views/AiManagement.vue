@@ -119,11 +119,11 @@
               {{ formatDate(record.createdAt) }}
             </template>
           </a-table-column>
-          <a-table-column title="操作" key="action" :width="180" fixed="right" align="center">
+          <a-table-column title="操作" key="action" :width="220" fixed="right" align="center">
             <template #cell="{ record }">
               <a-space>
                 <a-button type="text" status="warning" size="mini" @click="showEditModal(record)">编辑</a-button>
-                <a-button type="text" size="mini" disabled>配置</a-button> <!-- Placeholder for config button -->
+                <a-button type="text" size="mini" @click="openFormBuilder(record)">配置</a-button>
                 <a-popconfirm
                   content="确定要删除这个 AI 应用吗？相关的封面图片也会被删除。"
                   ok-text="确定"
@@ -281,6 +281,13 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <FormBuilderModal
+      v-model:visible="formBuilderModalVisible"
+      :application-id="currentAppForFormBuilder?._id"
+      :platform-type="currentAppForFormBuilder?.platformType"
+      @save="onFormBuilderSave"
+    />
   </div>
 </template>
 
@@ -293,6 +300,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconPlus, IconLoading, IconRefresh } from '@arco-design/web-vue/es/icon';
 import apiService, { getStaticAssetBaseUrl } from '../services/apiService';
+import FormBuilderModal from '../components/form-builder/FormBuilderModal.vue';
 
 // Explicitly rename components if needed or use directly
 const ARow = Row;
@@ -329,6 +337,10 @@ const modalLoading = ref(false);
 const isEditing = ref(false);
 const currentAppId = ref(null);
 const formRef = ref(null);
+
+// Form Builder Modal State
+const formBuilderModalVisible = ref(false);
+const currentAppForFormBuilder = ref(null);
 
 // Reactive state for the form within the modal
 const formState = ref({
@@ -647,6 +659,7 @@ const showCreateModal = () => {
   currentAppId.value = null;
   resetForm();
   modalVisible.value = true;
+  apiSelectKey.value++; 
 };
 
 const showEditModal = async (record) => {
@@ -927,6 +940,16 @@ watch(() => formState.value.platformType, (newPlatformType, oldPlatformType) => 
     apiSelectKey.value++;    // Increment key to force re-render
   }
 });
+
+const openFormBuilder = (app) => {
+  currentAppForFormBuilder.value = app;
+  formBuilderModalVisible.value = true;
+};
+
+const onFormBuilderSave = () => {
+  // Optionally, refresh application list or specific item if form config affects display
+  fetchData(); // Assuming fetchData is your main data refresh method
+};
 
 // Lifecycle hook to fetch initial data
 onMounted(() => {

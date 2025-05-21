@@ -7,6 +7,7 @@ const ApiEntry = require('../models/ApiEntry'); // Needed for validation
 const { PLATFORM_TYPES } = require('../models/ApiEntry'); // Import PLATFORM_TYPES
 const User = require('../models/User'); // Added User model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
+const EnumConfig = require('../models/EnumConfig'); // Import EnumConfig model
 const authenticateToken = require('../middleware/authenticateToken');
 const isAdmin = require('../middleware/isAdmin');
 const multer = require('multer');
@@ -43,6 +44,77 @@ const upload = multer({
     }
 });
 // --- End Multer Configuration ---
+
+// Helper function to extract all enumOptionIds from a form schema
+function extractEnumOptionIds(schema) {
+    const ids = new Set();
+    if (schema && schema.fields && Array.isArray(schema.fields)) {
+        schema.fields.forEach(field => {
+            // From field.props.enumOptionIds
+            if (field.props && field.props.dataSourceType === 'enum' && field.props.enumOptionIds) {
+                if (Array.isArray(field.props.enumOptionIds)) {
+                    field.props.enumOptionIds.forEach(id => {
+                        if (id && typeof id === 'string') { // Ensure id is a non-empty string
+                            ids.add(id);
+                        }
+                    });
+                } else if (typeof field.props.enumOptionIds === 'string' && field.props.enumOptionIds) { // Ensure id is a non-empty string
+                    ids.add(field.props.enumOptionIds);
+                }
+            }
+            // From field.props.defaultValue if it's an enumOptionId or array of them
+            if (field.props && field.props.dataSourceType === 'enum' && field.props.defaultValue) {
+                const defaultValue = field.props.defaultValue;
+                if (field.component === 'Select' && field.props.multiple) { // Multi-select default values
+                    if (Array.isArray(defaultValue)) {
+                        defaultValue.forEach(val => {
+                            if (val && typeof val === 'string') { // Assuming default values are enumOptionIds
+                                ids.add(val);
+                            }
+                        });
+                    }
+                } else if (field.component === 'CheckboxGroup') { // Checkbox group default values
+                     if (Array.isArray(defaultValue)) {
+                        defaultValue.forEach(val => {
+                            if (val && typeof val === 'string') { // Assuming default values are enumOptionIds
+                                ids.add(val);
+                            }
+                        });
+                    }
+                }
+                else if (typeof defaultValue === 'string' && defaultValue) { // Ensure defaultValue is a non-empty string
+                    ids.add(defaultValue);
+                }
+            }
+
+            // From field.config.conditionalLogic.rules.conditions.value
+            if (field.config && field.config.conditionalLogic && field.config.conditionalLogic.rules) {
+                field.config.conditionalLogic.rules.forEach(rule => {
+                    if (rule.conditions && Array.isArray(rule.conditions)) {
+                        rule.conditions.forEach(condition => {
+                            // Find the trigger field in the schema to check its type
+                            const triggerField = schema.fields.find(f => f.id === condition.triggerFieldId);
+                            if (triggerField && triggerField.props && triggerField.props.dataSourceType === 'enum') {
+                                if (condition.value) { // value itself could be empty string, null, etc.
+                                    if (Array.isArray(condition.value)) {
+                                        condition.value.forEach(val => {
+                                            if (val && typeof val === 'string') { // Ensure val is a non-empty string
+                                                ids.add(val);
+                                            }
+                                        });
+                                    } else if (typeof condition.value === 'string' && condition.value) { // Ensure val is a non-empty string
+                                        ids.add(condition.value);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                });
+            }
+        });
+    }
+    return ids;
+}
 
 // Middleware to get AiApplication by ID
 async function getAiApplication(req, res, next) {
@@ -259,6 +331,61 @@ router.put('/:id', authenticateToken, isAdmin, getAiApplication, upload.single('
         res.status(400).json({ message: '更新 AI 应用失败: ' + err.message });
     }
 });
+
+// --- Form Configuration Routes ---
+
+// GET /:id/form-config - Get form configuration for an AI Application
+router.get('/:id/form-config', authenticateToken, isAdmin, getAiApplication, async (req, res) => {
+    try {
+        const aiApp = res.aiApp; // From getAiApplication middleware
+        if (aiApp.formSchema) {
+            res.json(aiApp.formSchema);
+        } else {
+            // If no formSchema exists, return an empty object or a default structure.
+            // The frontend expects to be able to load this even if it's "new".
+            // A 404 was previously handled, but returning an empty schema might be cleaner.
+            res.status(200).json({}); 
+        }
+    } catch (error) {
+        console.error('Error fetching form configuration:', error);
+        res.status(500).json({ message: '获取表单配置失败: ' + error.message });
+    }
+});
+
+// POST /:id/form-config - Save form configuration for an AI Application
+router.post('/:id/form-config', authenticateToken, isAdmin, getAiApplication, async (req, res) => {
+    const newFormSchema = req.body; // Schema is the direct body
+    const aiApp = res.aiApp;
+
+    try {
+        const oldFormSchema = aiApp.formSchema || { fields: [] }; // Default to empty schema if none exists
+
+        const oldEnumOptionIds = extractEnumOptionIds(oldFormSchema);
+        const newEnumOptionIds = extractEnumOptionIds(newFormSchema);
+
+        const addedIds = [...newEnumOptionIds].filter(id => !oldEnumOptionIds.has(id));
+        const removedIds = [...oldEnumOptionIds].filter(id => !newEnumOptionIds.has(id));
+
+        // Update usage counts
+        if (addedIds.length > 0) {
+            await EnumConfig.updateMany({ _id: { $in: addedIds } }, { $inc: { usageCount: 1 } });
+        }
+        if (removedIds.length > 0) {
+            await EnumConfig.updateMany({ _id: { $in: removedIds } }, { $inc: { usageCount: -1 } });
+            // Ensure usageCount doesn't go below 0 (though schema min constraint should also handle this)
+            // This is a safeguard. A more robust approach might involve pre-decrement checks if needed.
+            await EnumConfig.updateMany({ _id: { $in: removedIds }, usageCount: { $lt: 0 } }, { $set: { usageCount: 0 } });
+        }
+        
+        aiApp.formSchema = newFormSchema;
+        await aiApp.save();
+        res.status(200).json(aiApp.formSchema);
+    } catch (error) {
+        console.error("Error saving form configuration or updating enum usage count:", error);
+        res.status(500).json({ message: '保存表单配置或更新枚举使用计数时出错: ' + error.message });
+    }
+});
+// --- End Form Configuration Routes ---
 
 // POST /:id/consume - Consume credits for an AI Application
 router.post('/:id/consume', authenticateToken, getAiApplication, async (req, res) => {
