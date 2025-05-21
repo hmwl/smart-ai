@@ -316,8 +316,6 @@ const onTypeManagementSuccess = () => {
 
 // --- Utils ---
 const formatDate = (dateString) => {
-  // console.log('formatDate input:', dateString);
-  // console.log('formatDate new Date():', new Date(dateString));
   if (!dateString) return 'N/A';
   const date = new Date(dateString);
   return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });

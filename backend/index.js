@@ -112,7 +112,6 @@ app.get('/app', async (req, res, next) => {
       }
       const application = await Application.findOne({ _id: appId, status: 'active' });
       if (application) {
-        console.log(`Serving config for application ID: ${appId}`);
         return res.json(application.config || {});
       } else {
         return res.status(404).json({ message: 'Application not found or is inactive' });

@@ -146,11 +146,9 @@ router.post('/', authenticateToken, async (req, res) => {
         // 2. Validate and apply promotion if provided
         let promotion = null;
         if (promotionId) {
-            console.log(`[CreditTX] Received promotionId: ${promotionId}, Type: ${typeof promotionId}`);
 
             // Use findOne with the custom string _id instead of findById
             promotion = await PromotionActivity.findOne({ _id: promotionId });
-            console.log('[CreditTX] Promotion found by custom ID lookup (_id):', promotion);
 
             if (!promotion || !promotion.isEnabled || promotion.activityType !== 'recharge_discount' || promotion.effectiveStatus !== 'ongoing') {
                 console.error('[CreditTX] Promotion not valid, expired, or wrong type:', promotion);
@@ -169,11 +167,9 @@ router.post('/', authenticateToken, async (req, res) => {
                     if (frDetails.type === 'points') {
                         const times = Math.floor(amount / frDetails.everyAmountRMB);
                         actualCreditsEarned += times * (frDetails.giftPoints || 0);
-                        console.log(`[CreditTX] Applied points promotion: Added ${times * (frDetails.giftPoints || 0)} credits.`);
                     }
                 }
             }
-            console.log(`[CreditTX] Base credits: ${Math.floor(amount * exchangeRate)}, Final calculated credits (with promo): ${actualCreditsEarned}`);
         }
 
         // 3. Update user's credit balance

@@ -47,73 +47,69 @@ const upload = multer({
 
 // Helper function to extract all enumOptionIds from a form schema
 function extractEnumOptionIds(schema) {
-    const ids = new Set();
+    const ids = []; // Changed from Set to Array to count occurrences
     if (schema && schema.fields && Array.isArray(schema.fields)) {
         schema.fields.forEach(field => {
-            // From field.props.enumOptionIds
-            if (field.props && field.props.dataSourceType === 'enum' && field.props.enumOptionIds) {
-                if (Array.isArray(field.props.enumOptionIds)) {
-                    field.props.enumOptionIds.forEach(id => {
-                        if (id && typeof id === 'string') { // Ensure id is a non-empty string
-                            ids.add(id);
+            // From field.config.enumOptionIds
+            if (field.config && field.config.dataSourceType === 'enum' && field.config.enumOptionIds) {
+                if (Array.isArray(field.config.enumOptionIds)) {
+                    field.config.enumOptionIds.forEach(id => {
+                        if (id && typeof id === 'string') { 
+                            ids.push(id); // Changed from add to push
                         }
                     });
-                } else if (typeof field.props.enumOptionIds === 'string' && field.props.enumOptionIds) { // Ensure id is a non-empty string
-                    ids.add(field.props.enumOptionIds);
-                }
-            }
-            // From field.props.defaultValue if it's an enumOptionId or array of them
-            if (field.props && field.props.dataSourceType === 'enum' && field.props.defaultValue) {
-                const defaultValue = field.props.defaultValue;
-                if (field.component === 'Select' && field.props.multiple) { // Multi-select default values
-                    if (Array.isArray(defaultValue)) {
-                        defaultValue.forEach(val => {
-                            if (val && typeof val === 'string') { // Assuming default values are enumOptionIds
-                                ids.add(val);
-                            }
-                        });
-                    }
-                } else if (field.component === 'CheckboxGroup') { // Checkbox group default values
-                     if (Array.isArray(defaultValue)) {
-                        defaultValue.forEach(val => {
-                            if (val && typeof val === 'string') { // Assuming default values are enumOptionIds
-                                ids.add(val);
-                            }
-                        });
-                    }
-                }
-                else if (typeof defaultValue === 'string' && defaultValue) { // Ensure defaultValue is a non-empty string
-                    ids.add(defaultValue);
+                } else if (typeof field.config.enumOptionIds === 'string' && field.config.enumOptionIds) { 
+                    ids.push(field.config.enumOptionIds); // Changed from add to push
                 }
             }
 
-            // From field.config.conditionalLogic.rules.conditions.value
-            if (field.config && field.config.conditionalLogic && field.config.conditionalLogic.rules) {
-                field.config.conditionalLogic.rules.forEach(rule => {
-                    if (rule.conditions && Array.isArray(rule.conditions)) {
-                        rule.conditions.forEach(condition => {
-                            // Find the trigger field in the schema to check its type
-                            const triggerField = schema.fields.find(f => f.id === condition.triggerFieldId);
-                            if (triggerField && triggerField.props && triggerField.props.dataSourceType === 'enum') {
-                                if (condition.value) { // value itself could be empty string, null, etc.
-                                    if (Array.isArray(condition.value)) {
-                                        condition.value.forEach(val => {
-                                            if (val && typeof val === 'string') { // Ensure val is a non-empty string
-                                                ids.add(val);
-                                            }
-                                        });
-                                    } else if (typeof condition.value === 'string' && condition.value) { // Ensure val is a non-empty string
-                                        ids.add(condition.value);
+            // From field.props.defaultValue if it's an enumOptionId or array of them
+            if (field.config && field.config.dataSourceType === 'enum' && field.props && field.props.defaultValue) {
+                const defaultValue = field.props.defaultValue;
+                if (Array.isArray(defaultValue)) {
+                    defaultValue.forEach(val => {
+                        if (val && typeof val === 'string') { 
+                            ids.push(val); // Changed from add to push
+                        }
+                    });
+                } else if (typeof defaultValue === 'string' && defaultValue) {
+                    ids.push(defaultValue); // Changed from add to push
+                }
+            }
+
+            // From field.config.conditionalLogicRules.conditionValue
+            if (field.config && field.config.conditionalLogicRules && Array.isArray(field.config.conditionalLogicRules)) {
+                field.config.conditionalLogicRules.forEach(rule => {
+                    const triggerField = schema.fields.find(f => f.id === rule.triggerFieldId);
+                    if (triggerField && triggerField.config && triggerField.config.dataSourceType === 'enum') {
+                        if (rule.conditionValue) {
+                            if (Array.isArray(rule.conditionValue)) {
+                                rule.conditionValue.forEach(val => {
+                                    if (val && typeof val === 'string') { 
+                                        ids.push(val); // Changed from add to push
                                     }
-                                }
+                                });
+                            } else if (typeof rule.conditionValue === 'string' && rule.conditionValue) { 
+                                ids.push(rule.conditionValue); // Changed from add to push
                             }
-                        });
+                        }
                     }
                 });
             }
         });
     }
-    return ids;
+    return ids; // Returns an array of all occurrences
+}
+
+// Helper function to get a frequency map of IDs from an array
+function getCountsMap(idsArray) {
+    const counts = new Map();
+    if (idsArray && Array.isArray(idsArray)) {
+        for (const id of idsArray) {
+            counts.set(id, (counts.get(id) || 0) + 1);
+        }
+    }
+    return counts;
 }
 
 // Middleware to get AiApplication by ID
@@ -354,34 +350,57 @@ router.get('/:id/form-config', authenticateToken, isAdmin, getAiApplication, asy
 
 // POST /:id/form-config - Save form configuration for an AI Application
 router.post('/:id/form-config', authenticateToken, isAdmin, getAiApplication, async (req, res) => {
-    const newFormSchema = req.body; // Schema is the direct body
+    const newFormSchema = req.body; 
     const aiApp = res.aiApp;
 
+
     try {
-        const oldFormSchema = aiApp.formSchema || { fields: [] }; // Default to empty schema if none exists
+        const oldFormSchema = aiApp.formSchema || { fields: [] }; 
+        
+        const oldEnumOptionIdsArray = extractEnumOptionIds(oldFormSchema);
+        const newEnumOptionIdsArray = extractEnumOptionIds(newFormSchema);
 
-        const oldEnumOptionIds = extractEnumOptionIds(oldFormSchema);
-        const newEnumOptionIds = extractEnumOptionIds(newFormSchema);
+        const oldCountMap = getCountsMap(oldEnumOptionIdsArray);
+        const newCountMap = getCountsMap(newEnumOptionIdsArray);
 
-        const addedIds = [...newEnumOptionIds].filter(id => !oldEnumOptionIds.has(id));
-        const removedIds = [...oldEnumOptionIds].filter(id => !newEnumOptionIds.has(id));
+        const allUniqueIds = new Set([...oldCountMap.keys(), ...newCountMap.keys()]);
+        
+        const updateOperations = [];
 
-        // Update usage counts
-        if (addedIds.length > 0) {
-            await EnumConfig.updateMany({ _id: { $in: addedIds } }, { $inc: { usageCount: 1 } });
+        for (const optionId of allUniqueIds) {
+            const oldCount = oldCountMap.get(optionId) || 0;
+            const newCount = newCountMap.get(optionId) || 0;
+            const delta = newCount - oldCount;
+
+            if (delta !== 0) {
+                updateOperations.push({
+                    updateOne: {
+                        filter: { _id: optionId },
+                        update: { $inc: { usageCount: delta } }
+                    }
+                });
+            }
         }
-        if (removedIds.length > 0) {
-            await EnumConfig.updateMany({ _id: { $in: removedIds } }, { $inc: { usageCount: -1 } });
-            // Ensure usageCount doesn't go below 0 (though schema min constraint should also handle this)
-            // This is a safeguard. A more robust approach might involve pre-decrement checks if needed.
-            await EnumConfig.updateMany({ _id: { $in: removedIds }, usageCount: { $lt: 0 } }, { $set: { usageCount: 0 } });
+        
+        if (updateOperations.length > 0) {
+            await EnumConfig.bulkWrite(updateOperations);
+            
+            // Safeguard: Ensure usageCount doesn't go below 0 for affected IDs
+            const affectedIdsForSafeguard = updateOperations.map(op => op.updateOne.filter._id);
+            if (affectedIdsForSafeguard.length > 0) {
+                 await EnumConfig.updateMany(
+                    { _id: { $in: affectedIdsForSafeguard }, usageCount: { $lt: 0 } },
+                    { $set: { usageCount: 0 } }
+                );
+            }
+        } else {
         }
         
         aiApp.formSchema = newFormSchema;
         await aiApp.save();
         res.status(200).json(aiApp.formSchema);
     } catch (error) {
-        console.error("Error saving form configuration or updating enum usage count:", error);
+        console.error(`[UsageCount Update] APP ID: ${aiApp._id} - Error saving form configuration or updating enum usage count:`, error);
         res.status(500).json({ message: '保存表单配置或更新枚举使用计数时出错: ' + error.message });
     }
 });
@@ -391,18 +410,6 @@ router.post('/:id/form-config', authenticateToken, isAdmin, getAiApplication, as
 router.post('/:id/consume', authenticateToken, getAiApplication, async (req, res) => {
     const aiApp = res.aiApp; // From getAiApplication middleware
     const userMakingRequest = req.user; // From authenticateToken middleware
-
-    // ---- START DEBUG LOGGING ----
-    console.log('[DEBUG] /consume - Timestamp:', new Date().toISOString());
-    console.log('[DEBUG] /consume - aiApp._id:', aiApp ? aiApp._id : 'AI App not found by middleware');
-    console.log('[DEBUG] /consume - userMakingRequest object (raw req.user):', JSON.stringify(userMakingRequest, null, 2));
-    if (userMakingRequest) {
-        console.log('[DEBUG] /consume - userMakingRequest.userId (instead of _id):', userMakingRequest.userId);
-        console.log('[DEBUG] /consume - userMakingRequest type of userId:', typeof userMakingRequest.userId);
-    } else {
-        console.log('[DEBUG] /consume - userMakingRequest (req.user) is undefined or null');
-    }
-    // ---- END DEBUG LOGGING ----
 
     // 1. Check if AI Application is active
     if (aiApp.status !== 'active') {
@@ -507,6 +514,41 @@ router.delete('/:id', authenticateToken, isAdmin, getAiApplication, async (req, 
         const aiApp = res.aiApp;
         const imagePath = aiApp.coverImageUrl ? path.join(__dirname, '..', aiApp.coverImageUrl) : null;
 
+        // --- Update EnumConfig usage counts before deleting the application --- 
+        if (aiApp.formSchema && aiApp.formSchema.fields && aiApp.formSchema.fields.length > 0) {
+            const enumOptionIdsInForm = extractEnumOptionIds(aiApp.formSchema);
+            const countsInThisFormMap = getCountsMap(enumOptionIdsInForm);
+
+            const updateOperations = [];
+            if (countsInThisFormMap.size > 0) {
+                for (const [optionId, countInThisForm] of countsInThisFormMap) {
+                    if (countInThisForm > 0) {
+                        updateOperations.push({
+                            updateOne: {
+                                filter: { _id: optionId },
+                                update: { $inc: { usageCount: -countInThisForm } } 
+                            }
+                        });
+                    }
+                }
+            }
+
+            if (updateOperations.length > 0) {
+                await EnumConfig.bulkWrite(updateOperations);
+                
+                const affectedIdsForSafeguard = updateOperations.map(op => op.updateOne.filter._id);
+                if (affectedIdsForSafeguard.length > 0) {
+                    await EnumConfig.updateMany(
+                        { _id: { $in: affectedIdsForSafeguard }, usageCount: { $lt: 0 } },
+                        { $set: { usageCount: 0 } }
+                    );
+                }
+            } else {
+            }
+        } else {
+        }
+        // --- End EnumConfig usage count update ---
+
         await AiApplication.deleteOne({ _id: aiApp._id });
 
         // Delete associated cover image file
@@ -519,6 +561,7 @@ router.delete('/:id', authenticateToken, isAdmin, getAiApplication, async (req, 
 
         res.json({ message: 'AI 应用删除成功', appId: aiApp._id });
     } catch (err) {
+        console.error(`[UsageCount Update] DELETING APP ID: ${req.params.id} - Error during AI application deletion or enum usage count update:`, err);
         res.status(500).json({ message: '删除 AI 应用失败: ' + err.message });
     }
 });

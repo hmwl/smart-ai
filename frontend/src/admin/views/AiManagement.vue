@@ -535,12 +535,24 @@ const fetchData = async () => {
       // credits: filterCredits.value, // Note: 0 is a valid value, undefined for no filter
     };
     const applicationsResponse = await apiService.get('/ai-applications', { params: appParams });
-    if (applicationsResponse.data && applicationsResponse.data.data) {
-      aiApplications.value = applicationsResponse.data.data;
-      pagination.total = applicationsResponse.data.totalRecords;
-    } else {
-      aiApplications.value = applicationsResponse.data || []; // Fallback
-      pagination.total = applicationsResponse.data?.length || 0;
+    if (applicationsResponse.data) {
+      if (Array.isArray(applicationsResponse.data.data)) { // Standard paginated response
+        aiApplications.value = applicationsResponse.data.data;
+        pagination.total = applicationsResponse.data.totalRecords || 0;
+      } else if (Array.isArray(applicationsResponse.data)) { // Response data itself is the array
+        aiApplications.value = applicationsResponse.data;
+        // If the response is just an array, total might be its length,
+        // or the backend might not support pagination for this response type.
+        pagination.total = applicationsResponse.data.length; 
+      } else { // Unexpected structure
+        Message.error('获取 AI 应用列表格式不正确');
+        aiApplications.value = [];
+        pagination.total = 0;
+      }
+    } else { // No data in response
+      Message.error('获取 AI 应用列表无数据返回');
+      aiApplications.value = [];
+      pagination.total = 0;
     }
 
   } catch (error) {
@@ -578,14 +590,11 @@ const handlePageSizeChange = (pageSize) => {
 // ... existing code ...
 
 const fetchAiApplications = async () => {
-  // console.log("Fetching AI Applications..."); 
   loading.value = true;
   try {
     // Use apiService consistently
     const response = await apiService.get('/ai-applications');
-    // console.log("Fetched AI Applications Data:", response.data); 
     aiApplications.value = response.data; // Assign data
-    // console.log("aiApplications ref updated:", aiApplications.value); 
   } catch (error) {
     // Log error from apiService explicitly
     console.error('Error fetching AI applications:', error);
@@ -807,9 +816,7 @@ const handleSubmit = async () => {
         apiIdsToAppend = [currentApis]; // Wrap it in an array
     }
     // Now apiIdsToAppend is guaranteed to be an array (possibly empty)
-    // console.log("formState.apis right before check in handleSubmit:", JSON.parse(JSON.stringify(formState.value.apis)));
     // const shouldAppendApis = formState.value.apis && Array.isArray(formState.value.apis) && formState.value.apis.length > 0;
-    // console.log("Condition to append apis (formState.value.apis && Array.isArray(formState.value.apis) && formState.value.apis.length > 0) is:", shouldAppendApis);
     // --- End Revision ---
     
     // --- Revision: Use normalized array --- 
@@ -894,7 +901,7 @@ const handleSubmit = async () => {
     modalLoading.value = false; // Stop loading indicator
     Message.success(`AI 应用 ${isEditing.value ? '更新' : '创建'}成功`);
     modalVisible.value = false; // Close modal
-    await fetchAiApplications(); // Refresh the data grid
+    await fetchData(); // Refresh the data grid
 
   } catch (error) {
     modalLoading.value = false; // Ensure loading stops on error
@@ -925,7 +932,7 @@ const handleDelete = async (id) => {
   try {
     await apiService.delete(`/ai-applications/${id}`);
     Message.success('AI 应用删除成功');
-    fetchAiApplications(); // Refresh list
+    fetchData(); // Refresh list
   } catch (error) {
     Message.error('删除 AI 应用失败: ' + (error.response?.data?.message || error.message));
   }

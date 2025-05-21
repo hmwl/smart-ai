@@ -251,7 +251,6 @@ const saveAllChanges = async () => {
         return;
       }
 
-      console.log('发送修改密码请求，token:', localStorage.getItem('clientAccessToken'));
 
       // 手动添加认证头
       await apiClient.post('/auth/change-password', {

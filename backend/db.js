@@ -1,7 +1,6 @@
 require('dotenv').config(); // Load environment variables from .env file
 
 // Debug: Check if MONGO_URI is loaded
-console.log('DEBUG: MONGO_URI from process.env =', process.env.MONGO_URI);
 
 const { MongoClient } = require('mongodb');
 
@@ -13,7 +12,6 @@ if (!uri) {
   process.exit(1); // Exit the process
 }
 
-console.log('DEBUG: MONGO_URI seems loaded, attempting to create client...');
 
 const client = new MongoClient(uri);
 let dbConnection;
@@ -23,10 +21,8 @@ module.exports = {
     try {
       await client.connect();
       dbConnection = client;
-      console.log("Successfully connected to MongoDB.");
       return callback();
     } catch (err) {
-      console.error("Failed to connect to MongoDB", err);
       return callback(err);
     }
   },
@@ -42,7 +38,6 @@ module.exports = {
   closeConnection: async function() {
     if (dbConnection) {
         await dbConnection.close();
-        console.log("MongoDB connection closed.");
     }
   }
 }; 

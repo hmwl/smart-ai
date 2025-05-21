@@ -41,7 +41,6 @@ const checkAdminAuth = () => {
 
   // No need to log here, AdminLayout or LoginPage will render based on the ref
   // if (!isActuallyAdmin) {
-  //     console.log('Admin App: User not authenticated or not an admin.');
   // }
 };
 

@@ -251,12 +251,10 @@ router.delete('/:id', async (req, res) => {
 
     // Opportunistic Tag Cleanup after deleting a work
     if (tagsOfDeletedWork.length > 0) {
-        console.log('Work deleted, checking if its tags are orphaned:', tagsOfDeletedWork);
         for (const tagName of tagsOfDeletedWork) {
             try {
                 const worksUsingTag = await Work.countDocuments({ tags: tagName });
                 if (worksUsingTag === 0) {
-                    console.log(`Tag "${tagName}" is no longer used by any work after work deletion. Deleting from Tag collection.`);
                     await Tag.deleteOne({ name: tagName.toLowerCase() }); // Ensure case-insensitivity
                 }
             } catch (tagCleanupError) {

@@ -11,7 +11,6 @@
 
 class OpenAIService {
   constructor() {
-    console.log(`[OpenAIService] Generic instance created. API key/config selection will occur in handleLaunchRequest.`);
   }
 
   // Main method to be called by the router
@@ -40,7 +39,6 @@ class OpenAIService {
     try {
       // Simulate a check or a light operation. For a real call:
       // const DUMMY_API_KEY_FOR_LOGGING_ONLY = apiKey ? `${apiKey.substring(0, 5)}...` : 'N/A'; 
-      // console.log(`[OpenAIService] Simulating call to OpenAI for ${apiName} with key: ${DUMMY_API_KEY_FOR_LOGGING_ONLY}`);
       // const response = await fetch('https://api.openai.com/v1/models', { headers: { 'Authorization': `Bearer ${apiKey}` } });
       // if (!response.ok) throw new Error(`OpenAI API call failed: ${response.status} ${response.statusText}`);
       // const data = await response.json();

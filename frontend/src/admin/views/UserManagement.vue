@@ -238,12 +238,10 @@ const formRules = computed(() => {
 
 // Filtered users based on search term AND filters
 const filteredUsers = computed(() => {
-  // console.log('--- Recalculating filteredUsers ---'); 
   const term = searchTerm.value.toLowerCase().trim();
   const statusFilter = selectedStatus.value;
   const isAdminFilter = selectedIsAdmin.value;
 
-  // console.log(`Filters - Search: '${term}', Status: ${statusFilter} (type: ${typeof statusFilter}), IsAdmin: ${isAdminFilter} (type: ${typeof isAdminFilter})`);
 
   const filtered = users.value.filter((user, index) => {
     const matchesSearch = !term || 
@@ -259,14 +257,10 @@ const filteredUsers = computed(() => {
 
     // Log first few items for detail
     // if (index < 3) { 
-    //     console.log(`  User: ${user.username}, Status: ${user.status}, IsAdmin: ${user.isAdmin}`);
-    //     console.log(`    Search Match: ${matchesSearch}, Status Match: ${matchesStatus}, Admin Match: ${matchesAdmin}`);
-    //     console.log(`    Overall Match: ${matchesSearch && matchesStatus && matchesAdmin}`);
     // }
 
     return matchesSearch && matchesStatus && matchesAdmin;
   });
-  // console.log(`Result: ${filtered.length} users filtered out of ${users.value.length}`);
   return filtered;
 });
 

@@ -207,15 +207,26 @@ const launchApp = async () => {
   if (!application.value) return;
 
   let formConfigData = {};
-  if (dynamicFormRendererRef.value) {
-    try {
-      await dynamicFormRendererRef.value.validate();
-      formConfigData = { ...dynamicFormModel.value };
-    } catch (validationErrors) {
-      Message.error('表单配置校验失败，请检查输入。');
-      console.error("Form validation errors:", validationErrors);
-      return; // Stop execution if form is invalid
+  // Only attempt validation if there are actual form fields defined in the schema
+  if (formSchema.value && formSchema.value.fields && formSchema.value.fields.length > 0) {
+    if (dynamicFormRendererRef.value) {
+      const isValid = await dynamicFormRendererRef.value.validateForm();
+      if (!isValid) {
+        Message.error('表单配置校验失败，请检查输入。');
+        // Form validation errors are typically handled within DynamicFormRenderer or by its validateForm method.
+        return; // Stop execution if form is invalid
+      }
+      // Assuming getFormData() is also exposed if you prefer that over v-model direct usage
+      formConfigData = dynamicFormRendererRef.value.getFormData ? dynamicFormRendererRef.value.getFormData() : { ...dynamicFormModel.value };
+    } else {
+      // This case implies the form schema has fields, but the renderer component isn't mounted/available.
+      // This could be a timing issue or an error in conditional rendering of the form.
+      Message.warning('表单渲染器尚未准备好或不存在，请稍后再试。');
+      return;
     }
+  } else {
+    // No form fields to validate, proceed with empty formConfigData for the launch API call.
+    formConfigData = {};
   }
 
   const appName = application.value.name;
@@ -223,40 +234,39 @@ const launchApp = async () => {
 
   Modal.confirm({
     title: '确认执行应用',
-    content: `执行应用 "${appName}" 将消耗 ${creditsToConsume} 积分。是否继续？`,
+    content: `执行应用 "${appName}" ${creditsToConsume > 0 ? `将消耗 ${creditsToConsume} 积分` : '免费'}。是否继续？`,
     okText: '确认执行',
     cancelText: '取消',
     onOk: async () => {
       try {
-        // Assuming apiClient is already set up to handle auth and base URL
-        // The backend endpoint would be POST /api/auth/client/ai-applications/:id/launch
-        // It should now also accept `formConfigData` in its payload
         const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`, {
-          formConfig: formConfigData // Send the validated form data
+          formConfig: formConfigData 
         });
         
-        Message.success(response.data.message || `应用 "${appName}" 执行成功！已消耗 ${creditsToConsume} 积分。`);
+        Message.success(response.data.message || `应用 "${appName}" 执行成功！${creditsToConsume > 0 ? `已消耗 ${creditsToConsume} 积分。` : ''}`);
         
         if (refreshUserData) { 
           refreshUserData();
         }
 
-        // Log ComfyUI /users data if present in response
-        if (response.data && response.data.comfyuiUsersData) {
-        }
+        // TODO: Handle and display results from response.data
+        // e.g., if (response.data.result) { /* update some reactive property for display */ }
+        console.log('Launch API Response:', response.data);
         
       } catch (error) {
         Message.error(error.response?.data?.message || error.message || '执行应用失败');
+        console.error('Error launching application:', error);
       }
     },
     onCancel: () => {
-      Message.info('已取消执行应用');
+      // User cancelled the operation
     }
   });
 };
 
-// Rename the original launchApp to launchAppWithConfig for clarity
-const launchAppWithConfig = launchApp;
+const launchAppWithConfig = () => {
+    launchApp(); // This function will be called by the button
+}
 
 onMounted(() => {
   if (appId.value) {

@@ -18,7 +18,6 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
         const missingLocations = requiredLocations.filter(loc => !existingLocations.includes(loc));
 
         if (missingLocations.length > 0) {
-            console.log(`Attempting to auto-create missing default menus: ${missingLocations.join(', ')}`);
             const defaultsToCreate = missingLocations.map(loc => ({
                 _id: generateCustomId('MN'), // Explicitly generate custom string ID
                 name: loc === 'header' ? '头部菜单' : '底部菜单',
@@ -28,7 +27,6 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
 
             try {
                 await Menu.insertMany(defaultsToCreate, { ordered: false }); // Insert missing ones, ignore duplicates if any race condition
-                console.log(`Successfully auto-created ${defaultsToCreate.length} default menu(s).`);
                 // Re-fetch the list to include the newly created ones
                 menus = await Menu.find().sort({ location: 1 }); 
             } catch (creationError) {

@@ -304,7 +304,6 @@ const validateForm = async () => {
   if (formRef.value) {
     const errors = await formRef.value.validate();
     if (errors) {
-      // console.log('Validation errors:', errors);
       return false; // Validation failed
     }
     return true; // Validation passed

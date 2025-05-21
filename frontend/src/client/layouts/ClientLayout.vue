@@ -221,7 +221,6 @@ const handleDropdownSelect = (value) => {
       break;
     // 'credit-transactions' is now handled by handleAuthLinkClick in the template
     default:
-      // console.log('Dropdown item selected with no specific action:', value);
       break;
   }
 };

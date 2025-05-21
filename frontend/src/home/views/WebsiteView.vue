@@ -77,9 +77,7 @@ const fetchPageData = async (path) => {
     // Store data from the new API response structure
     pageData.value = data.page; 
     templateContent.value = data.templateContent;
-    console.log('Articles data from API:', JSON.stringify(data.articles, null, 2));
     articlesData.value = data.articles || [];
-    console.log('Assigned articlesData.value:', JSON.stringify(articlesData.value, null, 2));
     
     // Basic check if template content is missing
     if (!templateContent.value) {
@@ -97,7 +95,6 @@ const fetchPageData = async (path) => {
 };
 
 const fetchArticles = async (pageId) => {
-    console.log(`Fetching articles for pageId: ${pageId}`);
     try {
         const response = await fetch(`/api/public/articles?pageId=${pageId}`);
         if (response.ok) {
@@ -125,12 +122,10 @@ watch(
 
 // Watch for template content changes to re-compile the component
 watch(templateContent, (newTemplateString) => {
-    console.log("[WebsiteView Watcher] templateContent changed:", newTemplateString); // Log 1
     if (newTemplateString) {
         try {
             // Compile the template string into a render function
             const compiledRenderFn = compile(newTemplateString);
-            console.log("[WebsiteView Watcher] Compiled render function:", compiledRenderFn); // Log 2
 
             // Define the dynamic component using the compiled function
             dynamicTemplateComponent.value = {
@@ -138,13 +133,11 @@ watch(templateContent, (newTemplateString) => {
                 props: ['page', 'articles'], // Define expected props
                 // The setup function returns the compiled render function
                 setup(props) {
-                    console.log("[DynamicPageTemplate Setup] Received props:", props); // Log 3
                     // You could add computed properties or other setup logic here 
                     // that the template might rely on, using the passed props
                     return compiledRenderFn;
                 }
             };
-            console.log("[WebsiteView Watcher] dynamicTemplateComponent definition:", dynamicTemplateComponent.value); // Log 4
             pageError.value = null; // Clear previous errors if compilation succeeds
         } catch (e) {
             console.error("Template compilation error:", e);
@@ -152,7 +145,6 @@ watch(templateContent, (newTemplateString) => {
             dynamicTemplateComponent.value = null; // Clear component on error
         }
     } else {
-        console.log("[WebsiteView Watcher] Template content is null or empty, clearing component.");
         dynamicTemplateComponent.value = null;
     }
 }, { immediate: true });

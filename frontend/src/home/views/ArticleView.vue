@@ -52,7 +52,6 @@ const fetchArticleData = async () => {
     templateContent.value = null;
     dynamicArticleComponent.value = null;
     pageError.value = null;
-    console.log(`[ArticleView] Fetching article data for SLUG: ${props.slug}`);
 
     try {
         const response = await fetch(`/api/public/articles/by-slug/${props.slug}`);
@@ -60,7 +59,6 @@ const fetchArticleData = async () => {
             const errorData = await response.json().catch(() => ({ message: '未知错误' }));
             if (response.status === 404) {
                 pageError.value = `文章 (slug: ${props.slug}) 未找到或未激活。`;
-                console.log(pageError.value, errorData.message);
             } else {
                 pageError.value = `获取文章失败: ${response.status} - ${errorData.message}`;
                 console.error(pageError.value);
@@ -98,17 +96,14 @@ const fetchArticleData = async () => {
 };
 
 watch(templateContent, (newTemplateString) => {
-    console.log("[ArticleView Watcher] templateContent changed, length:", newTemplateString?.length);
     if (newTemplateString && typeof newTemplateString === 'string') {
         try {
             const compiledRenderFn = compile(newTemplateString);
-            console.log("[ArticleView Watcher] Compiled render function successfully.");
 
             dynamicArticleComponent.value = {
                 name: 'DynamicArticleTemplate',
                 props: ['article', 'page'],
                 setup(props) {
-                    console.log("[DynamicArticleTemplate Setup] Received props: article title:", props.article?.title);
                     return compiledRenderFn;
                 }
             };

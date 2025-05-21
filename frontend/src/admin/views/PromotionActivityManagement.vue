@@ -256,7 +256,7 @@
                 multiple 
                 :loading="isAppListLoading"
               >
-                <a-option v-for="app in availableApps" :key="app.id" :value="app.id">{{ app.name }}</a-option>
+                <a-option v-for="app in availableApps" :key="app._id" :value="app._id">{{ app.name }}</a-option>
                 <a-option v-if="isAppListLoading && availableApps.length === 0" value="loading" disabled>加载中...</a-option>
                 <a-option v-if="!isAppListLoading && availableApps.length === 0" value="no-apps" disabled>无已启用的AI应用</a-option>
               </a-select>
@@ -830,23 +830,20 @@ const handleFullReductionTypeChange = (newType) => {
 const fetchAvailableApps = async () => {
   isAppListLoading.value = true;
   try {
-    // 您需要将这里的 '/api/ai-applications?isEnabled=true&fields=id,name' 替换为实际的后端接口地址
-    // 该接口应返回一个包含 { id: string, name: string } 对象的数组
     const response = await apiService.get('/ai-applications', { 
         params: { 
-            isEnabled: true, 
-            // fields: 'id,name' //  如果您的API支持字段选择，可以减少数据量
-            // limit: 0 // 如果您的API支持，获取所有已启用的应用
+            // isEnabled: true, // Assuming the backend filters by status=active or similar for enabled apps
+            status: 'active', // Explicitly request active applications
+            limit: 0 // Attempt to get all active applications, adjust if API doesn't support 0 for all
         }
     });
-    // 假设返回的数据结构是 response.data.applications 或者 response.data (一个数组)
-    availableApps.value = response.data.applications || response.data || []; 
+    availableApps.value = response.data.data || []; // Corrected path to the array
     if (availableApps.value.length === 0) {
         Message.info('未能获取到已启用的AI应用列表，或列表为空。');
     }
   } catch (error) {
     Message.error('获取AI应用列表失败: ' + (error.response?.data?.message || error.message));
-    availableApps.value = []; // Clear on error
+    availableApps.value = [];
   } finally {
     isAppListLoading.value = false;
   }

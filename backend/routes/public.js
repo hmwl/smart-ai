@@ -15,16 +15,13 @@ async function populatePageRoutes(items) {
     if (!items || items.length === 0) {
         return [];
     }
-    // console.log('[DEBUG] populatePageRoutes received items:', JSON.stringify(items, null, 2));
     const populatedItems = [];
     for (const item of items) {
         let populatedItem = { ...item }; 
         if (item.type === 'page' && item.pageId) {
-            // console.log(`[DEBUG] Processing page item: ${item.title}, pageId: ${item.pageId}`);
             try {
                 const page = await Page.findOne({ _id: item.pageId, status: 'active' }).select('route').lean(); 
                 if (page) {
-                    // console.log(`[DEBUG] Found active page for ${item.pageId}:`, page);
                     populatedItem.route = page.route; 
                 } else {
                     console.warn(`[WARN] Menu item '${item.title}' (pageId: ${item.pageId}): Corresponding active page not found or route missing. Skipping.`);
@@ -35,13 +32,11 @@ async function populatePageRoutes(items) {
                 continue; 
             }
         } else if (item.type === 'submenu' && item.children && item.children.length > 0) {
-            // console.log(`[DEBUG] Processing submenu: ${item.title}`);
             populatedItem.children = await populatePageRoutes(item.children);
         }
         delete populatedItem.pageId; 
         populatedItems.push(populatedItem.toObject ? populatedItem.toObject() : populatedItem);
     }
-    // console.log('[DEBUG] populatePageRoutes returning items:', JSON.stringify(populatedItems, null, 2));
     return populatedItems;
 }
 

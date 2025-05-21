@@ -526,11 +526,9 @@ const cloneComponent = (original) => {
 };
 
 const onDragEndPalette = (event) => {
-  // console.log('Drag ended from palette:', event);
 };
 
 const onDropToCanvas = (event) => {
-  // console.log('Dropped on canvas:', event);
   // `vuedraggable` handles adding the item to `formFields` array automatically
   // The new item is at event.newIndex
   const newField = formFields.value[event.newIndex];
@@ -540,7 +538,6 @@ const onDropToCanvas = (event) => {
 };
 
 const onUpdateCanvas = (event) => {
-  // console.log('Canvas updated (reordered):', event);
   // This event is triggered when items are reordered within the canvas
 };
 
@@ -637,7 +634,6 @@ const fetchEnumConfigsForSelectedType = async (typeId) => {
 // Handler for when Enum Type changes in properties panel
 const onEnumTypeChange = async (field) => {
   if (field && field.config) {
-    console.log('onEnumTypeChange - selected enumTypeId:', field.config.enumTypeId);
     field.config.enumOptionIds = []; 
     field.runtimeAvailableEnumOptions = []; // Clear stored runtime options
     enumConfigsOfSelectedType.value = []; 
@@ -725,7 +721,6 @@ const saveForm = async () => {
     
     // Replace with actual API call
     await apiService.saveAppFormConfig(payload); // Actual API call
-    // console.log('Form schema to save:', JSON.stringify(payload, null, 2));
     
     // Simulating API call
     // await new Promise(resolve => setTimeout(resolve, 1000)); 
@@ -856,7 +851,6 @@ const loadForm = async () => {
     }
   } catch (error) {
     if (error.response && error.response.status === 404) {
-      console.log('No form configuration found for this application (404), starting fresh.');
       formFields.value = []; 
       if (isComfyUI.value) {
         comfyUIOutputNodeId.value = '';

@@ -72,7 +72,6 @@ const fetchHeaderNav = async () => {
         const response = await fetch('/api/public/menus/lookup?location=header'); 
         if (response.ok) {
             headerNav.value = await response.json();
-            // console.log("Fetched Header Nav:", headerNav.value); // For debugging
         } else {
             console.error('Failed to fetch header navigation (new endpoint)');
             headerNav.value = []; // Clear on error

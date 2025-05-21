@@ -396,9 +396,7 @@ const handleTopUpConfirm = async () => {
 
       // 4. Call Backend API to create the transaction record
       // Change endpoint to /api/credit-transactions
-      console.log('Calling backend API with payload:', payload);
       const response = await apiClient.post('/credit-transactions', payload);
-      console.log('Backend response:', response.data);
 
       // 5. Handle Success
       const earnedCredits = response.data?.earnedCredits || estimatedCredits.value; // Use backend value if provided
