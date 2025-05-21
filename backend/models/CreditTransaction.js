@@ -20,7 +20,7 @@ const CreditTransactionSchema = new Schema({
   aiApplication: {
     type: String, // Storing AiApplication _id as String
     ref: 'AiApplication',
-    default: null // Optional, only for 'consumption' type
+    required: false // Not all transactions are related to a specific app (e.g., direct top-up, manual adjustment)
   },
   creditsChanged: {
     type: Number,
@@ -45,10 +45,10 @@ const CreditTransactionSchema = new Schema({
     trim: true,
     default: null
   },
-  promotionActivity: {
+  promotionActivity: { // Added field to link to a promotion activity
     type: String,
     ref: 'PromotionActivity',
-    default: null
+    required: false // Not all transactions will have an associated promotion
   },
   relatedOrderId: {
     type: mongoose.Schema.Types.ObjectId,

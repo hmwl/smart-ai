@@ -75,6 +75,19 @@
               <span v-else class="text-gray-400">未知用户</span>
             </template>
           </a-table-column>
+          <a-table-column title="操作人" data-index="operator.username" :width="180">
+            <template #cell="{ record }">
+              <span v-if="record.operator && record.operator.username">
+                {{ record.operator.username }}
+                <span v-if="record.operator._id !== record.user?._id"> (管理员)</span>
+                <span v-else> (用户本人)</span>
+              </span>
+              <span v-else-if="record.user && record.user.username">
+                {{ record.user.username }} (用户本人)
+              </span>
+              <span v-else class="text-gray-400">未知操作人</span>
+            </template>
+          </a-table-column>
           <a-table-column title="类型" data-index="type" :width="120">
             <template #cell="{ record }">
               <a-tag :color="getTransactionTypeColor(record.type)">

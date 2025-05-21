@@ -45,8 +45,14 @@
                 </div>
                 <div class="info-item">
                   <icon-star class="info-icon"/> <strong>所需积分:</strong> 
-                  <a-tag v-if="application.creditsConsumed === 0" color="green" size="small">免费</a-tag>
-                  <span v-else>{{ application.creditsConsumed }} 积分</span>
+                  <template v-if="application.activePromotion">
+                    <a-tag color="red" size="small"><icon-fire /> {{ application.activePromotion.description }}</a-tag>
+                    <span v-if="application.creditsConsumed > 0" style="text-decoration: line-through; margin-left: 8px;">{{ application.creditsConsumed }} 积分</span>
+                  </template>
+                  <template v-else>
+                    <a-tag v-if="application.creditsConsumed === 0" color="green" size="small">免费</a-tag>
+                    <span v-else>{{ application.creditsConsumed }} 积分</span>
+                  </template>
                 </div>
                 <div class="info-item" v-if="application.tags && application.tags.length > 0">
                   <icon-bookmark class="info-icon"/> <strong>标签:</strong> 
@@ -119,7 +125,8 @@ import { useRoute, useRouter } from 'vue-router';
 import apiClient, { getStaticAssetBaseUrl } from '../services/apiService';
 import { Message, PageHeader as APageHeader, Spin as ASpin, Alert as AAlert, Card as ACard, Empty as AEmpty, Tag as ATag, Divider as ADivider, Tabs as ATabs, TabPane as ATabPane, Space as ASpace, Button as AButton, Modal } from '@arco-design/web-vue';
 import {
-  IconApps, IconTag, IconLayers, IconStar, IconBookmark, IconSchedule, IconHistory
+  IconApps, IconTag, IconLayers, IconStar, IconBookmark, IconSchedule, IconHistory,
+  IconFire
 } from '@arco-design/web-vue/es/icon';
 import DynamicFormRenderer from '../components/DynamicFormRenderer.vue';
 
@@ -230,11 +237,21 @@ const launchApp = async () => {
   }
 
   const appName = application.value.name;
-  const creditsToConsume = application.value.creditsConsumed;
+  const originalCreditsToConsume = application.value.creditsConsumed;
+  let finalCreditsToDisplay = originalCreditsToConsume;
+
+  if (application.value.activePromotion) {
+    const promo = application.value.activePromotion;
+    if (promo.discountType === 'percentage' && promo.discountValue !== null) {
+      finalCreditsToDisplay = Math.max(0, Math.round(originalCreditsToConsume * (1 - parseFloat(promo.discountValue) / 100)));
+    } else if (promo.discountType === 'fixed_reduction' && promo.discountValue !== null) {
+      finalCreditsToDisplay = Math.max(0, originalCreditsToConsume - parseInt(promo.discountValue, 10));
+    }
+  }
 
   Modal.confirm({
     title: '确认执行应用',
-    content: `执行应用 "${appName}" ${creditsToConsume > 0 ? `将消耗 ${creditsToConsume} 积分` : '免费'}。是否继续？`,
+    content: `执行应用 "${appName}" ${finalCreditsToDisplay > 0 ? `将消耗 ${finalCreditsToDisplay} 积分` : '免费'}${application.value.activePromotion ? ' (已应用优惠)' : ''}。是否继续？`,
     okText: '确认执行',
     cancelText: '取消',
     onOk: async () => {
@@ -243,7 +260,8 @@ const launchApp = async () => {
           formConfig: formConfigData 
         });
         
-        Message.success(response.data.message || `应用 "${appName}" 执行成功！${creditsToConsume > 0 ? `已消耗 ${creditsToConsume} 积分。` : ''}`);
+        const actualCreditsConsumed = response.data.creditsConsumed; // Get actual consumed credits from response
+        Message.success(response.data.message || `应用 "${appName}" 执行成功！${actualCreditsConsumed > 0 ? `已消耗 ${actualCreditsConsumed} 积分。` : ''}`);
         
         if (refreshUserData) { 
           refreshUserData();

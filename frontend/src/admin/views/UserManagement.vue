@@ -145,6 +145,50 @@
         <a-form-item field="isAdmin" label="管理员权限">
           <a-switch v-model="userForm.isAdmin" />
         </a-form-item>
+
+        <!-- Credit Modification Section (Only for Edit Mode) -->
+        <template v-if="isEditMode">
+          <a-divider orientation="center">积分调整</a-divider>
+          <a-form-item field="creditModification.type" label="积分修改方式">
+            <a-select 
+              v-model="userForm.creditModification.type" 
+              placeholder="选择修改方式 (默认不修改)"
+              allow-clear
+              @change="handleCreditModificationTypeChange"
+            >
+              <a-option value="grant">赠送积分</a-option>
+              <a-option value="adjust">调整积分</a-option>
+            </a-select>
+          </a-form-item>
+
+          <a-form-item 
+            v-if="userForm.creditModification && userForm.creditModification.type"
+            field="creditModification.amount" 
+            label="积分变动数额" 
+            :rules="[{ required: true, message: '请输入积分变动数额' }, { type: 'number', message: '请输入有效的数字'}, { validator: validateCreditAmount }]"
+          >
+            <a-input-number 
+              v-model="userForm.creditModification.amount" 
+              :placeholder="userForm.creditModification.type === 'adjust' ? '正数为增加，负数为扣减' : '输入赠送的积分数额 (非负数)'"
+              style="width: 100%;"
+            />
+          </a-form-item>
+
+          <a-form-item 
+            v-if="userForm.creditModification && userForm.creditModification.type"
+            field="creditModification.reason" 
+            label="变动原因说明" 
+            :rules="[{ required: true, message: '请输入变动原因' }]"
+          >
+            <a-textarea 
+              v-model="userForm.creditModification.reason" 
+              placeholder="例如：新用户注册奖励，活动补偿等"
+              :auto-size="{minRows:2, maxRows:4}"
+            />
+          </a-form-item>
+        </template>
+        <!-- End Credit Modification Section -->
+
       </a-form>
     </a-modal>
 
@@ -170,7 +214,8 @@ import {
     Option as AOption,
     Switch as ASwitch,
     Space as ASpace,
-    InputSearch as AInputSearch
+    InputSearch as AInputSearch,
+    Divider as ADivider
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
@@ -217,6 +262,11 @@ const getInitialUserForm = () => ({
   confirmPassword: '', // Added for create validation
   status: 'active',
   isAdmin: false,
+  creditModification: { // Added for credit modification
+    type: null,
+    amount: null,
+    reason: ''
+  }
 });
 
 // --- Password confirmation validator --- 
@@ -331,7 +381,12 @@ const editUser = (user) => {
   userForm.value = { 
       ...user, 
       password: '', // Clear password for edit
-      confirmPassword: '' // Clear confirm password
+      confirmPassword: '', // Clear confirm password
+      creditModification: { // Initialize/reset credit modification part
+        type: null,
+        amount: null,
+        reason: ''
+      }
   };
   isEditMode.value = true;
   userModalVisible.value = true;
@@ -357,7 +412,7 @@ const handleSubmit = async () => {
   isSubmitting.value = true;
 
   // Construct payload, removing confirmPassword and password if empty during edit
-  const payload = { ...userForm.value };
+  let payload = { ...userForm.value };
   delete payload.confirmPassword; 
 
   if (isEditMode.value && !payload.password) {
@@ -368,6 +423,14 @@ const handleSubmit = async () => {
     isSubmitting.value = false;
     return false;
   }
+
+  // Handle credit modification fields
+  if (isEditMode.value && payload.creditModification && payload.creditModification.type) {
+    payload.creditModificationType = payload.creditModification.type;
+    payload.creditModificationAmount = payload.creditModification.amount;
+    payload.creditModificationReason = payload.creditModification.reason;
+  }
+  delete payload.creditModification; // Remove the nested object before sending
 
   // const accessToken = localStorage.getItem('accessToken');
   // if (!accessToken) {
@@ -465,6 +528,28 @@ const confirmDeleteUser = (user) => {
         }
     }
   });
+};
+
+// --- Credit Amount Validator ---
+const validateCreditAmount = (value, callback) => {
+  if (userForm.value.creditModification && userForm.value.creditModification.type === 'grant') {
+    if (value === null || value === undefined || value < 0) {
+      return callback('赠送积分数额必须为非负数');
+    }
+  }
+  // For 'adjust', both positive and negative are allowed.
+  // The { type: 'number' } rule handles non-numeric input.
+  callback();
+};
+
+// --- Handle Credit Modification Type Change ---
+const handleCreditModificationTypeChange = (value) => {
+  if (userForm.value.creditModification) {
+    userForm.value.creditModification.amount = null;
+    userForm.value.creditModification.reason = '';
+    // Trigger validation or clear errors for amount and reason if needed
+    userFormRef.value?.clearValidate(['creditModification.amount', 'creditModification.reason']);
+  }
 };
 
 onMounted(() => {

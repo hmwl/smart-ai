@@ -7,6 +7,7 @@ const mongoose = require('mongoose'); // 引入 mongoose
 // Correctly import middleware from their respective files
 const authenticateToken = require('../middleware/authenticateToken'); 
 const isAdmin = require('../middleware/isAdmin'); 
+const CreditTransaction = require('../models/CreditTransaction'); // Import CreditTransaction model
 
 const SINGLE_CREDIT_SETTING_ID = 'global_credit_settings'; // ID for credit settings
 
@@ -139,15 +140,15 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
 router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
   try {
     const userId = req.params.id;
-    const { email, status, isAdmin, password } = req.body; // Destructure specific fields
-
-    // --- Revision: Remove ObjectId validation as _id is now String ---
-    /*
-    if (!mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({ message: '无效的用户 ID 格式' });
-    }
-    */
-    // --- End Revision ---
+    const { 
+      email, 
+      status, 
+      isAdmin: newIsAdminValue, // Renamed to avoid conflict with isAdmin middleware
+      password, 
+      creditModificationType, 
+      creditModificationAmount, 
+      creditModificationReason 
+    } = req.body; 
 
     // Find the user first
     const user = await User.findById(userId);
@@ -155,15 +156,22 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
       return res.status(404).json({ message: '未找到指定用户' });
     }
 
-    // Update allowed fields
-    if (email !== undefined) user.email = email; // Allow updating email
+    // Update standard fields
+    if (email !== undefined) user.email = email; 
     if (status !== undefined && ['active', 'disabled'].includes(status)) user.status = status;
-    if (isAdmin !== undefined) {
-        // Optional: Prevent admin from removing their own admin status?
-        // if (req.user.userId === userId && isAdmin === false) {
-        //     return res.status(403).json({ message: "不能移除自己的管理员权限" });
-        // }
-        user.isAdmin = isAdmin;
+    
+    // Admin status update logic (prevent self-demotion or last admin removal)
+    if (newIsAdminValue !== undefined && user.isAdmin !== newIsAdminValue) {
+      if (req.user.userId === userId && !newIsAdminValue) {
+        return res.status(403).json({ message: "操作失败：不能移除自己的管理员权限。" });
+      }
+      if (user.isAdmin && !newIsAdminValue) { // If demoting an admin
+        const adminCount = await User.countDocuments({ isAdmin: true });
+        if (adminCount <= 1) {
+          return res.status(400).json({ message: "操作失败：系统中至少需要保留一名管理员。" });
+        }
+      }
+      user.isAdmin = newIsAdminValue;
     }
 
     // Handle password update separately
@@ -172,11 +180,40 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
             return res.status(400).json({ message: '新密码长度不能少于6位' });
         }
         const saltRounds = 10;
-        user.passwordHash = await bcrypt.hash(password, saltRounds); // Hash and update password
+        user.passwordHash = await bcrypt.hash(password, saltRounds); 
     }
 
+    // --- Handle Credit Modification ---
+    if (creditModificationType && creditModificationType !== null) {
+      if (typeof creditModificationAmount !== 'number' || !creditModificationReason || creditModificationReason.trim() === '') {
+        return res.status(400).json({ message: '积分变动数额和原因说明均为必填项。' });
+      }
+
+      if (creditModificationType === 'grant' && creditModificationAmount < 0) {
+        return res.status(400).json({ message: '赠送积分数额必须为非负数。' });
+      }
+
+      const balanceBefore = user.creditsBalance;
+      user.creditsBalance += creditModificationAmount;
+      // Optional: Prevent balance from going below zero if it's an adjustment and that's a business rule
+      // if (creditModificationType === 'adjust' && user.creditsBalance < 0) { user.creditsBalance = 0; }
+
+      const transactionType = creditModificationType === 'grant' ? 'grant' : 'adjustment';
+
+      const creditTransaction = new CreditTransaction({
+        user: user._id,
+        type: transactionType, 
+        creditsChanged: creditModificationAmount,
+        balanceBefore: balanceBefore,
+        balanceAfter: user.creditsBalance,
+        description: creditModificationReason,
+        referenceId: `ADMIN_OP_BY_${req.user.userId}` // Log which admin performed the action
+      });
+      await creditTransaction.save();
+    }
+    // --- End Credit Modification ---
+
     // Save the updated user
-    // Mongoose validation will run automatically on save()
     const updatedUser = await user.save();
 
     // Return updated user info (excluding password hash)

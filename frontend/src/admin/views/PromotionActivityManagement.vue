@@ -17,6 +17,9 @@
         <a-button type="primary" @click="openCreateModal">
           <template #icon><icon-plus /></template> 创建活动
         </a-button>
+        <a-button @click="fetchActivities" :loading="isLoading">
+          <template #icon><icon-refresh /></template> 刷新
+        </a-button>
       </a-space>
     </div>
 

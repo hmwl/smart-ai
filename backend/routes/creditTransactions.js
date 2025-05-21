@@ -90,15 +90,59 @@ router.get('/', authenticateToken, async (req, res) => {
     // --- End Build Filter Query ---
 
     try {
-        const transactions = await CreditTransaction.find(query)
+        let transactions = await CreditTransaction.find(query)
             .populate('user', 'username email _id') 
             .populate('aiApplication', 'name _id') 
             .populate('promotionActivity', 'name _id') 
             .sort(sort) 
             .skip((pageInt - 1) * limitInt)
-            .limit(limitInt);
+            .limit(limitInt)
+            .lean(); // Use .lean() for plain JS objects, as we will modify them
 
         const total = await CreditTransaction.countDocuments(query);
+
+        // --- Populate Operator --- 
+        const adminOpPrefix = 'ADMIN_OP_BY_';
+        const adminUserIdsToFetch = new Set();
+
+        transactions.forEach(transaction => {
+            if (transaction.referenceId && transaction.referenceId.startsWith(adminOpPrefix)) {
+                const adminId = transaction.referenceId.substring(adminOpPrefix.length);
+                if (adminId) {
+                    adminUserIdsToFetch.add(adminId);
+                }
+            }
+        });
+
+        let adminUsersMap = new Map();
+        if (adminUserIdsToFetch.size > 0) {
+            const adminUsers = await User.find({ '_id': { $in: Array.from(adminUserIdsToFetch) } }).select('username _id').lean();
+            adminUsers.forEach(admin => adminUsersMap.set(admin._id.toString(), admin));
+        }
+        
+        transactions = transactions.map(transaction => {
+            let operator = null; 
+            // Default operator to the user who owns the transaction, if user is populated
+            if (transaction.user) {
+                 operator = {
+                    username: transaction.user.username,
+                    _id: transaction.user._id.toString() 
+                };
+            }
+
+            if (transaction.referenceId && transaction.referenceId.startsWith(adminOpPrefix)) {
+                const adminId = transaction.referenceId.substring(adminOpPrefix.length);
+                const adminUser = adminUsersMap.get(adminId);
+                if (adminUser) {
+                    operator = { // Override if admin operator found
+                        username: adminUser.username,
+                        _id: adminUser._id.toString()
+                    };
+                }
+            }
+            return { ...transaction, operator }; // Add operator to the transaction object
+        });
+        // --- End Populate Operator ---
 
         res.json({
             transactions,

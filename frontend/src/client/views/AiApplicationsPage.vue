@@ -45,8 +45,13 @@
               <div class="app-card-footer">
                 <div class="app-info">
                   <a-tag v-if="item.type" :color="getTagColor(item.type.name)" bordered size="small">{{ item.type.name }}</a-tag>
-                  <a-tag v-if="item.creditsConsumed === 0" color="green" bordered size="small">免费</a-tag>
-                  <a-tag v-else-if="item.creditsConsumed > 0" color="gold" bordered size="small">{{ item.creditsConsumed }} 积分</a-tag>
+                  <a-tag v-if="item.activePromotion" color="red" bordered size="small">
+                    <icon-fire /> {{ item.activePromotion.description }}
+                  </a-tag>
+                  <a-tag v-if="!item.activePromotion && item.creditsConsumed === 0" color="green" bordered size="small">免费</a-tag>
+                  <a-tag v-else-if="!item.activePromotion && item.creditsConsumed > 0" color="gold" bordered size="small">{{ item.creditsConsumed }} 积分</a-tag>
+                  <!-- If there is an active promotion, the original price might still be relevant or shown struck-through -->
+                  <a-tag v-if="item.activePromotion && item.creditsConsumed > 0" color="gold" bordered size="small" style="text-decoration: line-through;">{{ item.creditsConsumed }} 积分</a-tag>
                 </div>
                 <div class="flex w-full justify-center mt-8">
                   <a-button type="primary" @click="handleAppClick(item)">查看详情</a-button>
@@ -78,7 +83,7 @@ import {
   Tabs as ATabs, 
   TabPane as ATabPane
 } from '@arco-design/web-vue';
-import { IconApps } from '@arco-design/web-vue/es/icon';
+import { IconApps, IconFire } from '@arco-design/web-vue/es/icon';
 
 const applications = ref([]);
 const loading = ref(false);

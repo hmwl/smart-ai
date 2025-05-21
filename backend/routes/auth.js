@@ -8,6 +8,7 @@ const ms = require('ms'); // 用于解析时间字符串，如 '7d'
 const authenticateToken = require('../middleware/authenticateToken'); // 引入认证中间件
 const AiApplication = require('../models/AiApplication'); // Added AiApplication model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
+const PromotionActivity = require('../models/PromotionActivity'); // Added PromotionActivity model
 
 // Dynamically load platform services
 const ComfyUIService = require('../services/platform_integrations/comfyuiService');
@@ -502,33 +503,79 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
     if (!application) return res.status(404).json({ message: 'AI 应用未找到。' });
     if (application.status !== 'active') return res.status(400).json({ message: `AI 应用 "${application.name}" 当前不可用。` });
 
-    // 2. Check and Deduct Credits
-    const creditsToConsume = application.creditsConsumed;
-    const balanceBeforeConsumption = currentUser.creditsBalance;
+    // 2. Determine Credits to Consume (with Promotion Logic)
+    let originalCreditsToConsume = application.creditsConsumed;
+    let finalCreditsToConsume = originalCreditsToConsume;
+    let appliedPromotionId = null;
+    let appliedPromotionName = null;
 
-    if (balanceBeforeConsumption < creditsToConsume) {
-      return res.status(400).json({ message: `积分不足 (需要 ${creditsToConsume}, 当前 ${balanceBeforeConsumption})，无法执行应用 "${application.name}"。` });
+    const now = new Date();
+    const promotionQuery = {
+      isEnabled: true,
+      startTime: { $lte: now },
+      endTime: { $gte: now },
+      activityType: 'usage_discount',
+      'activityDetails.usageDiscountSubType': 'app_specific_discount',
+      'activityDetails.appSpecific.targetAppIds': application._id.toString()
+    };
+
+    const applicablePromotions = await PromotionActivity.find(promotionQuery).sort({ createdAt: -1 });
+
+    if (applicablePromotions.length > 0) {
+      const promotion = applicablePromotions[0];
+      appliedPromotionId = promotion._id;
+      appliedPromotionName = promotion.name;
+      const appSpecificDetails = promotion.activityDetails.appSpecific;
+
+      if (appSpecificDetails.discountType === 'percentage') {
+        const discountRate = parseFloat(appSpecificDetails.discountValue);
+        if (discountRate > 0 && discountRate <= 100) {
+          finalCreditsToConsume = Math.max(0, Math.round(originalCreditsToConsume * (1 - discountRate / 100)));
+        }
+      } else if (appSpecificDetails.discountType === 'fixed_reduction') {
+        const reductionAmount = parseInt(appSpecificDetails.discountValue, 10);
+        if (reductionAmount > 0) {
+          finalCreditsToConsume = Math.max(0, originalCreditsToConsume - reductionAmount);
+        }
+      }
+    } else {
     }
 
-    currentUser.creditsBalance -= creditsToConsume;
-    await currentUser.save();
+    // 3. Check and Deduct Credits
+    const balanceBeforeConsumption = currentUser.creditsBalance;
+
+    if (finalCreditsToConsume > 0) { // Only deduct if there's a cost
+        if (balanceBeforeConsumption < finalCreditsToConsume) {
+            return res.status(400).json({ message: `积分不足 (需要 ${finalCreditsToConsume}, 当前 ${balanceBeforeConsumption})，无法执行应用 "${application.name}"。` });
+        }
+        currentUser.creditsBalance -= finalCreditsToConsume;
+        await currentUser.save();
+    } else {
+    }
+    
+
+    const transactionDescription = appliedPromotionId ?
+      `执行 AI 应用: ${application.name} (ID: ${applicationId}) (促销: ${appliedPromotionName})` :
+      `执行 AI 应用: ${application.name} (ID: ${applicationId})`;
 
     const consumptionTransaction = new CreditTransaction({
       user: userId,
       type: 'consumption',
       aiApplication: applicationId,
-      creditsChanged: -creditsToConsume,
+      creditsChanged: -finalCreditsToConsume, // Use final (potentially discounted) amount
       balanceBefore: balanceBeforeConsumption,
       balanceAfter: currentUser.creditsBalance,
-      description: `执行 AI 应用: ${application.name} (ID: ${applicationId})`,
+      description: transactionDescription,
+      promotionActivity: appliedPromotionId // Link to promotion if applied
     });
     await consumptionTransaction.save();
     consumptionTransactionId = consumptionTransaction._id;
 
-    // 3. Dynamically get and execute platform-specific service
+    // 4. Dynamically get and execute platform-specific service
     const ServiceClass = platformServiceMap[application.platformType];
     if (!ServiceClass) {
-      throw new Error(`平台类型 "${application.platformType}" 的服务处理程序未实现。`); // This will trigger refund
+      // This error will trigger the refund logic below
+      throw new Error(`平台类型 "${application.platformType}" 的服务处理程序未实现。`);
     }
 
     const serviceInstance = new ServiceClass();
@@ -541,40 +588,70 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
       
       clientResponseMessage = serviceResult.clientMessage || `应用 "${application.name}" 服务执行成功。`;
       
+      let successMessage = `${clientResponseMessage}`;
+      if (finalCreditsToConsume > 0) {
+        successMessage += ` 已消耗 ${finalCreditsToConsume} 积分。`;
+      } else {
+        successMessage += ` (免费使用${appliedPromotionId ? ' - 已应用优惠' : ''})`;
+      }
+      if (appliedPromotionId && finalCreditsToConsume > 0) { // Add promotion name if discount applied and cost > 0
+          successMessage += ` (已应用促销: ${appliedPromotionName})`;
+      }
+
+
       return res.json({
-        message: `${clientResponseMessage} 已消耗 ${creditsToConsume} 积分。`,
+        message: successMessage,
         newBalance: currentUser.creditsBalance,
         transactionId: consumptionTransactionId,
         serviceData: serviceResult.data, // Pass through any data returned by the service
+        creditsConsumed: finalCreditsToConsume, // Send back the actual consumed credits
+        promotionApplied: !!appliedPromotionId,
+        promotionName: appliedPromotionName
       });
 
     } catch (serviceExecutionError) {
       clientResponseMessage = serviceExecutionError.message || `应用 "${application.name}" 服务执行失败。`;
 
-      // Refund logic (remains the same)
-      const balanceBeforeRefund = currentUser.creditsBalance;
-      currentUser.creditsBalance += creditsToConsume; // Add back the deducted credits
-      await currentUser.save();
+      // Refund logic: only refund if credits were actually deducted
+      if (finalCreditsToConsume > 0) {
+        const balanceBeforeRefund = currentUser.creditsBalance;
+        currentUser.creditsBalance += finalCreditsToConsume; // Add back the deducted credits
+        await currentUser.save();
 
-      const refundTransaction = new CreditTransaction({
-        user: userId,
-        type: 'refund',
-        aiApplication: applicationId,
-        creditsChanged: creditsToConsume,
-        balanceBefore: balanceBeforeRefund,
-        balanceAfter: currentUser.creditsBalance,
-        description: `应用 "${application.name}" 执行失败退款. 原因: ${clientResponseMessage.substring(0, 150)}`, // Truncate error
-        relatedTransaction: consumptionTransactionId
-      });
-      await refundTransaction.save();
-
-      return res.status(500).json({ // Or 400/422 depending on error type
-        message: `${clientResponseMessage} 已退还 ${creditsToConsume} 积分。`,
-        errorDetail: serviceExecutionError.message, // Full technical error for client debugging if needed
-        newBalance: currentUser.creditsBalance,
-        originalTransactionId: consumptionTransactionId,
-        refundTransactionId: refundTransaction._id
-      });
+        const refundTransaction = new CreditTransaction({
+          user: userId,
+          type: 'refund',
+          aiApplication: applicationId,
+          creditsChanged: finalCreditsToConsume, // Amount that was deducted
+          balanceBefore: balanceBeforeRefund,
+          balanceAfter: currentUser.creditsBalance,
+          description: `应用 "${application.name}" 执行失败退款. 原因: ${clientResponseMessage.substring(0, 150)}`, // Truncate error
+          relatedTransaction: consumptionTransactionId,
+          promotionActivity: appliedPromotionId // Keep track of promotion if one was involved in original charge
+        });
+        await refundTransaction.save();
+        
+        return res.status(500).json({ // Or 400/422 depending on error type
+            message: `${clientResponseMessage} 已退还 ${finalCreditsToConsume} 积分。`,
+            errorDetail: serviceExecutionError.message, // Full technical error for client debugging if needed
+            newBalance: currentUser.creditsBalance,
+            originalTransactionId: consumptionTransactionId,
+            refundTransactionId: refundTransaction._id,
+            creditsConsumed: 0, // No credits consumed after refund
+            promotionApplied: !!appliedPromotionId, 
+            promotionName: appliedPromotionName
+        });
+      } else { // If it was free and failed, just report error without refund
+         return res.status(500).json({
+            message: `${clientResponseMessage} (应用免费，未扣除积分)`,
+            errorDetail: serviceExecutionError.message,
+            newBalance: currentUser.creditsBalance,
+            originalTransactionId: consumptionTransactionId, // Still send original transaction ID for reference
+            creditsConsumed: 0,
+            promotionApplied: !!appliedPromotionId,
+            promotionName: appliedPromotionName
+        });
+      }
     }
   } catch (outerError) {
     

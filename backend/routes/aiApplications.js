@@ -13,6 +13,7 @@ const isAdmin = require('../middleware/isAdmin');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const PromotionActivity = require('../models/PromotionActivity'); // Added PromotionActivity model
 
 // --- Multer Configuration for Cover Image Upload ---
 const UPLOADS_DIR = 'uploads/ai-covers';
@@ -411,33 +412,96 @@ router.post('/:id/consume', authenticateToken, getAiApplication, async (req, res
     const aiApp = res.aiApp; // From getAiApplication middleware
     const userMakingRequest = req.user; // From authenticateToken middleware
 
+
     // 1. Check if AI Application is active
     if (aiApp.status !== 'active') {
         return res.status(400).json({ message: `AI 应用 '${aiApp.name}' 当前未激活，无法使用。` });
     }
 
-    // 2. Check if the application costs anything
-    const creditsToConsume = aiApp.creditsConsumed;
-    if (creditsToConsume <= 0) {
-        // Free to use, no transaction needed, or log a zero-cost transaction if required
-        // For now, just return success. Potentially, one might want to log this usage.
+    let originalCreditsToConsume = aiApp.creditsConsumed;
+    let finalCreditsToConsume = originalCreditsToConsume;
+    let appliedPromotionId = null;
+    let appliedPromotionName = null; // For logging
+
+    // 2. Check for applicable 'AI应用折扣' promotions
+    const now = new Date();
+    const promotionQuery = {
+        isEnabled: true,
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+        activityType: 'usage_discount',
+        'activityDetails.usageDiscountSubType': 'app_specific_discount',
+        'activityDetails.appSpecific.targetAppIds': aiApp._id.toString() // Ensure aiApp._id is a string for matching
+    };
+
+    const applicablePromotions = await PromotionActivity.find(promotionQuery)
+        .sort({ createdAt: -1 }); 
+
+
+    if (applicablePromotions.length > 0) {
+        const promotion = applicablePromotions[0]; // Apply the first found (e.g., latest)
+        appliedPromotionId = promotion._id;
+        appliedPromotionName = promotion.name; // For logging
+        const appSpecificDetails = promotion.activityDetails.appSpecific;
+
+        if (appSpecificDetails.discountType === 'percentage') {
+            const discountRate = parseFloat(appSpecificDetails.discountValue);
+            if (discountRate > 0 && discountRate <= 100) {
+                finalCreditsToConsume = Math.max(0, Math.round(originalCreditsToConsume * (1 - discountRate / 100)));
+            }
+        } else if (appSpecificDetails.discountType === 'fixed_reduction') {
+            const reductionAmount = parseInt(appSpecificDetails.discountValue, 10);
+            if (reductionAmount > 0) {
+                finalCreditsToConsume = Math.max(0, originalCreditsToConsume - reductionAmount);
+            }
+        }
+    } else {
+    }
+
+    // 3. Check if the application (after potential discount) costs anything
+    if (finalCreditsToConsume <= 0) {
+        // Log a zero-cost transaction if a promotion made it free or it was already free
+        try {
+            const transactionDescription = appliedPromotionId ? 
+                `使用AI应用: ${aiApp.name} (ID: ${aiApp._id}) (促销活动: ${appliedPromotionName} - ${appliedPromotionId})` :
+                `使用免费AI应用: ${aiApp.name} (ID: ${aiApp._id})`;
+
+            const userForBalance = await User.findById(userMakingRequest.userId).select('creditsBalance').lean();
+            const currentBalance = userForBalance ? userForBalance.creditsBalance : 0;
+
+            const transaction = new CreditTransaction({
+                user: userMakingRequest.userId,
+                type: 'consumption',
+                aiApplication: aiApp._id,
+                creditsChanged: 0, // Zero cost
+                balanceBefore: currentBalance, 
+                balanceAfter: currentBalance,
+                description: transactionDescription,
+                promotionActivity: appliedPromotionId // Log promotion ID if applied
+            });
+            await transaction.save();
+        } catch (transactionError) {
+            console.error('[Consume API] Error logging zero-cost transaction:', transactionError);
+            // Non-critical if zero-cost logging fails, proceed to inform user.
+        }
         return res.status(200).json({
-            message: `成功使用免费AI应用: ${aiApp.name}`,
-            // currentBalance: userMakingRequest.creditsBalance // req.user might not be fully up-to-date after findOneAndUpdate elsewhere
+            message: `成功使用AI应用: ${aiApp.name}${appliedPromotionId ? ` (已应用促销: ${appliedPromotionName})` : ''}`,
+            creditsConsumed: 0,
+            promotionApplied: !!appliedPromotionId,
+            promotionName: appliedPromotionId ? appliedPromotionName : undefined,
         });
     }
 
     let updatedUser;
     try {
-        // 3. Atomically find user and update balance if sufficient
-        // Ensure req.user.userId is the correct path to the user's ID from the token payload
+        // 4. Atomically find user and update balance if sufficient
         updatedUser = await User.findOneAndUpdate(
             { 
                 _id: userMakingRequest.userId,
-                creditsBalance: { $gte: creditsToConsume } 
+                creditsBalance: { $gte: finalCreditsToConsume } 
             },
             { 
-                $inc: { creditsBalance: -creditsToConsume },
+                $inc: { creditsBalance: -finalCreditsToConsume },
                 $set: { lastLoginAt: new Date() } // Optionally update last activity timestamp
             },
             { new: true, runValidators: true } // new: true returns the updated document, runValidators ensures model validations are checked
@@ -445,55 +509,57 @@ router.post('/:id/consume', authenticateToken, getAiApplication, async (req, res
 
         if (!updatedUser) {
             // If updatedUser is null, it means either user not found (unlikely if authenticated)
-            // or creditsBalance was less than creditsToConsume
+            // or creditsBalance was less than finalCreditsToConsume
             // Fetch current balance to give accurate message, though this is an extra DB call
             const currentUserForBalanceCheck = await User.findById(userMakingRequest.userId).select('creditsBalance username');
+            const currentBalance = currentUserForBalanceCheck ? currentUserForBalanceCheck.creditsBalance : '未知';
+            console.warn(`[Consume API] Insufficient credits for user ${userMakingRequest.userId}. Required: ${finalCreditsToConsume}, Available: ${currentBalance}`);
             return res.status(402).json({ // 402 Payment Required is fitting
                 message: '积分不足',
-                required: creditsToConsume,
-                currentBalance: currentUserForBalanceCheck ? currentUserForBalanceCheck.creditsBalance : '未知'
+                required: finalCreditsToConsume,
+                currentBalance: currentBalance
             });
         }
 
     } catch (error) {
-        console.error('Error during user credit update:', error);
+        console.error('[Consume API] Error during user credit update:', error);
         return res.status(500).json({ message: '更新用户积分失败: ' + error.message });
     }
 
-    // 4. Create CreditTransaction record if deduction was successful
+    // 5. Create CreditTransaction record if deduction was successful
     try {
-        const balanceBeforeDeduction = updatedUser.creditsBalance + creditsToConsume; // Calculate what balance was before $inc
+        const balanceBeforeDeduction = updatedUser.creditsBalance + finalCreditsToConsume; // Calculate what balance was before $inc
         
+        const transactionDescription = appliedPromotionId ? 
+            `使用AI应用: ${aiApp.name} (ID: ${aiApp._id}) (促销活动: ${appliedPromotionName} - ${appliedPromotionId})` :
+            `使用AI应用: ${aiApp.name} (ID: ${aiApp._id})`;
+
         const transaction = new CreditTransaction({
             user: updatedUser._id,
             type: 'consumption',
             aiApplication: aiApp._id,
-            creditsChanged: -creditsToConsume,
+            creditsChanged: -finalCreditsToConsume,
             balanceBefore: balanceBeforeDeduction,
             balanceAfter: updatedUser.creditsBalance,
-            description: `使用AI应用: ${aiApp.name} (ID: ${aiApp._id})`,
+            description: transactionDescription,
+            promotionActivity: appliedPromotionId // Log promotion ID if applied
         });
         await transaction.save();
 
         res.status(200).json({
-            message: `成功使用AI应用: ${aiApp.name}，已消耗 ${creditsToConsume} 积分。`,
+            message: `成功使用AI应用: ${aiApp.name}，已消耗 ${finalCreditsToConsume} 积分。${appliedPromotionId ? ` (已应用促销: ${appliedPromotionName})` : ''}`,
             remainingBalance: updatedUser.creditsBalance,
-            transactionId: transaction._id
+            transactionId: transaction._id,
+            creditsConsumed: finalCreditsToConsume,
+            promotionApplied: !!appliedPromotionId,
+            promotionName: appliedPromotionId ? appliedPromotionName : undefined,
         });
 
     } catch (error) {
         console.error('Error creating credit transaction record:', error);
-        // IMPORTANT: Potentially need to refund the user if transaction record fails
-        // This part makes the operation non-atomic across collections without MongoDB transactions.
-        // For now, we'll log the error. A more robust system might queue a refund.
-        // Or, if User.findOneAndUpdate failed, we wouldn't reach here.
-        // If transaction.save() fails, the user's balance IS already debited.
-        // This is a critical point for data consistency.
-        
-        // Attempt to refund (best effort without full transaction safety)
         try {
-            await User.findByIdAndUpdate(updatedUser._id, { $inc: { creditsBalance: creditsToConsume }});
-            console.error(`CRITICAL: Credit transaction save failed for user ${updatedUser._id} after debiting ${creditsToConsume}. Attempted refund. Please verify.`);
+            await User.findByIdAndUpdate(updatedUser._id, { $inc: { creditsBalance: finalCreditsToConsume }});
+            console.error(`CRITICAL: Credit transaction save failed for user ${updatedUser._id} after debiting ${finalCreditsToConsume}. Attempted refund. Please verify.`);
              return res.status(500).json({
                 message: '记录消费流水失败，但积分可能已扣除。已尝试回退积分，请联系管理员核实。',
                 error: error.message

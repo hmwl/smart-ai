@@ -40,6 +40,66 @@ async function populatePageRoutes(items) {
     return populatedItems;
 }
 
+// Helper function to find and attach active promotions to AI applications
+async function attachActivePromotions(applications) {
+    if (!applications) return applications;
+    const appArray = Array.isArray(applications) ? applications : [applications];
+    if (appArray.length === 0) return applications;
+
+    const now = new Date();
+    const appIds = appArray.map(app => app._id.toString());
+
+    // Find all potentially relevant promotions in one go
+    const relevantPromotions = await PromotionActivity.find({
+        isEnabled: true,
+        startTime: { $lte: now },
+        endTime: { $gte: now },
+        activityType: 'usage_discount',
+        'activityDetails.usageDiscountSubType': 'app_specific_discount',
+        'activityDetails.appSpecific.targetAppIds': { $in: appIds }
+    }).lean(); // Use lean for efficiency
+
+    const promotionsMap = new Map(); // Map appId to its best promotion
+    for (const promo of relevantPromotions) {
+        const details = promo.activityDetails.appSpecific;
+        if (details && details.targetAppIds && Array.isArray(details.targetAppIds)) {
+            for (const targetAppId of details.targetAppIds) {
+                // If multiple promotions apply to an app, prioritize (e.g., latest created, highest discount)
+                // For now, let's assume the latest created (if sorted by find) or simply the first one encountered.
+                // To ensure latest, the find query should sort by createdAt descending.
+                // Or, if multiple are found for an app, apply logic here.
+                if (!promotionsMap.has(targetAppId) || new Date(promo.createdAt) > new Date(promotionsMap.get(targetAppId).createdAt)) {
+                    promotionsMap.set(targetAppId, promo);
+                }
+            }
+        }
+    }
+
+    const resultApps = appArray.map(app => {
+        const appObj = app.toObject ? app.toObject() : { ...app }; // Ensure it's a plain object if coming from Mongoose
+        const promotion = promotionsMap.get(appObj._id.toString());
+        if (promotion) {
+            const promoDetails = promotion.activityDetails.appSpecific;
+            let promoDescription = promotion.name;
+            if (promoDetails.discountType === 'percentage') {
+                promoDescription = `${promoDetails.discountValue}% off`;
+            } else if (promoDetails.discountType === 'fixed_reduction') {
+                promoDescription = `立减 ${promoDetails.discountValue} 积分`;
+            }
+            appObj.activePromotion = {
+                name: promotion.name,
+                discountType: promoDetails.discountType,
+                discountValue: promoDetails.discountValue,
+                description: promoDescription,
+                _id: promotion._id
+            };
+        }
+        return appObj;
+    });
+
+    return Array.isArray(applications) ? resultApps : resultApps[0];
+}
+
 // GET /api/public/pages/lookup?route=... - Find active page by route AND include template content
 router.get('/pages/lookup', async (req, res) => {
     const route = req.query.route;
@@ -282,22 +342,25 @@ router.get('/ai-applications/active', async (req, res) => {
     let query = { status: 'active' };
 
     if (typeId) {
-      query.type = typeId; // Assuming AiApplication model has a 'type' field referencing AiType _id
+      query.type = typeId;
     }
     if (tags) {
       query.tags = { $in: tags.split(',').map(tag => tag.trim()) };
     }
     if (name) {
-      query.name = { $regex: name, $options: 'i' }; // Case-insensitive name search
+      query.name = { $regex: name, $options: 'i' };
     }
 
-    const applications = await AiApplication.find(query)
-      .populate('type', 'name uri _id') // Populate type details
+    let applications = await AiApplication.find(query)
+      .populate('type', 'name uri _id')
       .sort({ createdAt: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean(); // Use lean here as we will modify it
       
     const totalApplications = await AiApplication.countDocuments(query);
+
+    applications = await attachActivePromotions(applications); // Attach promotions
 
     res.json({ 
         applications, 
@@ -315,14 +378,17 @@ router.get('/ai-applications/active', async (req, res) => {
 router.get('/ai-applications/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const application = await AiApplication.findOne({ _id: id /*, status: 'active' */ })
+    let application = await AiApplication.findOne({ _id: id /*, status: 'active' */ })
       .populate('type', 'name uri _id')
-      // .populate('apis', 'platformName description creditsPerCall _id') // No sensitive API details for public endpoint
-      .select('-__v'); // Exclude version key, select all other fields by default
+      .select('-__v')
+      .lean(); // Use lean here
 
     if (!application) {
       return res.status(404).json({ message: 'AI 应用未找到' });
     }
+
+    application = await attachActivePromotions(application); // Attach promotion
+
     res.json(application);
   } catch (err) {
     if (err.name === 'CastError') {
