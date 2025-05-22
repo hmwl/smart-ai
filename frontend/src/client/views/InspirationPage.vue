@@ -278,7 +278,7 @@ watch(selectedFilterTags, () => {
 }
 
 .page-header-custom {
-  background-color: var(--custom-bg-secondary);
+  background-color: rgba(35, 40, 49, 0.5);
   border-radius: 4px;
   padding: 16px 24px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -348,6 +348,10 @@ watch(selectedFilterTags, () => {
 }
 :deep(.arco-tabs-tab) {
   /* Styles for individual tabs if needed */
+}
+
+:deep(.inspiration-page-main-content) {
+  padding: 0!important;
 }
 
 </style>

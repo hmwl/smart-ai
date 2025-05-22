@@ -64,7 +64,7 @@ const routes = [
       {
         path: 'credit-transactions',
         name: 'UserCreditTransactions',
-        component: () => import('../views/UserCreditTransactionsPage.vue'),
+        component: () => import('../views/CreditTransactionsPage.vue'),
         meta: { requiresAuth: true, title: '消费记录' }
       }
     ]

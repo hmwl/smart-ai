@@ -1,5 +1,6 @@
 <template>
   <div class="client-layout">
+    <div class="aurora-background"></div>
     <header class="client-header">
       <div class="header-left">
         <router-link to="/" class="logo">APP LOGO</router-link>
@@ -265,11 +266,47 @@ provide('refreshUserData', fetchCurrentUserData);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background-color: var(--custom-bg-primary);
+  background-color: rgba(var(--custom-bg-primary), 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+.aurora-background {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  mask-image: radial-gradient(ellipse at 100% 0, #000 10%, transparent 70%);
+  filter: blur(10px);
+  opacity: 0.5;
+  z-index: 0;
+}
+.aurora-background::before {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  mix-blend-mode: difference;
+  position: absolute;
+  content: "";
+  backdrop-filter: blur(10px);
+  background-attachment: fixed;
+  background-image: repeating-linear-gradient(100deg, #000 0%, #000 7%, transparent 10%, transparent 12%, #000 16%), repeating-linear-gradient(100deg, #0b172c 10%, #2d3144 15%, #324357 20%, #3d3b47 25%, #162941 30%);
+  background-size: 200%, 100%;
+  /* animation: animate-aurora 60s linear infinite; */
+}
+@keyframes animate-aurora {
+  0% {
+    background-position: 50% 50%, 50% 50%;
+  }
+  100% {
+    background-position: 350% 50%, 350% 50%;
+  }
 }
 
 .client-header {
-  background-color: var(--custom-bg-secondary);
+  background-color: rgba(var(--custom-bg-secondary), 0.5);
   padding: 0 24px;
   height: 60px;
   display: flex;
@@ -277,6 +314,8 @@ provide('refreshUserData', fetchCurrentUserData);
   align-items: center;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  position: relative;
+  z-index: 2;
 }
 
 .header-left {
@@ -351,6 +390,8 @@ provide('refreshUserData', fetchCurrentUserData);
 
 .client-main-content {
   flex-grow: 1;
+  position: relative;
+  z-index: 1;
 }
 
 :deep(.arco-dropdown-option-icon) {

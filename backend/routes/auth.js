@@ -508,6 +508,7 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
     let finalCreditsToConsume = originalCreditsToConsume;
     let appliedPromotionId = null;
     let appliedPromotionName = null;
+    let promotion = null;
 
     const now = new Date();
     const promotionQuery = {
@@ -522,7 +523,7 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
     const applicablePromotions = await PromotionActivity.find(promotionQuery).sort({ createdAt: -1 });
 
     if (applicablePromotions.length > 0) {
-      const promotion = applicablePromotions[0];
+      promotion = applicablePromotions[0];
       appliedPromotionId = promotion._id;
       appliedPromotionName = promotion.name;
       const appSpecificDetails = promotion.activityDetails.appSpecific;
@@ -538,7 +539,6 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
           finalCreditsToConsume = Math.max(0, originalCreditsToConsume - reductionAmount);
         }
       }
-    } else {
     }
 
     // 3. Check and Deduct Credits
@@ -550,7 +550,6 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
         }
         currentUser.creditsBalance -= finalCreditsToConsume;
         await currentUser.save();
-    } else {
     }
     
 
@@ -606,7 +605,9 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
         serviceData: serviceResult.data, // Pass through any data returned by the service
         creditsConsumed: finalCreditsToConsume, // Send back the actual consumed credits
         promotionApplied: !!appliedPromotionId,
-        promotionName: appliedPromotionName
+        promotionName: appliedPromotionName,
+        promotionStartDate: promotion ? promotion.startTime : undefined,
+        promotionEndDate: promotion ? promotion.endTime : undefined
       });
 
     } catch (serviceExecutionError) {

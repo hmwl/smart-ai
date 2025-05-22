@@ -17,7 +17,7 @@
       </div>
       <a-list
         v-else
-        :grid-props="{ gutter: [24, 24], xs: 1, sm: 1, md: 2, lg: 3, xl: 3, xxl:3 }"
+        :grid-props="{ gutter: [24, 24], xs: 24, sm: 12, md: 12, lg: 8, xl: 8, xxl: 6 }"
         :data="applications"
         class="app-list"
       >
@@ -35,6 +35,7 @@
                   <div v-else class="app-cover-placeholder">
                     <icon-apps style="font-size: 48px;"/>
                   </div>
+                  <a-tag v-if="item.type" size="small" class="absolute top-5 right-2 filter-blur">{{ item.type.name }}</a-tag>
                 </div>
               </template>
               <a-card-meta :title="item.name">
@@ -44,14 +45,23 @@
               </a-card-meta>
               <div class="app-card-footer">
                 <div class="app-info">
-                  <a-tag v-if="item.type" :color="getTagColor(item.type.name)" bordered size="small">{{ item.type.name }}</a-tag>
-                  <a-tag v-if="item.activePromotion" color="red" bordered size="small">
-                    <icon-fire /> {{ item.activePromotion.description }}
-                  </a-tag>
-                  <a-tag v-if="!item.activePromotion && item.creditsConsumed === 0" color="green" bordered size="small">免费</a-tag>
-                  <a-tag v-else-if="!item.activePromotion && item.creditsConsumed > 0" color="gold" bordered size="small">{{ item.creditsConsumed }} 积分</a-tag>
-                  <!-- If there is an active promotion, the original price might still be relevant or shown struck-through -->
-                  <a-tag v-if="item.activePromotion && item.creditsConsumed > 0" color="gold" bordered size="small" style="text-decoration: line-through;">{{ item.creditsConsumed }} 积分</a-tag>
+                  <template v-if="item.activePromotion">
+                    <template v-if="getDiscountedCredits(item) === 0">
+                      <a-tag color="green" bordered size="small"><icon-fire /> 限时免费</a-tag>
+                    </template>
+                    <template v-else>
+                      <a-tag color="red" bordered size="small"><icon-fire /> {{ getDiscountedCredits(item) }} 积分</a-tag>
+                    </template>
+                    <span v-if="item.creditsConsumed > 0 && item.creditsConsumed !== getDiscountedCredits(item)" style="text-decoration: line-through; margin-left: 4px;">{{ item.creditsConsumed }} 积分</span>
+                    <!-- Display promotion deadline -->
+                    <div v-if="getPromotionDeadlineText(item)" class="promotion-dates" style="font-size: 11px; color: var(--color-text-3);">
+                      {{ getPromotionDeadlineText(item) }}
+                    </div>
+                  </template>
+                  <template v-else>
+                    <a-tag v-if="item.creditsConsumed === 0" color="green" bordered size="small">免费</a-tag>
+                    <a-tag v-else color="gold" bordered size="small">{{ item.creditsConsumed }} 积分</a-tag>
+                  </template>
                 </div>
                 <div class="flex w-full justify-center mt-8">
                   <a-button type="primary" @click="handleAppClick(item)">查看详情</a-button>
@@ -91,6 +101,59 @@ const router = useRouter();
 
 const aiTypes = ref([]);
 const selectedTypeKey = ref('all'); // 'all' or type._id
+
+const formatDateShort = (dateString) => {
+  if (!dateString) return '';
+  try {
+    // Format to YYYY-MM-DD or similar short form
+    const date = new Date(dateString);
+    return `${date.getFullYear()}-${('0' + (date.getMonth() + 1)).slice(-2)}-${('0' + date.getDate()).slice(-2)}`;
+  } catch (e) {
+    return dateString;
+  }
+};
+
+const getPromotionDeadlineText = (item) => {
+  if (!item || !item.activePromotion || !item.activePromotion.endDate) {
+    return '';
+  }
+
+  const endDate = new Date(item.activePromotion.endDate);
+  const now = new Date();
+
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const promotionEndDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+  const oneDay = 24 * 60 * 60 * 1000;
+  const daysRemaining = Math.round((promotionEndDay - today) / oneDay);
+
+  if (daysRemaining < 0) {
+    return ''; // Or "活动已结束"
+  }
+  if (daysRemaining === 0) {
+    return "活动仅最后一天";
+  }
+  if (daysRemaining <= 7) {
+    return `活动仅剩 ${daysRemaining} 天`;
+  }
+  return `活动截止至 ${formatDateShort(item.activePromotion.endDate)}`;
+};
+
+const getDiscountedCredits = (item) => {
+  if (!item) return 0;
+  const originalCredits = item.creditsConsumed;
+  let finalCredits = originalCredits;
+
+  if (item.activePromotion) {
+    const promo = item.activePromotion;
+    if (promo.discountType === 'percentage' && promo.discountValue !== null) {
+      finalCredits = Math.max(0, Math.round(originalCredits * (1 - parseFloat(promo.discountValue) / 100)));
+    } else if (promo.discountType === 'fixed_reduction' && promo.discountValue !== null) {
+      finalCredits = Math.max(0, originalCredits - parseInt(promo.discountValue, 10));
+    }
+  }
+  return finalCredits;
+};
 
 const getImageUrl = (relativePath) => {
   if (!relativePath) return '';
@@ -169,7 +232,7 @@ onMounted(async () => {
 }
 
 .site-page-header-responsive {
-  background-color: var(--custom-bg-secondary);
+  background-color: rgba(35, 40, 49, 0.5);
   border-radius: 4px;
   padding: 16px 24px;
   border: 1px solid rgba(255, 255, 255, 0.1);
@@ -213,7 +276,7 @@ onMounted(async () => {
 
 .app-card-cover {
   width: 100%;
-  padding-top: 56.25%;
+  padding-top: 100%;
   position: relative;
   background-color: rgba(255, 255, 255, 0.05);
 }
@@ -267,6 +330,7 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  align-items: center;
 }
 
 .empty-state {

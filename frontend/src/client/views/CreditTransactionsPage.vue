@@ -229,7 +229,7 @@ onMounted(() => {
 }
 
 .site-page-header {
-  background-color: var(--custom-bg-secondary);
+  background-color: rgba(35, 40, 49, 0.5);
   border-radius: 4px;
   padding: 16px 24px;
   border: 1px solid rgba(255, 255, 255, 0.1);

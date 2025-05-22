@@ -1,16 +1,5 @@
 <template>
   <div class="ai-app-detail-page p-4 md:p-6">
-    <a-page-header title="AI 应用详情" @back="goBack" class="page-header-custom">
-      <template #subtitle>
-        <span v-if="application && !loading">{{ application.name }}</span>
-      </template>
-      <template #extra>
-        <div class="flex items-center gap-2">
-          <a-button @click="goBack">返回列表</a-button>
-          <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig">执行应用</a-button>
-        </div>
-      </template>
-    </a-page-header>
 
     <a-spin :loading="loading" tip="加载应用详情中..." style="width:100%;">
       <div v-if="errorMsg" class="error-display">
@@ -21,7 +10,7 @@
         <div class="top-section-grid">
           <!-- Left Column: App Info -->
           <div class="app-info-column">
-            <a-card class="info-card scrollable-card" :bordered="false" title="应用信息">
+            <a-card class="info-card scrollable-card" :bordered="false" title="应用信息" @click="goBack">
               <div class="cover-image-container">
                 <img v-if="application.coverImageUrl" :src="getImageUrl(application.coverImageUrl)" :alt="application.name" class="cover-image" />
                 <div v-else class="cover-image-placeholder">
@@ -44,15 +33,26 @@
                   </a-tag>
                 </div>
                 <div class="info-item">
-                  <icon-star class="info-icon"/> <strong>所需积分:</strong> 
-                  <template v-if="application.activePromotion">
-                    <a-tag color="red" size="small"><icon-fire /> {{ application.activePromotion.description }}</a-tag>
-                    <span v-if="application.creditsConsumed > 0" style="text-decoration: line-through; margin-left: 8px;">{{ application.creditsConsumed }} 积分</span>
-                  </template>
-                  <template v-else>
-                    <a-tag v-if="application.creditsConsumed === 0" color="green" size="small">免费</a-tag>
-                    <span v-else>{{ application.creditsConsumed }} 积分</span>
-                  </template>
+                  <icon-star class="info-icon"/> <strong>所需积分:</strong>
+                  <div>
+                    <template v-if="application.activePromotion">
+                      <template v-if="discountedCredits === 0">
+                        <a-tag color="green" size="small"><icon-fire /> 限时免费</a-tag>
+                      </template>
+                      <template v-else>
+                        <a-tag color="red" size="small"><icon-fire /> {{ discountedCredits }} 积分</a-tag>
+                      </template>
+                      <span v-if="originalCreditsDisplay > 0 && originalCreditsDisplay !== discountedCredits" style="text-decoration: line-through; margin-left: 8px;">{{ originalCreditsDisplay }} 积分</span>
+                      <!-- Display promotion deadline -->
+                      <div v-if="promotionDeadlineText" class="promotion-dates" style="font-size: 12px; color: var(--color-text-3);">
+                        {{ promotionDeadlineText }}
+                      </div>
+                    </template>
+                    <template v-else>
+                      <a-tag v-if="originalCreditsDisplay === 0" color="green" size="small">免费</a-tag>
+                      <span v-else>{{ originalCreditsDisplay }} 积分</span>
+                    </template>
+                  </div>
                 </div>
                 <div class="info-item" v-if="application.tags && application.tags.length > 0">
                   <icon-bookmark class="info-icon"/> <strong>标签:</strong> 
@@ -67,9 +67,6 @@
                   <icon-history class="info-icon"/> <strong>最后更新:</strong> {{ formatDate(application.updatedAt) }}
                 </div>
               </div>
-              <a-divider title-position="left">详细介绍</a-divider>
-              <div v-if="application.longDescription" v-html="application.longDescription" class="long-description-content"></div>
-              <p v-else>暂无详细介绍。</p>
             </a-card>
           </div>
 
@@ -85,7 +82,9 @@
                 :fields="formSchema.fields"
                 v-model:form-model="dynamicFormModel"
                 ref="dynamicFormRendererRef"
+                class=""
               />
+              <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成</a-button>
             </a-card>
             <a-empty v-else description="此应用无需配置" class="empty-config-placeholder"/>
           </div>
@@ -93,7 +92,7 @@
           <!-- Right Column: Result Content (Placeholder) -->
           <div class="app-result-column">
             <a-card class="details-card scrollable-card" title="结果内容" :bordered="false">
-              <p>此处将显示应用的执行结果。（待实现）</p>
+              <p>此处将显示应用的生成结果。（待实现）</p>
               <!-- Placeholder for future result display components -->
             </a-card>
           </div>
@@ -103,11 +102,11 @@
         <div class="bottom-section-results">
           <a-tabs type="line" class="results-tabs">
             <a-tab-pane key="recommended" title="推荐">
-              <p>推荐的应用执行结果将显示在这里。（待实现）</p>
+              <p>推荐的应用生成结果将显示在这里。（待实现）</p>
               <!-- Placeholder for recommended results list (e.g., WorkCard components) -->
             </a-tab-pane>
             <a-tab-pane key="latest" title="最新">
-              <p>最新的应用执行结果将显示在这里。（待实现）</p>
+              <p>最新的应用生成结果将显示在这里。（待实现）</p>
               <!-- Placeholder for latest results list -->
             </a-tab-pane>
           </a-tabs>
@@ -146,6 +145,61 @@ const dynamicFormModel = ref({});
 const dynamicFormRendererRef = ref(null);
 
 const appId = computed(() => route.params.id);
+
+const originalCreditsDisplay = computed(() => {
+  if (application.value) {
+    return application.value.creditsConsumed;
+  }
+  return 0;
+});
+
+const discountedCredits = computed(() => {
+  if (!application.value) {
+    return 0;
+  }
+  const originalCredits = application.value.creditsConsumed;
+  let finalCredits = originalCredits;
+
+  if (application.value.activePromotion) {
+    const promo = application.value.activePromotion;
+    if (promo.discountType === 'percentage' && promo.discountValue !== null) {
+      finalCredits = Math.max(0, Math.round(originalCredits * (1 - parseFloat(promo.discountValue) / 100)));
+    } else if (promo.discountType === 'fixed_reduction' && promo.discountValue !== null) {
+      finalCredits = Math.max(0, originalCredits - parseInt(promo.discountValue, 10));
+    }
+  }
+  return finalCredits;
+});
+
+const promotionDeadlineText = computed(() => {
+  if (!application.value || !application.value.activePromotion || !application.value.activePromotion.endDate) {
+    return '';
+  }
+
+  const endDate = new Date(application.value.activePromotion.endDate);
+  const now = new Date();
+
+  // Normalize to midnight to compare dates only
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const promotionEndDay = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+
+  const oneDay = 24 * 60 * 60 * 1000; // milliseconds in a day
+  const daysRemaining = Math.round((promotionEndDay - today) / oneDay);
+
+  if (daysRemaining < 0) { // Promotion has ended
+    return ''; // Or perhaps "活动已结束" if we want to show that
+  }
+
+  if (daysRemaining === 0) {
+    return "活动仅最后一天";
+  }
+
+  if (daysRemaining <= 7) {
+    return `活动仅剩 ${daysRemaining} 天`;
+  }
+
+  return `活动截止至 ${endDate.getFullYear()}-${('0' + (endDate.getMonth() + 1)).slice(-2)}-${('0' + endDate.getDate()).slice(-2)}`;
+});
 
 const canLaunch = computed(() => {
   if (!application.value || application.value.status !== 'active') return false;
@@ -250,9 +304,9 @@ const launchApp = async () => {
   }
 
   Modal.confirm({
-    title: '确认执行应用',
+    title: '确认生成',
     content: `执行应用 "${appName}" ${finalCreditsToDisplay > 0 ? `将消耗 ${finalCreditsToDisplay} 积分` : '免费'}${application.value.activePromotion ? ' (已应用优惠)' : ''}。是否继续？`,
-    okText: '确认执行',
+    okText: '确认生成',
     cancelText: '取消',
     onOk: async () => {
       try {
@@ -260,16 +314,12 @@ const launchApp = async () => {
           formConfig: formConfigData 
         });
         
-        const actualCreditsConsumed = response.data.creditsConsumed; // Get actual consumed credits from response
+        const actualCreditsConsumed = response.data.creditsConsumed;
         Message.success(response.data.message || `应用 "${appName}" 执行成功！${actualCreditsConsumed > 0 ? `已消耗 ${actualCreditsConsumed} 积分。` : ''}`);
         
         if (refreshUserData) { 
           refreshUserData();
         }
-
-        // TODO: Handle and display results from response.data
-        // e.g., if (response.data.result) { /* update some reactive property for display */ }
-        console.log('Launch API Response:', response.data);
         
       } catch (error) {
         Message.error(error.response?.data?.message || error.message || '执行应用失败');
@@ -277,13 +327,12 @@ const launchApp = async () => {
       }
     },
     onCancel: () => {
-      // User cancelled the operation
     }
   });
 };
 
 const launchAppWithConfig = () => {
-    launchApp(); // This function will be called by the button
+    launchApp();
 }
 
 onMounted(() => {
@@ -296,21 +345,8 @@ onMounted(() => {
 
 <style scoped>
 .ai-app-detail-page {
-  color: var(--color-text-1); /* Adjusted for general theme compatibility */
-  min-height: calc(100vh - 100px); /* Ensure page takes available height */
-}
-
-.page-header-custom {
-  background-color: var(--color-bg-2); /* Use theme variable */
-  border-radius: 4px;
-  padding: 16px 24px;
-  border: 1px solid var(--color-border-2); /* Use theme variable */
-  margin-bottom: 20px;
-}
-
-.page-header-custom .arco-page-header-title,
-.page-header-custom .arco-page-header-subtitle {
-  color: var(--color-text-1); /* Use theme variable */
+  color: var(--color-text-1);
+  min-height: calc(100vh - 100px);
 }
 
 .page-content-wrapper {
@@ -321,32 +357,37 @@ onMounted(() => {
 
 .top-section-grid {
   display: grid;
-  grid-template-columns: 380px 1fr 1fr; /* Fixed left, two flexible for middle and right */
+  grid-template-columns: 350px 380px 1fr;
   gap: 24px;
-  align-items: flex-start; /* Align items to the start of the grid cell */
-  /* max-height: calc(70vh - 50px); /* Example max height for the top section */ 
-  /* overflow: hidden; /* This will make individual columns scrollable if they overflow */
+  align-items: flex-start;
 }
 
 .app-info-column, .app-config-column, .app-result-column {
   display: flex;
   flex-direction: column; 
-  /* max-height: calc(70vh - 70px); /* Match top-section-grid's effective content height */
-  /* overflow-y: auto; /* Individual column scrolling */
+  height: 100%;
 }
 
 .scrollable-card {
-  flex-grow: 1; /* Allow card to grow */
-  overflow-y: auto; /* Make content within card scrollable */
-  max-height: calc(100vh - 200px); /* Adjust as needed, considering header and other elements */
+  flex-grow: 1;
+  overflow-y: auto;
+  max-height: calc(100vh - 200px);
 }
 
 .info-card, .details-card, .config-card {
-  background-color: var(--color-bg-2); /* Use theme variable */
-  border: 1px solid var(--color-border-2); /* Use theme variable */
+  background-color: var(--color-bg-2);
+  border: 1px solid var(--color-border-2);
   border-radius: 8px;
-  color: var(--color-text-1); /* Use theme variable */
-  /* height: 100%; /* Make cards fill their column height */
+  color: var(--color-text-1);
+  display: flex;
+  flex-direction: column;
+}
+
+:deep(.config-card .arco-card-body){
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: 1;
 }
 
 .details-card .arco-card-header,
@@ -364,7 +405,7 @@ onMounted(() => {
   width: 100%;
   padding-top: 56.25%; 
   position: relative;
-  background-color: var(--color-fill-2); /* Use theme variable */
+  background-color: var(--color-fill-2);
   border-radius: 6px;
   overflow: hidden;
   margin-bottom: 20px;
@@ -392,7 +433,7 @@ onMounted(() => {
 }
 
 .app-title {
-  font-size: 22px; /* Slightly reduced */
+  font-size: 22px;
   font-weight: 600;
   color: var(--color-text-1);
   margin-bottom: 8px;
@@ -408,22 +449,22 @@ onMounted(() => {
 .info-section {
   display: flex;
   flex-direction: column;
-  gap: 10px; /* Reduced gap */
+  gap: 10px;
 }
 
 .info-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 13px; /* Slightly reduced */
+  font-size: 13px;
   color: var(--color-text-2);
 }
 .info-item strong {
   color: var(--color-text-1);
 }
 .info-icon {
-  color: var(--primary-6); /* Use theme primary color */
-  font-size: 15px; /* Slightly reduced */
+  color: var(--primary-6);
+  font-size: 15px;
 }
 
 .long-description-content {
@@ -444,7 +485,7 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 200px; /* Give it some height */
+  height: 200px;
   background-color: var(--color-bg-2);
   border: 1px solid var(--color-border-2);
   border-radius: 8px;
@@ -458,11 +499,6 @@ onMounted(() => {
   margin: 0;
 }
 
-/* Remove fixed height for config-card if it exists, let content define it or use column properties */
-/* .config-card { */
-  /* margin-top: 24px; /* If it's in its own column, this might not be needed */
-/* } */
-
 .bottom-section-results {
   margin-top: 24px;
   border: 1px solid var(--color-border-2);
@@ -472,27 +508,10 @@ onMounted(() => {
 }
 
 .results-tabs .arco-tabs-nav::before {
-  display: none; /* Remove default bottom border of tabs nav */
+  display: none;
 }
 
 .results-tabs .arco-tabs-content {
   padding-top: 16px;
 }
-
-/* Ensuring cards within columns can scroll if content overflows */
-/* .app-info-column .arco-card, 
-.app-config-column .arco-card, 
-.app-result-column .arco-card {
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-} */
-
-/* .app-info-column .arco-card-body, 
-.app-config-column .arco-card-body, 
-.app-result-column .arco-card-body {
-  flex-grow: 1;
-  overflow-y: auto;
-} */
-
 </style> 

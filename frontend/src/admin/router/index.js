@@ -91,8 +91,8 @@ const routes = [
   },
   {
     path: '/promotion-activities',
-    name: 'PromotionActivityManagement',
-    component: () => import('../views/PromotionActivityManagement.vue'),
+    name: 'ActivityManagement',
+    component: () => import('../views/ActivityManagement.vue'),
     meta: { title: '优惠活动管理' }
   },
   // New Routes for Works Management

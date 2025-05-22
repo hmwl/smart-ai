@@ -66,7 +66,7 @@
         <a-sub-menu key="credits-management-group">
             <template #icon><icon-gift /></template>
             <template #title>积分管理</template>
-            <a-menu-item key="promotion-activity-management">
+            <a-menu-item key="activity-management">
               <template #icon><icon-fire /></template>
               活动管理
             </a-menu-item>
@@ -168,7 +168,7 @@ const targetSelectedKey = computed(() => {
       'ApiManagement': 'api-management',
       'CreditTransactionManagement': 'credit-transactions',
       'CreditSettingsManagement': 'credit-settings',
-      'PromotionActivityManagement': 'promotion-activity-management',
+      'ActivityManagement': 'activity-management',
       'InspirationMarket': 'inspiration-market',
       'AllWorks': 'all-works',
       'EnumConfigManagement': 'enum-config-management',
@@ -191,7 +191,7 @@ watch(targetSelectedKey, (newKey) => {
   if (['api-management', 'ai-type-management', 'enum-config-management', 'ai-app-management'].includes(newKey)) {
       keysToOpen.push('ai-management-group');
   }
-  if (['credit-transactions', 'credit-settings', 'promotion-activity-management'].includes(newKey)) {
+  if (['credit-transactions', 'credit-settings', 'activity-management'].includes(newKey)) {
       keysToOpen.push('credits-management-group');
   }
   if (['inspiration-market', 'all-works'].includes(newKey)) {
@@ -221,7 +221,7 @@ const onClickMenuItem = (key) => {
     'api-management': { name: 'ApiManagement' },
     'credit-transactions': { name: 'CreditTransactionManagement' },
     'credit-settings': { name: 'CreditSettingsManagement' },
-    'promotion-activity-management': { name: 'PromotionActivityManagement' },
+    'activity-management': { name: 'ActivityManagement' },
     'inspiration-market': { name: 'InspirationMarket' },
     'all-works': { name: 'AllWorks' },
     'enum-config-management': { name: 'EnumConfigManagement' },

@@ -91,7 +91,9 @@ async function attachActivePromotions(applications) {
                 discountType: promoDetails.discountType,
                 discountValue: promoDetails.discountValue,
                 description: promoDescription,
-                _id: promotion._id
+                _id: promotion._id,
+                startDate: promotion.startTime,
+                endDate: promotion.endTime
             };
         }
         return appObj;
