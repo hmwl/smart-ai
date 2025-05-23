@@ -4,7 +4,6 @@ const mongoose = require('mongoose');
 const AiApplication = require('../models/AiApplication');
 const AiType = require('../models/AiType'); // Needed for validation
 const ApiEntry = require('../models/ApiEntry'); // Needed for validation
-const { PLATFORM_TYPES } = require('../models/ApiEntry'); // Import PLATFORM_TYPES
 const User = require('../models/User'); // Added User model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
 const EnumConfig = require('../models/EnumConfig'); // Import EnumConfig model

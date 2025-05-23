@@ -70,6 +70,9 @@ const enumTypesRoutes = require('./routes/enumTypes');
 const enumConfigsRoutes = require('./routes/enumConfigs');
 const publicEnumApiRoutes = require('./routes/publicEnumApi'); // Import new public enum API
 
+// Import new Platform routes
+const platformRoutes = require('./routes/platforms');
+
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
@@ -91,6 +94,9 @@ app.use('/api/works', authenticateToken, isAdmin, worksRoutes);
 app.use('/api/inspiration-categories', authenticateToken, isAdmin, inspirationCategoriesRoutes);
 app.use('/api/enum-types', authenticateToken, isAdmin, enumTypesRoutes);
 app.use('/api/enum-configs', authenticateToken, isAdmin, enumConfigsRoutes);
+
+// Mount Platform routes (admin only)
+app.use('/api/platforms', authenticateToken, isAdmin, platformRoutes);
 
 // Mount public routes
 app.use('/api/public', publicRoutes); // Restore public routes

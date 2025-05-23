@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const generateCustomId = require('../utils/generateCustomId');
-const { PLATFORM_TYPES } = require('./ApiEntry'); // Import PLATFORM_TYPES
+const Platform = require('./Platform'); // For dynamic platform validation
 
 const enumConfigSchema = new Schema({
   _id: {
@@ -29,8 +29,8 @@ const enumConfigSchema = new Schema({
   platform: {
     type: String,
     required: [true, '平台不能为空'],
-    enum: PLATFORM_TYPES, // Use the imported enum
     trim: true,
+    // Remove static enum validation, will validate dynamically in pre-save hook
   },
   isUsed: {
     type: Boolean,
@@ -52,8 +52,21 @@ const enumConfigSchema = new Schema({
   timestamps: true // Adds createdAt and updatedAt
 });
 
-// Pre-save hook for ID generation
-enumConfigSchema.pre('save', function (next) {
+// Pre-save hook for platform validation and ID generation
+enumConfigSchema.pre('save', async function (next) {
+  // Validate platform against active platforms
+  if (this.isNew || this.isModified('platform')) {
+    try {
+      const platformDoc = await Platform.findOne({ name: this.platform, status: 'active' });
+      if (!platformDoc) {
+        return next(new Error(`无效或未激活的平台类型: ${this.platform}`));
+      }
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  // ID generation
   if (this.isNew && !this._idSetted) {
     this._id = generateCustomId('EC');
   }

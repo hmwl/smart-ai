@@ -24,6 +24,17 @@
             {{ type.name }}
           </a-option>
         </a-select>
+        <!-- Platform Filter -->
+        <a-select
+          v-model="filterPlatform"
+          placeholder="按平台筛选"
+          allow-clear
+          style="width: 150px;"
+        >
+          <a-option v-for="platform in platformTypes" :key="platform._id" :value="platform._id">
+            {{ platform.name }}
+          </a-option>
+        </a-select>
         <!-- Status Filter -->
         <a-select
           v-model="filterStatus"
@@ -87,6 +98,14 @@
               <span v-if="record.type && record.type.name">{{ record.type.name }} ({{ record.type.uri }})</span>
               <span v-else-if="record.type">{{ record.type }}</span>
               <span v-else>未知类型</span>
+            </template>
+          </a-table-column>
+          <a-table-column title="平台类型" data-index="platformType" :width="120">
+            <template #cell="{ record }">
+              <a-tag v-if="record.platformType" color="blue">
+                {{ typeof record.platformType === 'object' ? record.platformType.name : record.platformType }}
+              </a-tag>
+              <span v-else>-</span>
             </template>
           </a-table-column>
           <a-table-column title="API 数量" data-index="apis.length" :width="120" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
@@ -244,8 +263,8 @@
             :filter-option="filterOption"
             allow-clear
           >
-            <a-option v-for="type in platformTypes" :key="type" :value="type">
-              {{ type }}
+            <a-option v-for="platform in platformTypes" :key="platform._id" :value="platform._id">
+              {{ platform.name }}
             </a-option>
           </a-select>
         </a-form-item>
@@ -329,6 +348,7 @@ const allApiEntries = ref([]); // To store all fetched API entries
 const loading = ref(false);
 const searchName = ref('');
 const filterType = ref(undefined);
+const filterPlatform = ref(undefined);
 const filterStatus = ref(undefined);
 const filterCredits = ref(''); // New filter state, default to 'all'
 
@@ -409,6 +429,21 @@ const filteredData = computed(() => {
     const typeMatch = filterType.value !== undefined && filterType.value !== ''
                       ? (app.type && app.type._id === filterType.value) 
                       : true;
+    
+    // Platform filter logic
+    const platformMatch = filterPlatform.value !== undefined && filterPlatform.value !== ''
+                          ? (() => {
+                              // Handle both object and string platformType
+                              if (typeof app.platformType === 'object' && app.platformType._id) {
+                                return app.platformType._id === filterPlatform.value;
+                              } else if (typeof app.platformType === 'string') {
+                                // Find platform by name
+                                const platform = platformTypes.value.find(p => p.name === app.platformType);
+                                return platform && platform._id === filterPlatform.value;
+                              }
+                              return false;
+                            })()
+                          : true;
                       
     const statusMatch = filterStatus.value !== undefined && filterStatus.value !== '' 
                       ? app.status === filterStatus.value 
@@ -422,7 +457,7 @@ const filteredData = computed(() => {
         creditsMatch = app.creditsConsumed > 0;
       }
     }
-    return nameMatch && typeMatch && statusMatch && creditsMatch;
+    return nameMatch && typeMatch && platformMatch && statusMatch && creditsMatch;
   });
   return result;
 });
@@ -444,18 +479,27 @@ const availableApiOptionsForForm = computed(() => {
   if (!formState.value.platformType) {
     return []; // No platform type selected for the AI App, so no APIs can be chosen
   }
+  
+  // 根据选择的平台类型ID找到对应的平台名称
+  const selectedPlatform = platformTypes.value.find(p => p._id === formState.value.platformType);
+  const platformName = selectedPlatform ? selectedPlatform.name : null;
+  
+  if (!platformName) {
+    return [];
+  }
+  
   const filtered = allApiEntries.value
-    .filter(api => api.platformType === formState.value.platformType && api.status === 'active');
+    .filter(api => api.platformType === platformName && api.status === 'active');
   
   const mapped = filtered.map((api, index) => {
       const apiId = api._id;
-      const platformName = api.platformName;
+      const platformInstanceName = api.platformName;
       const configApiUrl = api.config?.apiUrl;
-      const legacyApiUrl = api.apiUrl; // The top-level one
+      const legacyApiUrl = api.apiUrl;
       const displayUrl = configApiUrl || legacyApiUrl || 'Config N/A';
       
       const option = {
-        label: `${platformName} (${apiId}) - ${displayUrl}`,
+        label: `${platformInstanceName} (${apiId}) - ${displayUrl}`,
         value: apiId,
       };
       return option;
@@ -520,7 +564,7 @@ const fetchData = async () => {
     // Fetch AI Types and Platform Types first (or in parallel)
     const [typesResponse, platformTypesResponse] = await Promise.all([
       apiService.get('/ai-types'), // Assuming this fetches ALL active types for dropdowns
-      apiService.getApiPlatformTypes()
+      apiService.get('/platforms') // 使用新的平台 API
     ]);
     aiTypes.value = typesResponse.data || [];
     platformTypes.value = platformTypesResponse.data || [];
@@ -569,6 +613,7 @@ const fetchData = async () => {
 const refreshData = () => {
   searchName.value = '';
   filterType.value = undefined;
+  filterPlatform.value = undefined;
   filterStatus.value = undefined;
   filterCredits.value = undefined;
   pagination.current = 1; // Reset to first page
@@ -619,13 +664,13 @@ const fetchAiTypes = async () => {
 
 const fetchPlatformTypes = async () => {
   try {
-    const response = await apiService.getApiPlatformTypes();
+    const response = await apiService.get('/platforms');
+    // 直接使用完整的平台对象
     platformTypes.value = response.data;
   } catch (error) {
     console.error('Error fetching platform types:', error);
     Message.error('获取平台类型失败');
-    // Fallback in case of error, ensuring the dropdown is still somewhat usable
-    platformTypes.value = ['ComfyUI', 'OpenAI', 'StabilityAI', 'Midjourney', 'DallE', 'Custom']; 
+    platformTypes.value = [];
   }
 };
 
@@ -683,9 +728,21 @@ const showEditModal = async (record) => {
   formState.value.tags = record.tags ? [...record.tags] : [];
   
   formState.value.type = record.type ? record.type._id : null;
-  formState.value.platformType = record.platformType || null; 
-  // formState.value.apis = record.apis ? record.apis.map(api => api._id) : []; // Defer this assignment
-
+  
+  // 根据平台类型名称找到对应的平台ID
+  if (record.platformType) {
+    if (typeof record.platformType === 'object' && record.platformType._id) {
+      // 如果是对象，直接使用ID
+      formState.value.platformType = record.platformType._id;
+    } else {
+      // 如果是字符串名称，找到对应的平台ID
+      const platform = platformTypes.value.find(p => p.name === record.platformType);
+      formState.value.platformType = platform ? platform._id : null;
+    }
+  } else {
+    formState.value.platformType = null;
+  }
+  
   formState.value.status = record.status;
   formState.value.creditsConsumed = record.creditsConsumed === undefined ? 0 : Number(record.creditsConsumed);
   const relativePath = record.coverImageUrl;
@@ -702,7 +759,8 @@ const showEditModal = async (record) => {
 
   await nextTick(); // Wait for DOM updates, options to compute
   
-  const apiIds = record.apis ? record.apis.map(api => api._id) : [];
+  // 确保正确设置 APIs 数组
+  const apiIds = record.apis ? record.apis.map(api => api._id || api) : [];
   formState.value.apis = apiIds;
 
   formRef.value?.clearValidate(); 
@@ -782,21 +840,16 @@ const removeImage = () => {
 // --- Form Submission Logic ---
 const handleSubmit = async () => {
   try {
-    // Validate the form first
     await formRef.value.validate();
+    modalLoading.value = true;
 
-    modalLoading.value = true; // Start loading indicator
-
-    // Create FormData object
     const formData = new FormData();
-
     // Append standard fields
     formData.append('name', formState.value.name);
     formData.append('description', formState.value.description || '');
     formData.append('type', formState.value.type);
     formData.append('status', formState.value.status);
     formData.append('creditsConsumed', formState.value.creditsConsumed === undefined ? 0 : Number(formState.value.creditsConsumed));
-    formData.append('platformType', formState.value.platformType);
 
     // Append array fields: tags and apis
     if (formState.value.tags && Array.isArray(formState.value.tags)) {
@@ -807,30 +860,29 @@ const handleSubmit = async () => {
       });
     }
 
-    // --- Revision: Normalize formState.apis before check/use and remove logs --- 
+    // 使用平台名称而不是ID
+    if (formState.value.platformType) {
+      const selectedPlatform = platformTypes.value.find(p => p._id === formState.value.platformType);
+      const platformName = selectedPlatform ? selectedPlatform.name : formState.value.platformType;
+      formData.append('platformType', platformName);
+    }
+
+    // 处理关联的 APIs
     let apiIdsToAppend = [];
     const currentApis = formState.value.apis;
     if (Array.isArray(currentApis)) {
         apiIdsToAppend = currentApis;
-    } else if (currentApis) { // If it's truthy but not an array (e.g., a single string ID)
-        apiIdsToAppend = [currentApis]; // Wrap it in an array
+    } else if (currentApis) {
+        apiIdsToAppend = [currentApis];
     }
-    // Now apiIdsToAppend is guaranteed to be an array (possibly empty)
-    // const shouldAppendApis = formState.value.apis && Array.isArray(formState.value.apis) && formState.value.apis.length > 0;
-    // --- End Revision ---
     
-    // --- Revision: Use normalized array --- 
     if (apiIdsToAppend.length > 0) { 
       apiIdsToAppend.forEach(apiId => {
-    // --- End Revision ---
         if (apiId) {
            formData.append('apis', apiId);
         }
       });
     }
-     // Ensure empty arrays are handled if backend requires an empty array marker, otherwise omit
-     // else { formData.append('apis', ''); } // Example if backend needs empty marker
-
 
     // Append the cover image file if a new one is selected
     if (formState.value.coverImageFile instanceof File) {
@@ -839,8 +891,6 @@ const handleSubmit = async () => {
       // If editing and the remove flag is set (and no new file), signal removal
       formData.append('removeCoverImage', 'true');
     }
-    // Note: We don't send coverImage or coverImageUrl fields directly,
-    // only the file or the removal flag.
 
     // Get access token
     const accessToken = localStorage.getItem('accessToken');

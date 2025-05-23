@@ -2,9 +2,9 @@ const express = require('express');
 const router = express.Router();
 const EnumType = require('../models/EnumType');
 const EnumConfig = require('../models/EnumConfig'); // To check for usage
+const Platform = require('../models/Platform'); // For dynamic platform validation
 const authenticateToken = require('../middleware/authenticateToken');
 const isAdmin = require('../middleware/isAdmin');
-const { PLATFORM_TYPES } = require('../models/ApiEntry'); // For validation
 
 // Middleware to get EnumType by ID
 async function getEnumType(req, res, next) {
@@ -19,6 +19,26 @@ async function getEnumType(req, res, next) {
     }
     res.enumType = enumType;
     next();
+}
+
+// Helper function to validate platform
+async function validatePlatform(platformName) {
+    try {
+        const platform = await Platform.findOne({ name: platformName, status: 'active' });
+        return !!platform;
+    } catch (error) {
+        return false;
+    }
+}
+
+// Helper function to get all active platform names
+async function getActivePlatformNames() {
+    try {
+        const platforms = await Platform.find({ status: 'active' }).select('name').lean();
+        return platforms.map(p => p.name);
+    } catch (error) {
+        return [];
+    }
 }
 
 // GET all Enum Types
@@ -45,8 +65,13 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
         return res.status(400).json({ message: '类型名称和平台不能为空' });
     }
 
-    if (!PLATFORM_TYPES.includes(platform)) {
-        return res.status(400).json({ message: `无效的平台类型: ${platform}。允许的平台有: ${PLATFORM_TYPES.join(', ')}` });
+    // Validate platform dynamically
+    const isValidPlatform = await validatePlatform(platform);
+    if (!isValidPlatform) {
+        const activePlatforms = await getActivePlatformNames();
+        return res.status(400).json({ 
+            message: `无效的平台类型: ${platform}。当前可用的平台有: ${activePlatforms.join(', ')}` 
+        });
     }
 
     const enumType = new EnumType({
@@ -82,8 +107,15 @@ router.get('/:id', authenticateToken, isAdmin, getEnumType, async (req, res) => 
 router.put('/:id', authenticateToken, isAdmin, getEnumType, async (req, res) => {
     const { name, platform, status } = req.body;
 
-    if (platform && !PLATFORM_TYPES.includes(platform)) {
-        return res.status(400).json({ message: `无效的平台类型: ${platform}。允许的平台有: ${PLATFORM_TYPES.join(', ')}` });
+    // Validate platform dynamically if provided
+    if (platform) {
+        const isValidPlatform = await validatePlatform(platform);
+        if (!isValidPlatform) {
+            const activePlatforms = await getActivePlatformNames();
+            return res.status(400).json({ 
+                message: `无效的平台类型: ${platform}。当前可用的平台有: ${activePlatforms.join(', ')}` 
+            });
+        }
     }
 
     if (status === 'inactive' && res.enumType.status !== 'inactive') {

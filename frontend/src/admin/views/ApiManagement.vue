@@ -10,14 +10,27 @@
             placeholder="搜索平台名称或 API 地址" 
             allow-clear
             style="width: 250px;"
+            @search="fetchApiEntries" 
+            @press-enter="fetchApiEntries"
          />
-        <a-select v-model="selectedPlatformTypeFilter" placeholder="按平台类型筛选" allow-clear style="width: 180px;">
+        <a-select 
+          v-model="selectedPlatformTypeFilter" 
+          placeholder="按平台类型筛选" 
+          allow-clear 
+          style="width: 180px;" 
+          @change="fetchApiEntries" 
+          :loading="loadingPlatformTypes"
+        >
             <a-option v-for="ptype in platformTypes" :key="ptype" :value="ptype">{{ ptype }}</a-option>
         </a-select>
-         <a-select v-model="selectedStatus" placeholder="按状态筛选" allow-clear style="width: 150px;">
+         <a-select v-model="selectedStatus" placeholder="按状态筛选" allow-clear style="width: 150px;" @change="fetchApiEntries">
             <a-option value="active">活动</a-option>
             <a-option value="inactive">禁用</a-option>
         </a-select>
+        <!-- Platform Management Button -->
+        <a-button type="primary" status="warning" @click="openPlatformManagementModal">
+          <template #icon><icon-settings /></template>平台管理
+        </a-button>
         <!-- Action Buttons -->
         <a-button type="primary" @click="openCreateModal">
           <template #icon><icon-plus /></template> 添加 API
@@ -46,14 +59,24 @@
                </template>
            </a-table-column>
           <a-table-column title="平台实例名称" data-index="platformName" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
-          <a-table-column title="平台类型" data-index="platformType" :width="150" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
+          <a-table-column title="平台类型" data-index="platformType" :width="150" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+            <template #cell="{ record }">
+              <a-tag v-if="record.platform && record.platform.name" :color="getPlatformColor(record.platform.name)">
+                {{ record.platform.name }}
+              </a-tag>
+              <a-tag v-else-if="record.platformType" :color="getPlatformColor(record.platformType)">
+                {{ record.platformType }} 
+              </a-tag>
+              <span v-else>-</span>
+            </template>
+          </a-table-column>
           <a-table-column title="简介" data-index="description" ellipsis tooltip :width="250"></a-table-column>
           <a-table-column title="API 地址/关键配置" data-index="apiUrl" :width="300" ellipsis tooltip>
             <template #cell="{ record }">
-              <div v-if="record.platformType === 'ComfyUI' && record.config && record.config.apiUrl">
+              <div v-if="(record.platform?.name === 'ComfyUI' || record.platformType === 'ComfyUI') && record.config && record.config.apiUrl">
                 <a :href="record.config.apiUrl" target="_blank" class="text-blue-600 hover:underline">{{ record.config.apiUrl }} <icon-launch /></a>
               </div>
-              <div v-else-if="record.platformType === 'OpenAI' && record.config && record.config.apiKey">
+              <div v-else-if="(record.platform?.name === 'OpenAI' || record.platformType === 'OpenAI') && record.config && record.config.apiKey">
                 API Key: {{ record.config.apiKey.substring(0, 5) }}...{{ record.config.apiKey.slice(-4) }}
                 <br/>
                 <span v-if="record.config.defaultModel" class="text-xs text-gray-500">Model: {{ record.config.defaultModel }}</span>
@@ -78,7 +101,15 @@
             </template>
           </a-table-column>
           <a-table-column title="创建时间" data-index="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
-             <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
+             <template #cell="{ record }">
+               {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
+                  year: 'numeric', 
+                  month: 'short', 
+                  day: 'numeric', 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                }) }}
+             </template>
            </a-table-column>
           <a-table-column title="操作" :width="150" fixed="right">
             <template #cell="{ record }">
@@ -105,11 +136,17 @@
     >
       <a-form ref="apiFormRef" :model="apiForm" :rules="formRules" layout="vertical">
         <a-form-item field="platformName" label="平台实例名称">
-          <a-input v-model="apiForm.platformName" placeholder="例如：ComfyUI" />
+          <a-input v-model="apiForm.platformName" placeholder="例如：我的 ComfyUI 服务" />
         </a-form-item>
         
         <a-form-item field="platformType" label="平台类型">
-          <a-select v-model="apiForm.platformType" placeholder="选择平台类型" @change="handlePlatformTypeChange" allow-clear>
+          <a-select 
+            v-model="apiForm.platformType" 
+            placeholder="选择平台类型" 
+            @change="handlePlatformTypeChangeInForm" 
+            allow-clear 
+            :loading="loadingPlatformTypes"
+          >
             <a-option v-for="ptype in platformTypes" :key="ptype" :value="ptype">{{ ptype }}</a-option>
           </a-select>
         </a-form-item>
@@ -119,28 +156,58 @@
         </a-form-item>
 
         <!-- Dynamic Config Fields -->
-        <div v-if="apiForm.platformType && platformSpecificFields[apiForm.platformType]">
+        <div v-if="apiForm.platformType && currentPlatformConfigFields.length > 0">
           <h4 class="text-sm font-medium mb-2 mt-3 text-gray-600">{{ apiForm.platformType }} 特定配置:</h4>
-          <div v-for="field in platformSpecificFields[apiForm.platformType]" :key="field.name">
+          <div v-for="field in currentPlatformConfigFields" :key="field.key">
             <a-form-item 
-              :field="`config.${field.name}`" 
-              :label="field.label"
+              :field="`config.${field.key}`" 
+              :label="field.label + '（' + field.key + '）'"
               :rules="field.required ? [{ required: true, message: `${field.label}不能为空` }] : []"
             >
+              <!-- 文本输入框 -->
               <a-input 
-                v-if="field.type === 'text' || field.type === 'password'"
-                v-model="apiForm.config[field.name]" 
-                :placeholder="field.placeholder"
-                :type="field.type === 'password' ? 'password' : 'text'"
+                v-if="field.type === 'text'"
+                v-model="apiForm.config[field.key]" 
+                :placeholder="field.placeholder || `请输入${field.label}`"
                 allow-clear
               />
-              <!-- Add other field types like select, number if needed -->
+              <!-- 下拉选择框 -->
+              <a-select
+                v-else-if="field.type === 'select'"
+                v-model="apiForm.config[field.key]"
+                :placeholder="field.placeholder || `请选择${field.label}`"
+                allow-clear
+              >
+                <a-option 
+                  v-for="option in field.options" 
+                  :key="option.key" 
+                  :value="option.key"
+                >
+                  {{ option.value }}({{ option.key }})
+                </a-option>
+              </a-select>
+              <!-- 多选框 -->
+              <a-select
+                v-else-if="field.type === 'multiSelect'"
+                v-model="apiForm.config[field.key]"
+                :placeholder="field.placeholder || `请选择${field.label}`"
+                multiple
+                allow-clear
+              >
+                <a-option 
+                  v-for="option in field.options" 
+                  :key="option.key" 
+                  :value="option.key"
+                >
+                  {{ option.value }}({{ option.key }})
+                </a-option>
+              </a-select>
             </a-form-item>
           </div>
         </div>
         
         <!-- Fallback API URL for 'Custom' type or older entries without specific config structure -->
-        <a-form-item v-if="!apiForm.platformType || !platformSpecificFields[apiForm.platformType]?.some(f => f.name === 'apiUrl')" field="apiUrl" label="API 地址 (通用)">
+        <a-form-item v-if="!apiForm.platformType || !currentPlatformConfigFields.some(f => f.key === 'apiUrl')" field="apiUrl" label="API 地址 (通用)">
           <a-input v-model="apiForm.apiUrl" placeholder="例如：https://api.example.com/custom_endpoint" />
         </a-form-item>
 
@@ -157,6 +224,11 @@
         </a-form-item>
       </a-form>
     </a-modal>
+
+    <platform-management-modal 
+      v-model:visible="platformModalVisible"
+      @success="handlePlatformManagementSuccess"
+    />
   </div>
 </template>
 
@@ -167,10 +239,12 @@ import {
     Tag as ATag, Button as AButton, Space as ASpace, Form as AForm, FormItem as AFormItem,
     Input as AInput, Textarea as ATextarea, Select as ASelect, Option as AOption, 
     InputSearch as AInputSearch,
-    Tooltip as ATooltip
+    Tooltip as ATooltip,
+    Popconfirm as APopconfirm
 } from '@arco-design/web-vue';
-import { IconRefresh, IconPlus, IconLaunch } from '@arco-design/web-vue/es/icon';
+import { IconRefresh, IconPlus, IconLaunch, IconSettings } from '@arco-design/web-vue/es/icon';
 import apiService from '@/admin/services/apiService';
+import PlatformManagementModal from '../components/PlatformManagementModal.vue';
 
 const apiEntries = ref([]);
 const isLoading = ref(false);
@@ -181,10 +255,13 @@ const modalVisible = ref(false);
 const isEditMode = ref(false);
 const currentApiEntry = ref(null);
 const apiFormRef = ref(null);
-const apiForm = ref({});
+const apiForm = ref({ config: {} });
 const isSubmitting = ref(false);
 
 const platformTypes = ref([]);
+const platforms = ref([]); // 存储完整的平台信息，包括配置字段
+const loadingPlatformTypes = ref(false);
+const platformModalVisible = ref(false);
 
 const pagination = reactive({
   current: 1,
@@ -195,34 +272,20 @@ const pagination = reactive({
   pageSizeOptions: [10, 15, 20, 50, 100],
 });
 
-const platformSpecificFields = {
-  ComfyUI: [
-    { name: 'apiUrl', label: 'ComfyUI 服务器地址', type: 'text', required: true, placeholder: '例如: http://127.0.0.1:8188' }
-  ],
-  OpenAI: [
-    { name: 'apiKey', label: 'OpenAI API Key', type: 'password', required: true, placeholder: 'sk-...' },
-    { name: 'defaultModel', label: '默认模型 (可选)', type: 'text', placeholder: 'dall-e-3' }
-  ],
-  StabilityAI: [
-    { name: 'apiKey', label: 'StabilityAI API Key', type: 'password', required: true, placeholder: 'sk-...' },
-    { name: 'defaultEngine', label: '默认引擎 (可选)', type: 'text', placeholder: 'stable-diffusion-v1-5' }
-  ],
-  Custom: [
-     { name: 'apiUrl', label: '自定义 API URL', type: 'text', required: true, placeholder: 'http://custom.api/endpoint' },
-     { name: 'customApiKey', label: '自定义 API Key (可选)', type: 'password', placeholder: 'your-custom-key' }
-  ]
-  // Midjourney and DallE might be covered by OpenAI or have their own specifics
-};
-
-const isGenericApiUrlFieldVisible = computed(() => {
-  if (!apiForm.value.platformType) return true; // No type selected, generic field is visible
-  const specificFields = platformSpecificFields[apiForm.value.platformType];
-  // If the platform type has no specific fields defined, or if it does but none of them is named 'apiUrl', the generic field is visible.
-  if (!specificFields) return true;
-  return !specificFields.find(field => field.name === 'apiUrl');
+// 动态获取当前选中平台的配置字段
+const currentPlatformConfigFields = computed(() => {
+  if (!apiForm.value.platformType) return [];
+  const platform = platforms.value.find(p => p.name === apiForm.value.platformType);
+  return platform?.configFields || [];
 });
 
-// Validation Rules
+const isGenericApiUrlFieldVisible = computed(() => {
+  if (!apiForm.value.platformType) return true;
+  const specificFields = currentPlatformConfigFields.value;
+  if (!specificFields) return true;
+  return !specificFields.find(field => field.key === 'apiUrl');
+});
+
 const formRules = computed(() => {
   const rules = {
     platformName: [{ required: true, message: '请输入平台实例名称' }],
@@ -230,7 +293,6 @@ const formRules = computed(() => {
     status: [{ required: true, message: '请选择状态' }],
   };
 
-  // Apply rules for the generic apiUrl field only if it's visible
   if (isGenericApiUrlFieldVisible.value) {
     rules.apiUrl = [
         { required: true, message: '请输入 API 地址' },
@@ -239,12 +301,12 @@ const formRules = computed(() => {
     ];
   }
 
-  if (apiForm.value.platformType && platformSpecificFields[apiForm.value.platformType]) {
-    platformSpecificFields[apiForm.value.platformType].forEach(field => {
+  if (apiForm.value.platformType && currentPlatformConfigFields.value) {
+    currentPlatformConfigFields.value.forEach(field => {
       if (field.required) {
-        rules[`config.${field.name}`] = [{ required: true, message: `${field.label}不能为空` }];
-        if (field.type === 'text' && (field.name.toLowerCase().includes('url') || field.name.toLowerCase().includes('uri'))) {
-           rules[`config.${field.name}`].push(
+        rules[`config.${field.key}`] = [{ required: true, message: `${field.label}不能为空` }];
+        if (field.type === 'text' && (field.key.toLowerCase().includes('url') || field.key.toLowerCase().includes('uri'))) {
+           rules[`config.${field.key}`].push(
             { type: 'url', message: '请输入有效的 URL 格式' },
             { match: /^https?:\/\/.+/, message: 'URL 必须以 http:// 或 https:// 开头' }
           );
@@ -255,7 +317,6 @@ const formRules = computed(() => {
   return rules;
 });
 
-// Filtered API Entries
 const filteredApiEntries = computed(() => {
   return apiEntries.value.filter(entry => {
     const term = searchTerm.value.toLowerCase().trim();
@@ -264,8 +325,8 @@ const filteredApiEntries = computed(() => {
 
     const matchesSearch = !term || 
                           (entry.platformName && entry.platformName.toLowerCase().includes(term)) ||
-                          (entry.config?.apiUrl && entry.config.apiUrl.toLowerCase().includes(term)) || // Search in config.apiUrl
-                          (entry.apiUrl && entry.apiUrl.toLowerCase().includes(term)); // Search in old apiUrl
+                          (entry.config?.apiUrl && entry.config.apiUrl.toLowerCase().includes(term)) ||
+                          (entry.apiUrl && entry.apiUrl.toLowerCase().includes(term));
     
     const matchesStatus = statusFilter === undefined || statusFilter === '' || entry.status === statusFilter;
     const matchesPlatformType = platformTypeFilter === undefined || platformTypeFilter === '' || entry.platformType === platformTypeFilter;
@@ -274,86 +335,102 @@ const filteredApiEntries = computed(() => {
   });
 });
 
-// Helper to get initial form values
 const getInitialApiForm = () => ({
   platformName: '',
   platformType: null,
   description: '',
-  apiUrl: '', // For Custom or fallback
+  apiUrl: '',
   config: {},
   status: 'active',
 });
 
-const handlePlatformTypeChange = (selectedType) => {
-  // Reset config when platform type changes to avoid carrying over old config fields
-  apiForm.value.config = {};
-  // Optionally, pre-fill default values for the new platform type if any
-};
-
-// Helper function to format date
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
-
-// Fetch API Platform Types
-const fetchApiPlatformTypes = async () => {
-  try {
-    const response = await apiService.getApiPlatformTypes();
-    platformTypes.value = response.data;
-  } catch (error) {
-    console.error('Error fetching API platform types:', error);
-    Message.error('获取可用平台类型失败');
-    platformTypes.value = ['ComfyUI', 'OpenAI', 'StabilityAI', 'Midjourney', 'DallE', 'Custom']; // Fallback
+const handlePlatformTypeChangeInForm = async (value, isInitialLoad = false) => {
+  if (!isInitialLoad) {
+    apiForm.value.config = {}; 
   }
+  
+  if (value) {
+    // 获取平台信息并设置配置字段默认值
+    const platform = platforms.value.find(p => p.name === value);
+    if (platform) {
+      apiForm.value.platform = platform._id;
+      
+      // 为配置字段设置默认值（仅在非编辑模式或字段为空时）
+      if (platform.configFields) {
+        platform.configFields.forEach(field => {
+          if (field.defaultValue !== undefined && field.defaultValue !== '' && (!apiForm.value.config[field.key] || !isInitialLoad)) {
+            if (!apiForm.value.config) {
+              apiForm.value.config = {};
+            }
+            // 处理多选字段的默认值
+            if (field.type === 'multiSelect' && Array.isArray(field.defaultValue)) {
+              apiForm.value.config[field.key] = [...field.defaultValue];
+            } else {
+              apiForm.value.config[field.key] = field.defaultValue;
+            }
+          }
+        });
+      }
+    }
+  }
+  
+  apiFormRef.value?.clearValidate(['config']);
 };
 
-// Fetch API Entries
 const fetchApiEntries = async () => {
   isLoading.value = true;
   try {
     const params = {
       page: pagination.current,
       limit: pagination.pageSize,
-      // query: searchTerm.value || undefined, 
-      // platformType: selectedPlatformTypeFilter.value || undefined,
-      // status: selectedStatus.value || undefined,
+      searchTerm: searchTerm.value || undefined,
+      platformType: selectedPlatformTypeFilter.value || undefined,
+      status: selectedStatus.value || undefined,
     };
-    // Ensure apiService.getApiEntries or its underlying call (e.g., apiService.get('/api-entries')) handles these params
-    const response = await apiService.getApiEntries(params); 
-    if (response.data && response.data.data && typeof response.data.totalRecords === 'number') { // Check for paginated structure
-      apiEntries.value = response.data.data;
-      pagination.total = response.data.totalRecords;
-    } else if (Array.isArray(response.data)) { // Fallback if it returns a simple array
+    const response = await apiService.getApiEntries(params);
+    if (response.data && Array.isArray(response.data)) {
       apiEntries.value = response.data;
-      pagination.total = response.data.length;
-      // Consider logging a warning here if pagination was expected but not received
-      // console.warn("fetchApiEntries received a flat array, expected paginated response.");
+      pagination.total = response.data.length; 
+    } else if (response.data && response.data.data) {
+        apiEntries.value = response.data.data;
+        pagination.total = response.data.totalRecords;
     } else {
-      // Handle other unexpected structures
-      console.error("fetchApiEntries received an unexpected response structure:", response.data);
       apiEntries.value = [];
       pagination.total = 0;
     }
   } catch (error) {
-    console.error('Error fetching API entries:', error);
-    apiEntries.value = []; 
+    Message.error('获取 API 列表失败: ' + (error.response?.data?.message || error.message));
+    apiEntries.value = [];
     pagination.total = 0;
-    // Message.error might be handled by apiService interceptor
   } finally {
     isLoading.value = false;
   }
 };
 
-// Refresh function
+const fetchPlatformTypes = async () => {
+  loadingPlatformTypes.value = true;
+  try {
+    // 获取完整的平台信息
+    const platformsResponse = await apiService.getPlatforms(); 
+    if (platformsResponse.data && Array.isArray(platformsResponse.data)) {
+      platforms.value = platformsResponse.data;
+      // 提取活跃平台的名称作为平台类型
+      platformTypes.value = platformsResponse.data
+        .filter(platform => platform.status === 'active')
+        .map(platform => platform.name);
+    }
+  } catch (error) {
+    Message.error('获取平台类型列表失败: ' + (error.response?.data?.message || error.message));
+    platformTypes.value = [];
+    platforms.value = [];
+  } finally {
+    loadingPlatformTypes.value = false;
+  }
+};
+
 const refreshApiEntries = () => {
-    searchTerm.value = '';
-    selectedStatus.value = undefined;
-    selectedPlatformTypeFilter.value = undefined;
-    pagination.current = 1; // Reset to first page
-    fetchApiEntries();
-    fetchApiPlatformTypes(); 
+  fetchApiEntries();
+  fetchPlatformTypes();
 };
 
 const handlePageChange = (page) => {
@@ -363,117 +440,132 @@ const handlePageChange = (page) => {
 
 const handlePageSizeChange = (pageSize) => {
   pagination.pageSize = pageSize;
-  pagination.current = 1; // Reset to first page
+  pagination.current = 1;
   fetchApiEntries();
 };
 
-// --- Modal Logic ---
 const openCreateModal = () => {
-    apiForm.value = getInitialApiForm();
-    isEditMode.value = false;
-    currentApiEntry.value = null;
-    modalVisible.value = true;
-    apiFormRef.value?.clearValidate();
+  isEditMode.value = false;
+  currentApiEntry.value = null;
+  apiForm.value = {
+    platformName: '',
+    platformType: undefined,
+    description: '',
+    apiUrl: '',
+    config: {},
+    status: 'active',
+  };
+  apiFormRef.value?.clearValidate();
+  modalVisible.value = true;
 };
 
 const editApiEntry = (entry) => {
-    currentApiEntry.value = entry;
-    apiForm.value = { 
-        _id: entry._id,
-        platformName: entry.platformName,
-        platformType: entry.platformType,
-        description: entry.description || '',
-        apiUrl: entry.apiUrl || '', // For fallback/Custom
-        config: entry.config ? { ...entry.config } : {}, // Deep copy config
-        status: entry.status,
-     }; 
-    isEditMode.value = true;
-    modalVisible.value = true;
-    apiFormRef.value?.clearValidate();
+  isEditMode.value = true;
+  currentApiEntry.value = JSON.parse(JSON.stringify(entry));
+  
+  // 初始化配置对象，包含默认值
+  const config = entry.config ? JSON.parse(JSON.stringify(entry.config)) : {};
+  
+  apiForm.value = {
+    _id: entry._id,
+    platformName: entry.platformName,
+    platformType: entry.platform?.name || entry.platformType,
+    platform: entry.platform?._id || entry.platform,
+    description: entry.description || '',
+    apiUrl: entry.apiUrl || '',
+    config,
+    status: entry.status,
+  };
+  
+  // 设置平台类型后，为配置字段设置默认值
+  handlePlatformTypeChangeInForm(apiForm.value.platformType, true);
+  apiFormRef.value?.clearValidate();
+  modalVisible.value = true;
 };
 
 const handleCancel = () => {
-    modalVisible.value = false;
+  modalVisible.value = false;
+  apiFormRef.value?.clearValidate();
 };
 
 const handleSubmit = async () => {
-    const validationResult = await apiFormRef.value?.validate();
-    if (validationResult) {
-      Message.error('请检查表单输入项是否有效。');
-      return false;
+  const isValid = await apiFormRef.value?.validate();
+  if (isValid) return;
+
+  isSubmitting.value = true;
+  try {
+    const payload = { ...apiForm.value };
+    
+    // 确保platform字段正确设置
+    if (payload.platformType && !payload.platform) {
+      const platform = platforms.value.find(p => p.name === payload.platformType);
+      if (platform) {
+        payload.platform = platform._id;
+      }
     }
-
-    isSubmitting.value = true;
-    try {
-        const dataToSubmit = JSON.parse(JSON.stringify(apiForm.value)); // Deep copy
-
-        // Ensure the top-level dataToSubmit.apiUrl is correctly populated
-        if (dataToSubmit.platformType && platformSpecificFields[dataToSubmit.platformType]) {
-            const specificPlatformFields = platformSpecificFields[dataToSubmit.platformType];
-            // Check if the platform defines its URL within the 'config' object (e.g., ComfyUI, Custom)
-            const platformDefinesUrlInConfig = specificPlatformFields.find(f => f.name === 'apiUrl');
-
-            if (platformDefinesUrlInConfig && dataToSubmit.config && dataToSubmit.config.apiUrl) {
-                // If so, use this config.apiUrl as the primary top-level apiUrl.
-                dataToSubmit.apiUrl = dataToSubmit.config.apiUrl;
-            }
-            // If platformDefinesUrlInConfig is false (e.g., OpenAI, StabilityAI),
-            // dataToSubmit.apiUrl (from the generic apiForm.apiUrl input) is already correctly set.
-        }
-        // If !dataToSubmit.platformType (no platform type selected),
-        // dataToSubmit.apiUrl (from the generic apiForm.apiUrl input) is also correctly set.
-        
-        if (isEditMode.value && currentApiEntry.value?._id) {
-            await apiService.updateApiEntry(currentApiEntry.value._id, dataToSubmit);
-            Message.success('API 条目更新成功');
-        } else {
-            await apiService.createApiEntry(dataToSubmit);
-            Message.success('API 条目添加成功');
-        }
-        modalVisible.value = false;
-        fetchApiEntries();
-    } catch (error) {
-        console.error('Error submitting API entry:', error);
-        if (error.response && error.response.data && error.response.data.message) {
-            Message.error(`操作失败: ${error.response.data.message}`);
-        } else {
-            Message.error('操作失败，请稍后重试。');
-        }
-    } finally {
-        isSubmitting.value = false;
+    
+    if (isEditMode.value) {
+      await apiService.updateApiEntry(payload._id, payload);
+      Message.success('API 更新成功');
+    } else {
+      await apiService.createApiEntry(payload);
+      Message.success('API 添加成功');
     }
+    modalVisible.value = false;
+    fetchApiEntries();
+  } catch (error) {
+    Message.error('操作失败: ' + (error.response?.data?.message || error.message));
+  } finally {
+    isSubmitting.value = false;
+  }
 };
 
 const confirmDeleteApiEntry = (entry) => {
-  if (entry.usageCount && entry.usageCount > 0) {
-    Message.warning(`该API被 ${entry.usageCount} 个应用使用，无法删除`);
-    return;
-  }
   AModal.confirm({
     title: '确认删除',
-    content: `您确定要删除 API 条目 "${entry.platformName}" 吗？此操作不可撤销。`,
+    content: `确定要删除 API 条目 "${entry.platformName}" 吗？此操作不可恢复。`,
     okText: '删除',
     cancelText: '取消',
+    okButtonProps: { status: 'danger' },
     onOk: async () => {
       try {
         await apiService.deleteApiEntry(entry._id);
-        Message.success(`API 条目 "${entry.platformName}" 已删除`);
+        Message.success('API 删除成功');
         fetchApiEntries();
       } catch (error) {
-        console.error('Error deleting API entry:', error);
-         if (error.response && error.response.data && error.response.data.message) {
-            Message.error(`删除失败: ${error.response.data.message}`);
-        } else {
-            Message.error('删除失败，请稍后重试。');
-        }
+        Message.error('删除失败: ' + (error.response?.data?.message || error.message));
       }
     },
   });
 };
 
+watch([searchTerm, selectedPlatformTypeFilter, selectedStatus], () => {
+  pagination.current = 1;
+  fetchApiEntries();
+});
+
+const handlePlatformManagementSuccess = () => {
+  fetchPlatformTypes();
+  fetchApiEntries();
+};
+
+const getPlatformColor = (platformName) => {
+  if (!platformName) return 'gray';
+  let hash = 0;
+  for (let i = 0; i < platformName.length; i++) {
+    hash = platformName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const colors = ['blue', 'green', 'orange', 'red', 'purple', 'cyan', 'magenta', 'volcano', 'gold', 'lime'];
+  return colors[Math.abs(hash) % colors.length];
+};
+
+const openPlatformManagementModal = () => {
+  platformModalVisible.value = true;
+};
+
 onMounted(() => {
   fetchApiEntries();
-  fetchApiPlatformTypes();
+  fetchPlatformTypes();
 });
 </script>
 

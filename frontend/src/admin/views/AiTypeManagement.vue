@@ -61,7 +61,15 @@
             </template>
           </a-table-column>
           <a-table-column title="创建时间" data-index="createdAt" key="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
-              <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
+              <template #cell="{ record }">
+                {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
+                  year: 'numeric', 
+                  month: '2-digit', 
+                  day: '2-digit', 
+                  hour: '2-digit', 
+                  minute: '2-digit' 
+                }) }}
+              </template>
           </a-table-column>
           <!-- Actions Updated -->
           <a-table-column title="操作" key="action" :width="150" fixed="right" align="center"> 
@@ -184,12 +192,6 @@ const filteredData = computed(() => {
 });
 
 // --- Utility Functions ---
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  // Consistent formatting
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
 
 // --- API Interaction Updated ---
 const fetchAiTypes = async () => {
@@ -199,16 +201,13 @@ const fetchAiTypes = async () => {
       page: pagination.current,
       limit: pagination.pageSize,
     };
-    // Ensure endpoint is correct and supports pagination
     const response = await apiService.get('/ai-types', { params }); 
     if (response.data && response.data.data) {
       aiTypes.value = response.data.data;
       pagination.total = response.data.totalRecords;
-      // pagination.current can be updated if backend confirms the page, but usually it's driven by frontend request
     } else {
-      // If backend returns flat array for non-paginated endpoint, handle gracefully or log error
       aiTypes.value = response.data || []; 
-      pagination.total = response.data?.length || 0; // Basic fallback for non-paginated
+      pagination.total = response.data?.length || 0;
     }
   } catch (error) {
     Message.error('获取 AI 类型列表失败: ' + (error.response?.data?.message || error.message));

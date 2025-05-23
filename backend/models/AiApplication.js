@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 const generateCustomId = require('../utils/generateCustomId'); // Import the generator
-const { PLATFORM_TYPES } = require('./ApiEntry'); // Import PLATFORM_TYPES
+const Platform = require('./Platform'); // For dynamic platform validation
 
 const aiApplicationSchema = new Schema({
   _id: {
@@ -30,7 +30,7 @@ const aiApplicationSchema = new Schema({
   platformType: { // New field
     type: String,
     required: [true, '平台类型不能为空'],
-    enum: PLATFORM_TYPES,
+    // Remove static enum validation, will validate dynamically in pre-save hook
   },
   apis: [{
     type: String,
@@ -71,8 +71,21 @@ const aiApplicationSchema = new Schema({
   timestamps: true // 添加 createdAt 和 updatedAt 字段
 });
 
-// Add pre-save hook for ID generation (only if NEW)
-aiApplicationSchema.pre('save', function (next) {
+// Add pre-save hook for platform validation and ID generation
+aiApplicationSchema.pre('save', async function (next) {
+  // Validate platform against active platforms
+  if (this.isNew || this.isModified('platformType')) {
+    try {
+      const platformDoc = await Platform.findOne({ name: this.platformType, status: 'active' });
+      if (!platformDoc) {
+        return next(new Error(`无效或未激活的平台类型: ${this.platformType}`));
+      }
+    } catch (error) {
+      return next(error);
+    }
+  }
+
+  // ID generation
   if (this.isNew && !this._id) { // Ensure ID is set only for new documents
     this._id = generateCustomId('AI');
   }

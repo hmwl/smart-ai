@@ -2,9 +2,29 @@ const express = require('express');
 const router = express.Router();
 const EnumConfig = require('../models/EnumConfig');
 const EnumType = require('../models/EnumType');
+const Platform = require('../models/Platform'); // For dynamic platform validation
 const authenticateToken = require('../middleware/authenticateToken');
 const isAdmin = require('../middleware/isAdmin');
-const { PLATFORM_TYPES } = require('../models/ApiEntry');
+
+// Helper function to validate platform
+async function validatePlatform(platformName) {
+    try {
+        const platform = await Platform.findOne({ name: platformName, status: 'active' });
+        return !!platform;
+    } catch (error) {
+        return false;
+    }
+}
+
+// Helper function to get all active platform names
+async function getActivePlatformNames() {
+    try {
+        const platforms = await Platform.find({ status: 'active' }).select('name').lean();
+        return platforms.map(p => p.name);
+    } catch (error) {
+        return [];
+    }
+}
 
 // Middleware to get EnumConfig by ID
 async function getEnumConfig(req, res, next) {
@@ -68,8 +88,13 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
         return res.status(400).json({ message: '配置名称、类型ID和平台不能为空' });
     }
 
-    if (!PLATFORM_TYPES.includes(platform)) {
-        return res.status(400).json({ message: `无效的平台类型: ${platform}。允许的平台有: ${PLATFORM_TYPES.join(', ')}` });
+    // Validate platform dynamically
+    const isValidPlatform = await validatePlatform(platform);
+    if (!isValidPlatform) {
+        const activePlatforms = await getActivePlatformNames();
+        return res.status(400).json({ 
+            message: `无效的平台类型: ${platform}。当前可用的平台有: ${activePlatforms.join(', ')}` 
+        });
     }
     
     try {
@@ -125,8 +150,15 @@ router.put('/:id', authenticateToken, isAdmin, getEnumConfig, async (req, res) =
     // If 'platform' is in req.body, it takes precedence. Otherwise, use the platform of the (new or existing) enumType.
     const effectivePlatform = platform || (currentEnumType ? currentEnumType.platform : res.enumConfig.platform);
 
-    if (platform && !PLATFORM_TYPES.includes(platform)) {
-      return res.status(400).json({ message: `请求中提供的平台类型无效: ${platform}` });
+    // Validate platform dynamically if provided
+    if (platform) {
+        const isValidPlatform = await validatePlatform(platform);
+        if (!isValidPlatform) {
+            const activePlatforms = await getActivePlatformNames();
+            return res.status(400).json({ 
+                message: `无效的平台类型: ${platform}。当前可用的平台有: ${activePlatforms.join(', ')}` 
+            });
+        }
     }
     
     // Validate that the config's platform matches its type's platform

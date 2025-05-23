@@ -86,7 +86,13 @@
           </a-tag>
         </template>
         <template #createdAt="{ record }">
-          {{ formatDate(record.createdAt) }}
+          {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit', 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          }) }}
         </template>
         <template #actions="{ record }">
           <a-space>
@@ -222,8 +228,8 @@ const fetchEnumConfigs = async () => {
 
 const fetchPlatformTypes = async () => {
   try {
-    // Assuming getApiPlatformTypes is an existing method that returns an array of strings
-    const response = await apiService.getApiPlatformTypes(); 
+    // 使用新的平台 API 获取平台类型
+    const response = await apiService.getPlatformTypes(); 
     if (response.data && Array.isArray(response.data)) {
       platformTypes.value = response.data;
     }
@@ -315,12 +321,6 @@ const onTypeManagementSuccess = () => {
 };
 
 // --- Utils ---
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
-
 const getPlatformColor = (platform) => {
   // Basic color mapping, can be extended
   const colors = {

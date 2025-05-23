@@ -197,8 +197,34 @@ apiService.deleteApiEntry = (id) => {
   return apiService.delete(`/api-entries/${id}`);
 };
 
-apiService.getApiPlatformTypes = () => {
-  return apiService.get('/api-entries/platform-types');
+// apiService.getApiPlatformTypes = () => { // This line is to be commented out or removed
+//   return apiService.get('/api-entries/platform-types'); // This line is to be commented out or removed
+// };
+
+// --- Platform Service Methods ---
+apiService.getPlatforms = (params) => {
+  return apiService.get('/platforms', { params });
+};
+
+apiService.getPlatformById = (id) => {
+  return apiService.get(`/platforms/${id}`);
+};
+
+apiService.createPlatform = (data) => { // data: { name, status? }
+  return apiService.post('/platforms', data);
+};
+
+apiService.updatePlatform = (id, data) => { // data: { name?, status? }
+  return apiService.put(`/platforms/${id}`, data);
+};
+
+apiService.deletePlatform = (id) => {
+  return apiService.delete(`/platforms/${id}`);
+};
+
+// Get platform types (names of active platforms)
+apiService.getPlatformTypes = () => { // New method to get list of platform names
+  return apiService.get('/platforms/types');
 };
 
 // --- Enum Type Service Methods ---
