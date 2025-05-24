@@ -27,9 +27,6 @@
       >
         <a-input-password v-model="formState.password" placeholder="请输入密码" />
       </a-form-item>
-      <a-form-item v-if="loginError">
-        <a-alert type="error" :message="loginError" banner />
-      </a-form-item>
       <a-form-item>
         <a-button type="primary" html-type="submit" :loading="loading" long>
           登录
@@ -73,14 +70,10 @@ const formState = reactive({
   password: ''
 });
 const loading = ref(false);
-const loginError = ref(null);
 
 watch(() => props.visible, (newVal) => {
   internalVisible.value = newVal;
   if (newVal) {
-    loginError.value = null; // Reset error when modal opens
-    // formState.identifier = ''; // Optionally reset form
-    // formState.password = '';
   }
 });
 
@@ -91,12 +84,10 @@ const handleCancel = () => {
 const handleSubmit = async () => {
   const validationResult = await loginFormRef.value.validate();
   if (validationResult) { // validationResult is an object of errors if any
-    loginError.value = '请检查输入项。';
     return;
   }
 
   loading.value = true;
-  loginError.value = null;
   try {
     const response = await apiClient.post('/auth/client/login', {
       username: formState.identifier,
@@ -112,13 +103,10 @@ const handleSubmit = async () => {
       emit('loginSuccess', response.data.user);
       emit('update:visible', false);
     } else {
-      loginError.value = response.data?.message || '登录失败，未收到令牌。';
-      Message.error(loginError.value);
+      Message.error(response.data?.message || '登录失败，未收到令牌。');
     }
   } catch (error) {
-    console.error("Login failed:", error);
-    loginError.value = error.response?.data?.message || '登录失败，请检查您的凭据或网络连接。';
-    Message.error(loginError.value);
+    console.error(error.response?.data?.message || '登录失败，请检查您的凭据或网络连接。');
   } finally {
     loading.value = false;
   }
@@ -140,5 +128,15 @@ const switchToRegister = () => {
 }
 .text-center {
   text-align: center!important;
+}
+/* 只影响本组件的 autofill 背景色 */
+:deep(.arco-input-wrapper input:-webkit-autofill) {
+    -webkit-box-shadow: inset 0px 0px 0px 20px #3b3b3c !important;
+}
+:deep(.arco-input-wrapper:hover input:-webkit-autofill) {
+    -webkit-box-shadow: inset 0px 0px 0px 20px #444445 !important;
+}
+:deep(.arco-input-wrapper:focus-within input:-webkit-autofill, .arco-input-wrapper.arco-input-focus input:-webkit-autofill) {
+    -webkit-box-shadow: inset 0px 0px 0px 20px #232324 !important;
 }
 </style> 

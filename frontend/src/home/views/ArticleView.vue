@@ -22,12 +22,13 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed, h, compile } from 'vue';
+import { ref, watch, onMounted, computed, h, compile, markRaw } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
     Spin as ASpin,
     Message
 } from '@arco-design/web-vue';
+import { formatDate } from '../utils/date';
 
 const props = defineProps({
   slug: {
@@ -100,13 +101,18 @@ watch(templateContent, (newTemplateString) => {
         try {
             const compiledRenderFn = compile(newTemplateString);
 
-            dynamicArticleComponent.value = {
+            dynamicArticleComponent.value = markRaw({
                 name: 'DynamicArticleTemplate',
                 props: ['article', 'page'],
                 setup(props) {
-                    return compiledRenderFn;
-                }
-            };
+                    return {
+                        article: props.article || {},
+                        page: props.page || {},
+                        formatDate
+                    };
+                },
+                render: compiledRenderFn
+            });
             pageError.value = null;
         } catch (e) {
             console.error("[ArticleView] Template compilation error:", e);

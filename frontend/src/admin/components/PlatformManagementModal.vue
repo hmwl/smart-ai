@@ -7,7 +7,7 @@
     :footer="null" 
     unmount-on-close
   >
-    <div class="mb-4">
+    <div class="mb-4 w-full flex justify-end">
       <a-button type="primary" @click="openAddModal">
         <template #icon><icon-plus /></template> 添加平台
       </a-button>

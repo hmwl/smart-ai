@@ -21,7 +21,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed, h, compile } from 'vue'; // Import h and compile
+import { ref, watch, onMounted, computed, h, compile, markRaw } from 'vue'; // Import h and compile
 import { useRoute, useRouter } from 'vue-router';
 import {
     Spin as ASpin,
@@ -33,6 +33,7 @@ import {
     Message
 } from '@arco-design/web-vue';
 import NotFoundView from './NotFoundView.vue';
+import { formatDate } from '../utils/date';
 
 const route = useRoute();
 const router = useRouter();
@@ -46,14 +47,6 @@ const articlesData = ref([]);
 
 // Ref to hold the dynamically compiled component definition
 const dynamicTemplateComponent = ref(null);
-
-// Helper function to format date (duplicate from admin, consider moving to utils)
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  // Simpler format for public view
-  return date.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }); 
-};
 
 const fetchPageData = async (path) => {
   isLoading.value = true;
@@ -128,16 +121,17 @@ watch(templateContent, (newTemplateString) => {
             const compiledRenderFn = compile(newTemplateString);
 
             // Define the dynamic component using the compiled function
-            dynamicTemplateComponent.value = {
+            dynamicTemplateComponent.value = markRaw({
                 name: 'DynamicPageTemplate', // Optional: name for debugging
                 props: ['page', 'articles'], // Define expected props
-                // The setup function returns the compiled render function
                 setup(props) {
-                    // You could add computed properties or other setup logic here 
-                    // that the template might rely on, using the passed props
-                    return compiledRenderFn;
-                }
-            };
+                    return {
+                      ...props,
+                      formatDate
+                    };
+                },
+                render: compiledRenderFn
+            });
             pageError.value = null; // Clear previous errors if compilation succeeds
         } catch (e) {
             console.error("Template compilation error:", e);

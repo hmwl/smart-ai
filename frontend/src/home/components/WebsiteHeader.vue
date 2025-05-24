@@ -103,6 +103,7 @@ onMounted(() => {
     text-decoration: none;
     color: var(--color-text-1);
     transition: color 0.3s;
+    font-weight: 500;
 }
 .nav-link:hover, .router-link-active {
     color: rgb(var(--primary-6));

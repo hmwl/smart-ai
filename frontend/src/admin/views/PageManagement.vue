@@ -303,7 +303,7 @@ const fetchTemplates = async () => {
   isTemplatesLoading.value = true;
   try {
     const response = await apiService.get('/templates', { params: { type: 'page' } });
-    allTemplates.value = response.data;
+    allTemplates.value = Array.isArray(response.data.data) ? response.data.data : [];
   } catch (error) {
     console.error('Error fetching templates:', error);
     if (!error.response) {

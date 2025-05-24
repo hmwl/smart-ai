@@ -31,6 +31,7 @@
   "devDependencies": {
     "@arco-plugins/vite-vue": "^1.4.5",
     "@stagewise/toolbar": "^0.2.1",
+    "@stagewise/toolbar-vue": "^0.1.2",
     "@tailwindcss/postcss": "^4.1.4",
     "@tailwindcss/vite": "^4.1.5",
     "@vitejs/plugin-vue": "^5.2.2",

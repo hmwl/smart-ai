@@ -103,6 +103,7 @@
         <a-form-item field="content" label="模板内容 (HTML/Vue Template)" :rules="[{ required: true, message: '请输入模板内容' }]"
           validate-trigger="blur">
              <a-textarea 
+                ref="templateTextarea"
                 v-model="templateForm.content" 
                 placeholder="输入 HTML 或 Vue 模板代码。使用 {{ expression }} 插入数据。"
                 :auto-size="{ minRows: 15, maxRows: 25 }" 
@@ -111,20 +112,26 @@
 
         <!-- Help Tooltip -->
         <div class="mt-1 text-sm text-gray-500 flex items-center">
-          <a-tooltip position="right">
-             <template #content>
-              <div class="tooltip-content">
+          <a-popover position="right" :content-style="{ maxWidth: '1200px', whiteSpace: 'nowrap' }">
+            <template #content>
+              <div>
                 <h4 class="font-semibold mb-1">可用字段说明 (基于类型: {{ { single: '单页', list: '列表', item: '内容' }[templateForm.type] || '未知' }})</h4>
                 <ul class="list-none p-0 m-0">
-                  <li v-for="field in availableFields" :key="field.key" class="mb-1">
-                     <code class="px-1 rounded text-xs">{{ '{' + '{ ' + field.key + ' }' + '}' }}</code> - <span>{{ field.desc }}</span>
+                  <li v-for="field in availableFields" :key="field.key" class="mb-1 hover:bg-gray-100">
+                    <code
+                      class="px-1 rounded text-xs text-blue-500 cursor-pointer"
+                      @mousedown.prevent
+                      @click="insertFieldAtCursor('{'+ '{ ' + field.key + ' }' + '}')"
+                    >
+                      {{ '{' + '{ ' + field.key + ' }' + '}' }}
+                    </code><span class="text-gray-400"> - {{ field.desc }}</span>
                   </li>
                 </ul>
               </div>
             </template>
             <icon-info-circle class="cursor-help mr-1" />
-             <span>查看可用字段</span>
-          </a-tooltip>
+            <span>查看可用字段</span>
+          </a-popover>
         </div>
 
       </a-form>
@@ -134,7 +141,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, reactive } from 'vue';
+import { ref, onMounted, computed, reactive, nextTick } from 'vue';
 import { 
     Message, Modal, Spin as ASpin, Button as AButton, Select as ASelect, 
     Option as AOption, Space as ASpace, Form as AForm, FormItem as AFormItem, 
@@ -161,6 +168,7 @@ const currentTemplate = ref(null);
 const templateFormRef = ref(null);
 const templateForm = ref({});
 const isSubmitting = ref(false);
+const templateTextarea = ref(null);
 
 const pagination = reactive({
   current: 1,
@@ -359,10 +367,7 @@ const confirmDeleteTemplate = (template) => {
 // --- Computed property for available fields based on type ---
 const availableFields = computed(() => {
   const type = templateForm.value.type;
-  const fields = [
-      // Common fields (available in most contexts, adjust as needed)
-      // { key: 'site.name', desc: '网站名称' },
-  ];
+  const fields = [];
 
   if (type === 'single') {
     fields.push(
@@ -370,21 +375,18 @@ const availableFields = computed(() => {
       { key: 'page.content', desc: '页面内容 (HTML)' },
       { key: 'page.createdAt', desc: '页面创建时间' },
       { key: 'page.updatedAt', desc: '页面更新时间' },
-      // Potentially add SEO fields if defined on Page model
-      // { key: 'page.seoTitle', desc: 'SEO 标题' },
-      // { key: 'page.seoDescription', desc: 'SEO 描述' },
     );
   } else if (type === 'list') {
     fields.push(
       { key: 'page.name', desc: '列表页名称' },
       { key: 'page.content', desc: '列表页描述 (HTML)' },
       { key: 'articles', desc: '文章对象数组 (用于 v-for="article in articles")' },
-      { key: '  article.title', desc: '文章标题 (在循环内)' },
-      { key: '  article.author', desc: '文章作者 (在循环内)' },
-      { key: '  article.publishDate', desc: '文章发布日期 (在循环内)' },
-      { key: '  article._id', desc: '文章ID (用于链接, 在循环内)' },
-      { key: '  article.slug', desc: '文章的唯一标识符 (用于链接, 在循环内, 需要添加)' }, // Placeholder, need to add slug
-      { key: '  article.excerpt', desc: '文章摘要 (需要添加)' }, // Placeholder, need to add excerpt
+      { key: 'article.title', desc: '文章标题 (在循环内)' },
+      { key: 'article.author', desc: '文章作者 (在循环内)' },
+      { key: 'article.publishDate', desc: '文章发布日期 (在循环内)' },
+      { key: 'article._id', desc: '文章ID (用于链接, 在循环内)' },
+      { key: 'article.slug', desc: '文章的唯一标识符 (用于链接, 在循环内, 需要添加)' },
+      { key: 'article.excerpt', desc: '文章摘要 (需要添加)' },
     );
   } else if (type === 'item') {
     fields.push(
@@ -396,13 +398,31 @@ const availableFields = computed(() => {
       { key: 'article.updatedAt', desc: '文章更新时间' },
       { key: 'page.name', desc: '所属页面名称' },
       { key: 'page.route', desc: '所属页面路径' },
-      // { key: 'article.category', desc: '文章分类 (需要添加)' },
-      // { key: 'article.tags', desc: '文章标签数组 (需要添加)' },
     );
   }
 
+  fields.push({ key: 'formatDate()', desc: '格式化日期的方法，如 {{ formatDate(article.createdAt) }}' });
+
   return fields;
 });
+
+function insertFieldAtCursor(text) {
+  // 兼容 Arco a-textarea，直接获取 DOM textarea
+  const textarea = templateTextarea.value?.$el?.querySelector('textarea');
+  if (!textarea) {
+    Message.error('无法获取 textarea 元素');
+    return;
+  }
+  const start = textarea.selectionStart;
+  const end = textarea.selectionEnd;
+  const value = templateForm.value.content || '';
+  templateForm.value.content =
+    value.substring(0, start) + text + value.substring(end);
+  nextTick(() => {
+    textarea.focus();
+    textarea.selectionStart = textarea.selectionEnd = start + text.length;
+  });
+}
 
 // --- Lifecycle Hook ---
 onMounted(() => {
@@ -412,13 +432,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.tooltip-content {
-  padding: 8px 12px;
-  border-radius: 4px;
-}
-
-.tooltip-content ul {
-  margin-top: 4px;
+.tooltip-content-nowrap {
+  white-space: nowrap;
+  max-width: 1200px;
+  overflow-x: auto;
 }
 
 .mt-1 {

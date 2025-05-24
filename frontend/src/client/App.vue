@@ -1,9 +1,17 @@
 <template>
   <router-view />
+  <StagewiseToolbar v-if="isDev" :config="stagewiseConfig" />
 </template>
 
 <script setup>
-// No specific script needed for the root App.vue if it's just a router-view wrapper
+import { computed } from 'vue';
+import { StagewiseToolbar } from '@stagewise/toolbar-vue';
+
+const isDev = computed(() => import.meta.env.DEV);
+
+const stagewiseConfig = {
+  plugins: []
+};
 </script>
 
 <style>
@@ -56,13 +64,13 @@ body {
 .arco-input-wrapper input:-webkit-autofill:focus,
 .arco-input-wrapper input:-webkit-autofill:active,
 .arco-input-wrapper input:-internal-autofill-selected { 
-    -webkit-text-fill-color: var(--color-text-1) !important;
-    background-color: var(--color-fill-2) !important; 
-    -webkit-box-shadow: 0 0 0 1000px var(--color-fill-2) inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background-color: #3b3b3c !important; 
+    -webkit-box-shadow: none !important;
     transition: background-color 5000s ease-in-out 0s;
     font-family: inherit;
     font-size: inherit;
-    caret-color: var(--color-text-1);
+    caret-color: #ffffff;
 }
 
 /* General fallback and modern autofill selector */
@@ -71,12 +79,12 @@ input:-webkit-autofill:hover,
 input:-webkit-autofill:focus,
 input:-webkit-autofill:active,
 input:-internal-autofill-selected { 
-    -webkit-text-fill-color: var(--color-text-1) !important;
-    background-color: var(--color-fill-2) !important; 
-    -webkit-box-shadow: 0 0 0 1000px var(--color-fill-2) inset !important;
+    -webkit-text-fill-color: #ffffff !important;
+    background-color: #3b3b3c !important;
+    -webkit-box-shadow: none !important;
     transition: background-color 5000s ease-in-out 0s;
     font-family: inherit;
     font-size: inherit;
-    caret-color: var(--color-text-1);
+    caret-color: #ffffff;
 }
 </style>
