@@ -8,6 +8,7 @@ const Template = require('../models/Template');
 const AiApplication = require('../models/AiApplication');
 const PromotionActivity = require('../models/PromotionActivity'); // For potential future use
 const AiType = require('../models/AiType'); // Import AiType model
+const { encryptAesGcm } = require('../utils/encrypt');
 
 // Helper function to populate page routes within menu items
 // Moved from menus.js
@@ -131,13 +132,15 @@ router.get('/pages/lookup', async (req, res) => {
         delete responseData.page.templateList;
         delete responseData.page.templateItem; // Ensure this is removed too
 
+        let rawTemplateContent = null;
+        let rawCustomJs = '';
         // Determine which template content to send
         if (page.type === 'single' && page.templateSingle) {
-            responseData.templateContent = page.templateSingle.content;
-            responseData.customJs = page.templateSingle.customJs || '';
+            rawTemplateContent = page.templateSingle.content;
+            rawCustomJs = page.templateSingle.customJs || '';
         } else if (page.type === 'collection' && page.templateList) {
-            responseData.templateContent = page.templateList.content;
-            responseData.customJs = page.templateList.customJs || '';
+            rawTemplateContent = page.templateList.content;
+            rawCustomJs = page.templateList.customJs || '';
             // Fetch associated active articles for collection pages
             try {
                 const articles = await Article.find({ page: page._id, status: 'active' })
@@ -155,6 +158,21 @@ router.get('/pages/lookup', async (req, res) => {
             console.warn(`Page ${page._id} (${page.type}) is missing its required template content.`);
             // Send null templateContent, frontend should handle this
         }
+        
+        // 加密 templateContent 和 customJs
+        if (rawTemplateContent) {
+            responseData.encryptedTemplateContent = encryptAesGcm(rawTemplateContent);
+        } else {
+            responseData.encryptedTemplateContent = null;
+        }
+        if (rawCustomJs) {
+            responseData.encryptedCustomJs = encryptAesGcm(rawCustomJs);
+        } else {
+            responseData.encryptedCustomJs = null;
+        }
+        // 不再返回明文
+        delete responseData.templateContent;
+        delete responseData.customJs;
         
         res.json(responseData);
 

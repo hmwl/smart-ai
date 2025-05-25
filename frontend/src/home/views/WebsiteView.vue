@@ -9,7 +9,7 @@
       </div>
       <Suspense>
         <template #default>
-          <div v-if="!isLoading && dynamicTemplateComponent" class="page-content-container">
+          <div v-if="!isLoading && dynamicTemplateComponent" class="page-content-container" :class="dynamicScopeClass">
             <component 
               :is="dynamicTemplateComponent" 
               :page="pageData" 
@@ -36,6 +36,7 @@ import {
 } from '@arco-design/web-vue';
 import NotFoundView from './NotFoundView.vue';
 import { formatDate } from '../utils/date';
+import { nanoid } from 'nanoid';
 
 const route = useRoute();
 const router = useRouter();
@@ -53,6 +54,47 @@ const toJson = (val) => JSON.stringify(val, null, 2);
 
 // Ref to hold the dynamically compiled component definition
 const dynamicTemplateComponent = ref(null);
+const dynamicScopeClass = ref('');
+
+// AES-GCM 解密工具
+async function decryptAesGcm({ ciphertext, iv, authTag }, keyHex) {
+  if (!ciphertext || !iv || !authTag) return '';
+  const key = await window.crypto.subtle.importKey(
+    'raw',
+    hexToBytes(keyHex),
+    { name: 'AES-GCM' },
+    false,
+    ['decrypt']
+  );
+  const decrypted = await window.crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: base64ToBytes(iv),
+      tagLength: 128,
+      // additionalData: undefined
+    },
+    key,
+    concatBuffer(base64ToBytes(ciphertext), base64ToBytes(authTag))
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
+function hexToBytes(hex) {
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substr(i, 2), 16);
+  }
+  return bytes;
+}
+function base64ToBytes(b64) {
+  return Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+}
+function concatBuffer(buf1, buf2) {
+  const tmp = new Uint8Array(buf1.length + buf2.length);
+  tmp.set(buf1, 0);
+  tmp.set(buf2, buf1.length);
+  return tmp.buffer;
+}
 
 const fetchPageData = async (path) => {
   isLoading.value = true;
@@ -76,9 +118,19 @@ const fetchPageData = async (path) => {
 
     // Store data from the new API response structure
     pageData.value = data.page; 
-    templateContent.value = data.templateContent;
-    customJsContent.value = data.customJs || '';
     articlesData.value = data.articles || [];
+    // 解密 templateContent 和 customJs
+    const keyHex = import.meta.env.VITE_CONTENT_ENCRYPTION_KEY;
+    if (data.encryptedTemplateContent) {
+      templateContent.value = await decryptAesGcm(data.encryptedTemplateContent, keyHex);
+    } else {
+      templateContent.value = null;
+    }
+    if (data.encryptedCustomJs) {
+      customJsContent.value = await decryptAesGcm(data.encryptedCustomJs, keyHex);
+    } else {
+      customJsContent.value = '';
+    }
     
     // Basic check if template content is missing
     if (!templateContent.value) {
@@ -126,7 +178,18 @@ const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 watch([templateContent, customJsContent], async ([newTemplateString, newJsString]) => {
     if (newTemplateString) {
         try {
-            const compiledRenderFn = compile(newTemplateString);
+            // 1. 提取<style>和html
+            const { html, styleContent } = extractStyleAndHtml(newTemplateString);
+            // 2. 生成唯一scope class
+            const scopeClass = 'dynamic-scope-' + nanoid(8);
+            dynamicScopeClass.value = scopeClass;
+            // 3. 作用域化css并插入head
+            if (styleContent) {
+              const scopedCss = scopeStyle(styleContent, scopeClass);
+              injectScopedStyle(scopedCss, scopeClass);
+            }
+            // 4. 编译html
+            const compiledRenderFn = compile(html);
             dynamicTemplateComponent.value = markRaw({
                 name: 'DynamicPageTemplate',
                 props: ['page', 'articles'],
@@ -157,6 +220,37 @@ watch([templateContent, customJsContent], async ([newTemplateString, newJsString
         dynamicTemplateComponent.value = null;
     }
 }, { immediate: true });
+
+function extractStyleAndHtml(template) {
+  const styleRegex = /<style[^>]*>([\s\S]*?)<\/style>/gi;
+  let styleContent = '';
+  let html = template;
+  html = html.replace(styleRegex, (match, css) => {
+    styleContent += css + '\n';
+    return '';
+  });
+  return { html, styleContent };
+}
+
+function scopeStyle(style, scopeClass) {
+  // 只处理非@规则
+  return style.replace(/(^|\})\s*([^\{\}]+)\s*\{/g, (m, sep, selector) => {
+    if (selector.trim().startsWith('@')) return m;
+    return `${sep} .${scopeClass} ${selector} {`;
+  });
+}
+
+function injectScopedStyle(css, scopeClass) {
+  if (!css) return;
+  const styleId = `scoped-style-${scopeClass}`;
+  let styleTag = document.getElementById(styleId);
+  if (!styleTag) {
+    styleTag = document.createElement('style');
+    styleTag.id = styleId;
+    document.head.appendChild(styleTag);
+  }
+  styleTag.innerHTML = css;
+}
 
 </script>
 
