@@ -39,6 +39,10 @@ const TemplateSchema = new Schema({
         required: [true, 'Template content (HTML) is required.']
         // No default here, must be provided
     },
+    customJs: {
+        type: String,
+        default: ''
+    },
     // Removed fields array
     // fields: [TemplateFieldSchema] 
 }, {

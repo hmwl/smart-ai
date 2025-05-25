@@ -111,10 +111,10 @@ router.get('/pages/lookup', async (req, res) => {
     try {
         // Find the page and populate the relevant template fields
         const page = await Page.findOne({ route: route, status: 'active' })
-                             .populate('templateSingle', 'content') // Populate single template content
-                             .populate('templateList', 'content')   // Populate list template content
+                             .populate('templateSingle', 'content customJs') // Populate single template content and customJs
+                             .populate('templateList', 'content customJs')   // Populate list template content and customJs
                              // .populate('templateItem') // Item template not needed for page lookup itself
-                             .select('+templateSingle +templateList name type content status route createdAt updatedAt') // Select necessary page fields + populated templates
+                             .select('+templateSingle +templateList name type content status route createdAt updatedAt customJs') // Select necessary page fields + populated templates
                              .lean(); // Use lean for plain JS object
 
         if (!page) {
@@ -124,6 +124,7 @@ router.get('/pages/lookup', async (req, res) => {
         let responseData = { 
             page: { ...page }, // Copy page data
             templateContent: null,
+            customJs: '',
             articles: []
         };
         delete responseData.page.templateSingle; // Remove full template object from page data
@@ -133,8 +134,10 @@ router.get('/pages/lookup', async (req, res) => {
         // Determine which template content to send
         if (page.type === 'single' && page.templateSingle) {
             responseData.templateContent = page.templateSingle.content;
+            responseData.customJs = page.templateSingle.customJs || '';
         } else if (page.type === 'collection' && page.templateList) {
             responseData.templateContent = page.templateList.content;
+            responseData.customJs = page.templateList.customJs || '';
             // Fetch associated active articles for collection pages
             try {
                 const articles = await Article.find({ page: page._id, status: 'active' })

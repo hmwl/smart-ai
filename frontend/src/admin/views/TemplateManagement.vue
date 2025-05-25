@@ -100,39 +100,48 @@
             </a-col>
         </a-row>
         
-        <a-form-item field="content" label="模板内容 (HTML/Vue Template)" :rules="[{ required: true, message: '请输入模板内容' }]"
-          validate-trigger="blur">
+        <a-form-item field="content" label="模板内容 (HTML/Vue 代码)" :rules="[{ required: true, message: '请输入模板内容' }]"
+          validate-trigger="blur" class="relative">
+          <!-- Help Tooltip -->
+          <div class="mt-1 text-sm text-gray-500 flex items-center absolute top-0 right-0">
+            <a-popover position="right" :content-style="{ maxWidth: '1200px', whiteSpace: 'nowrap' }">
+              <template #content>
+                <div>
+                  <h4 class="font-semibold mb-1">可用字段说明 (基于类型: {{ { single: '单页', list: '列表', item: '内容' }[templateForm.type] || '未知' }})</h4>
+                  <ul class="list-none p-0 m-0">
+                    <li v-for="field in availableFields" :key="field.key" class="mb-1 hover:bg-gray-100">
+                      <code
+                        class="px-1 rounded text-xs text-blue-500 cursor-pointer"
+                        @mousedown.prevent
+                        @click="insertFieldAtCursor('{'+ '{ ' + field.key + ' }' + '}')"
+                      >
+                        {{ '{' + '{ ' + field.key + ' }' + '}' }}
+                      </code><span class="text-gray-400"> - {{ field.desc }}</span>
+                    </li>
+                  </ul>
+                </div>
+              </template>
+              <icon-info-circle class="cursor-help mr-1" />
+              <span>查看可用字段</span>
+            </a-popover>
+          </div>
              <a-textarea 
                 ref="templateTextarea"
                 v-model="templateForm.content" 
-                placeholder="输入 HTML 或 Vue 模板代码。使用 {{ expression }} 插入数据。"
+                placeholder="输入 HTML 或 Vue 模板代码。使用 {{ expression }} 插入数据"
                 :auto-size="{ minRows: 15, maxRows: 25 }" 
              />
         </a-form-item>
 
-        <!-- Help Tooltip -->
-        <div class="mt-1 text-sm text-gray-500 flex items-center">
-          <a-popover position="right" :content-style="{ maxWidth: '1200px', whiteSpace: 'nowrap' }">
-            <template #content>
-              <div>
-                <h4 class="font-semibold mb-1">可用字段说明 (基于类型: {{ { single: '单页', list: '列表', item: '内容' }[templateForm.type] || '未知' }})</h4>
-                <ul class="list-none p-0 m-0">
-                  <li v-for="field in availableFields" :key="field.key" class="mb-1 hover:bg-gray-100">
-                    <code
-                      class="px-1 rounded text-xs text-blue-500 cursor-pointer"
-                      @mousedown.prevent
-                      @click="insertFieldAtCursor('{'+ '{ ' + field.key + ' }' + '}')"
-                    >
-                      {{ '{' + '{ ' + field.key + ' }' + '}' }}
-                    </code><span class="text-gray-400"> - {{ field.desc }}</span>
-                  </li>
-                </ul>
-              </div>
-            </template>
-            <icon-info-circle class="cursor-help mr-1" />
-            <span>查看可用字段</span>
-          </a-popover>
-        </div>
+        <a-form-item field="customJs" label="自定义JS逻辑（可选）">
+          <a-textarea
+            v-model="templateForm.customJs"
+            placeholder="在这里写自定义JS逻辑，return 一个对象，内容会暴露给模板"
+            :auto-size="{ minRows: 6, maxRows: 12 }"
+          />
+        </a-form-item>
+
+        
 
       </a-form>
     </a-modal>
@@ -198,7 +207,7 @@ const getInitialTemplateForm = () => ({
     name: '',
     type: 'single',
     content: '',
-    // fields: [] // Removed fields
+    customJs: ''
 });
 
 // Helper function to format date
@@ -270,7 +279,8 @@ const editTemplate = (template) => {
         _id: template._id,
         name: template.name,
         type: template.type,
-        content: template.content || ''
+        content: template.content || '',
+        customJs: template.customJs || ''
      }; 
     isEditMode.value = true;
     modalVisible.value = true;

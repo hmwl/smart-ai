@@ -73,7 +73,7 @@ router.get('/:id', authenticateToken, isAdmin, async (req, res) => {
 
 // POST create a new template
 router.post('/', authenticateToken, isAdmin, async (req, res) => {
-    const { name, type, content } = req.body;
+    const { name, type, content, customJs } = req.body;
     if (!name || !type || !content) {
         return res.status(400).json({ message: 'Template name, type, and content are required.' });
     }
@@ -83,6 +83,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
         name,
         type,
         content,
+        customJs
     });
 
     try {
@@ -109,12 +110,13 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
             return res.status(404).json({ message: 'Template not found' });
         }
 
-        const { name, type, content } = req.body;
+        const { name, type, content, customJs } = req.body;
 
         // Update fields if they exist in the request body
         if (name !== undefined) template.name = name;
         if (type !== undefined) template.type = type;
         if (content !== undefined) template.content = content;
+        if (customJs !== undefined) template.customJs = customJs;
 
         const updatedTemplate = await template.save();
         res.json(updatedTemplate);

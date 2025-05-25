@@ -5,23 +5,25 @@
         Error loading page: {{ pageError }}
       </div>
       <div v-else-if="!isLoading && !dynamicTemplateComponent" class="text-center text-gray-500 p-4">
-         <!-- Handles cases where page loads but template is missing or fails to compile -->
          Page content could not be displayed. Template might be missing or invalid.
       </div>
-      <!-- Render the dynamic component -->
-       <div v-else class="page-content-container">
-          <component 
-            :is="dynamicTemplateComponent" 
-            :page="pageData" 
-            :articles="articlesData" 
-          />
-      </div>
+      <Suspense>
+        <template #default>
+          <div v-if="!isLoading && dynamicTemplateComponent" class="page-content-container">
+            <component 
+              :is="dynamicTemplateComponent" 
+              :page="pageData" 
+              :articles="articlesData" 
+            />
+          </div>
+        </template>
+      </Suspense>
     </a-spin>
   </div>
 </template>
 
 <script setup>
-import { ref, watch, onMounted, computed, h, compile, markRaw } from 'vue'; // Import h and compile
+import { ref, watch, onMounted, computed, h, compile, markRaw } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
     Spin as ASpin,
@@ -44,6 +46,10 @@ const pageError = ref(null);
 const pageData = ref(null);
 const templateContent = ref(null);
 const articlesData = ref([]);
+const customJsContent = ref('');
+
+// JSON stringify helper for template
+const toJson = (val) => JSON.stringify(val, null, 2);
 
 // Ref to hold the dynamically compiled component definition
 const dynamicTemplateComponent = ref(null);
@@ -55,6 +61,7 @@ const fetchPageData = async (path) => {
   templateContent.value = null;
   articlesData.value = [];
   dynamicTemplateComponent.value = null; // Reset component on fetch
+  customJsContent.value = '';
 
   try {
     // Use the updated API endpoint
@@ -70,6 +77,7 @@ const fetchPageData = async (path) => {
     // Store data from the new API response structure
     pageData.value = data.page; 
     templateContent.value = data.templateContent;
+    customJsContent.value = data.customJs || '';
     articlesData.value = data.articles || [];
     
     // Basic check if template content is missing
@@ -114,25 +122,32 @@ watch(
 );
 
 // Watch for template content changes to re-compile the component
-watch(templateContent, (newTemplateString) => {
+const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
+watch([templateContent, customJsContent], async ([newTemplateString, newJsString]) => {
     if (newTemplateString) {
         try {
-            // Compile the template string into a render function
             const compiledRenderFn = compile(newTemplateString);
-
-            // Define the dynamic component using the compiled function
             dynamicTemplateComponent.value = markRaw({
-                name: 'DynamicPageTemplate', // Optional: name for debugging
-                props: ['page', 'articles'], // Define expected props
-                setup(props) {
-                    return {
-                      ...props,
-                      formatDate
-                    };
+                name: 'DynamicPageTemplate',
+                props: ['page', 'articles'],
+                async setup(props) {
+                    const expose = { ...props, formatDate, toJson };
+                    if (newJsString && typeof newJsString === 'string') {
+                        try {
+                            const customFn = new AsyncFunction('page', 'articles', 'formatDate', 'toJson', `\n'use strict';\n${newJsString}`);
+                            const customResult = await customFn(props.page, props.articles, formatDate, toJson);
+                            if (customResult && typeof customResult === 'object') {
+                                Object.assign(expose, customResult);
+                            }
+                        } catch (e) {
+                            console.error('自定义JS逻辑执行出错:', e);
+                        }
+                    }
+                    return expose;
                 },
                 render: compiledRenderFn
             });
-            pageError.value = null; // Clear previous errors if compilation succeeds
+            pageError.value = null;
         } catch (e) {
             console.error("Template compilation error:", e);
             pageError.value = 'Failed to compile page template.';
