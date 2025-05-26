@@ -67,7 +67,7 @@
                 <label v-if="element.props && (element.props.label || element.props.nodeId)" class="canvas-field-label">
                   <span v-if="element.props.label">{{ element.props.label }}</span>
                   <span v-if="element.props.nodeId" class="canvas-field-node-id">
-                    (ID: {{ element.props.nodeId }})
+                    (ID: {{ element.props.nodeId }} {{ element.props.key ? `[${element.props.key}]` : '' }})
                   </span>
                   <span v-if="element.props.required && element.props.label" class="canvas-field-required-indicator">*</span>
                 </label>
@@ -98,6 +98,9 @@
           <a-form :model="selectedField.props" layout="vertical">
             <a-form-item label="节点ID" tooltip="节点标识，用于对接或逻辑处理">
               <a-input v-model="selectedField.props.nodeId" placeholder="请输入节点ID" />
+            </a-form-item>
+            <a-form-item v-if="isComfyUI" label="Key (唯一标识)" required>
+              <a-input v-model="selectedField.props.key" placeholder="请输入唯一Key（如：prompt、steps）" />
             </a-form-item>
             <a-form-item label="标签文字">
               <a-input v-model="selectedField.props.label" />
@@ -286,6 +289,42 @@
               </a-form-item>
             </template>
 
+            <!-- New properties for input, textarea, and slider -->
+            <a-form-item v-if="selectedField.type === 'input'" label="类型">
+              <a-select v-model="selectedField.props.inputType">
+                <a-option value="string">字符串</a-option>
+                <a-option value="integer">整数</a-option>
+                <a-option value="float">小数</a-option>
+              </a-select>
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'input' && (selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float')" label="最小值">
+              <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'input' && (selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float')" label="最大值">
+              <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'input' && (selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float')" label="步幅">
+              <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'input'" label="默认值">
+              <a-input v-model="selectedField.props.defaultValue" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'textarea'" label="默认值">
+              <a-input v-model="selectedField.props.defaultValue" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'slider'" label="最小值">
+              <a-input-number v-model="selectedField.props.min" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'slider'" label="最大值">
+              <a-input-number v-model="selectedField.props.max" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'slider'" label="步幅">
+              <a-input-number v-model="selectedField.props.step" />
+            </a-form-item>
+            <a-form-item v-if="selectedField.type === 'slider'" label="默认值">
+              <a-input-number v-model="selectedField.props.defaultValue" />
+            </a-form-item>
+
             <!-- Conditional Logic Section -->
             <template v-if="canHaveConditionalLogic(selectedField.type)">
               <a-divider>条件逻辑</a-divider>
@@ -311,7 +350,7 @@
                         :key="field.id" 
                         :value="field.id"
                       >
-                        {{ field.props.label || field.type }} (ID: {{ field.id.substring(0, 6) }})
+                        {{ field.props.label || field.type }} {{ field.props.nodeId ? `(ID: ${field.props.nodeId.substring(0, 6)})` : `(pid: ${field.id.substring(0, 6)})` }} {{ field.props.key ? `[${field.props.key}]` : '' }}
                       </a-option>
                     </a-select>
                   </a-form-item>
@@ -390,7 +429,6 @@
                     <a-radio value="none">不改变</a-radio>
                   </a-radio-group>
                 </a-form-item>
-
               </div>
             </template>
 
@@ -419,7 +457,8 @@ import {
     FormItem as AFormItem,
     Button as AButton,
     Message,
-    Divider
+    Divider,
+    Slider as ASlider
 } from '@arco-design/web-vue';
 import {
   IconDragArrow, IconDelete, IconPlus, IconMinusCircle,
@@ -438,8 +477,9 @@ const emit = defineEmits(['save-success']);
 const isComfyUI = computed(() => props.platformType === 'ComfyUI');
 
 const availableComponents = ref([
-  { type: 'input', label: '输入框', icon: 'icon-edit', defaultProps: { label: '输入框', placeholder: '请输入...' } },
-  { type: 'textarea', label: '多行文本框', icon: 'icon-file', defaultProps: { label: '多行文本框', placeholder: '请输入文本...', autoSize: { minRows: 3, maxRows: 5 } } },
+  { type: 'input', label: '输入框', icon: 'icon-edit', defaultProps: { label: '输入框', placeholder: '请输入...', defaultValue: '', inputType: 'string' } },
+  { type: 'textarea', label: '多行文本框', icon: 'icon-file', defaultProps: { label: '多行文本框', placeholder: '请输入文本...', autoSize: { minRows: 3, maxRows: 5 }, defaultValue: '' } },
+  { type: 'slider', label: '滑竿', icon: 'icon-sliders', defaultProps: { label: '滑竿', min: 0, max: 100, step: 1, defaultValue: 0 } },
   { type: 'checkbox', label: '复选框组', icon: 'icon-check-square', defaultProps: { label: '复选框', options: [{label: '选项1', value: '1'}, {label: '选项2', value: '2'}], defaultValue: []}, config: { dataSourceType: 'manual' } },
   { type: 'radio', label: '单选框组', icon: 'icon-radio', defaultProps: { label: '单选框', options: [{label: '选项A', value: 'A'}, {label: '选项B', value: 'B'}], defaultValue: undefined }, config: { dataSourceType: 'manual' } },
   { type: 'select', label: '下拉选择框', icon: 'icon-select', defaultProps: { label: '下拉选择', placeholder: '请选择...', options: [{label: '选项X', value: 'X'}, {label: '选项Y', value: 'Y'}], multiple: false, defaultValue: undefined }, config: { dataSourceType: 'manual' } },
@@ -488,6 +528,7 @@ const vueComponentMap = {
   select: ASelect,
   switch: ASwitch,
   upload: AUpload,
+  slider: ASlider,
 };
 
 const getVueComponent = (type) => {
@@ -502,7 +543,8 @@ const cloneComponent = (original) => {
       ...original.defaultProps, 
       field: `field_${uuidv4().substring(0,8)}`, 
       required: false,
-      nodeId: '' // Initialize nodeId
+      nodeId: '', // Initialize nodeId
+      key: (original.props && typeof original.props.key !== 'undefined') ? original.props.key : '', // 兼容 palette 拖拽
     }, 
     config: {
       ...(original.config || {}),
@@ -661,7 +703,6 @@ const saveForm = async () => {
     Message.error('应用ID缺失，无法保存表单。');
     throw new Error('应用ID缺失，无法保存表单。')
   }
-  
   try {
     const schemaToSave = {
       fields: formFields.value.map(field => ({
@@ -672,10 +713,8 @@ const saveForm = async () => {
           placeholder: field.props.placeholder, // 占位提示
           required: field.props.required, // 是否必填
           options: field.props.options, // For select, radio, checkbox (manual mode)
-          // other dynamic props from the form can be added here too
           field: field.props.field, // unique field name / key
           autoSize: field.props.autoSize, // for textarea
-          // Upload specific props
           action: field.props.action,
           accept: field.props.accept,
           multiple: field.props.multiple,
@@ -687,13 +726,17 @@ const saveForm = async () => {
           uncheckedValue: field.props.uncheckedValue, // For switch
           nodeId: field.props.nodeId, // Save nodeId
           defaultValue: field.props.defaultValue, // For switch default state, but also for other types later
+          key: field.props.key, // ComfyUI专用唯一key
+          inputType: field.props.inputType, // input 类型
+          min: field.props.min, // input/slider 最小值
+          max: field.props.max, // input/slider 最大值
+          step: field.props.step, // input/slider 步幅
         },
         config: {
           label: field.config.label, // Original component type label for reference
           dataSourceType: field.config.dataSourceType, // manual or enum
           enumTypeId: field.config.enumTypeId, // NEW: Save enum type ID
           enumOptionIds: field.config.enumOptionIds, // NEW: Save selected enum option IDs
-          // Conditional Logic will be stored here
           enableConditionalLogic: field.config.enableConditionalLogic,
           conditionalLogicRules: field.config.conditionalLogicRules,
           conditionalLogicOperator: field.config.conditionalLogicOperator,

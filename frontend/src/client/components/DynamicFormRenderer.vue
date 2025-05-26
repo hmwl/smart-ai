@@ -10,7 +10,36 @@
       >
         <!-- Conditional rendering for each field type -->
         <template v-if="field.type === 'input'">
-          <a-input v-model="formModel[field.props.field]" :placeholder="field.props.placeholder" :disabled="field.props.disabled" />
+          <a-input v-if="!field.props.inputType || field.props.inputType === 'string'"
+            v-model="formModel[field.props.field]"
+            :placeholder="field.props.placeholder"
+            :disabled="field.props.disabled"
+          />
+          <a-input-number v-else
+            v-model="formModel[field.props.field]"
+            :placeholder="field.props.placeholder"
+            :min="field.props.min"
+            :max="field.props.max"
+            :step="field.props.step || (field.props.inputType === 'integer' ? 1 : 0.01)"
+            :disabled="field.props.disabled"
+          />
+        </template>
+        <template v-else-if="field.type === 'slider'">
+          <a-row align="middle" style="width:100%;">
+            <a-col :span="22">
+              <a-slider
+                v-model="formModel[field.props.field]"
+                :min="field.props.min !== undefined ? field.props.min : 0"
+                :max="field.props.max !== undefined ? field.props.max : 100"
+                :step="field.props.step !== undefined ? field.props.step : 1"
+                :disabled="field.props.disabled"
+                style="width:100%;"
+              />
+            </a-col>
+            <a-col :span="2" style="padding-left:10px;">
+              <span style="font-size:13px;">{{ formModel[field.props.field] }}</span>
+            </a-col>
+          </a-row>
         </template>
         <template v-else-if="field.type === 'textarea'">
           <a-textarea v-model="formModel[field.props.field]" :placeholder="field.props.placeholder" :auto-size="field.props.autoSize" :disabled="field.props.disabled"/>
@@ -91,7 +120,7 @@ import { ref, watchEffect, defineProps, defineEmits, computed } from 'vue';
 import {
   Form as AForm, FormItem as AFormItem, Input as AInput, Textarea as ATextarea,
   Select as ASelect, RadioGroup as ARadioGroup, CheckboxGroup as ACheckboxGroup,
-  Switch as ASwitch, Upload as AUpload, Button as AButton, Message
+  Switch as ASwitch, Upload as AUpload, Button as AButton, Message, Slider as ASlider
 } from '@arco-design/web-vue';
 import { IconUpload } from '@arco-design/web-vue/es/icon';
 import clientApiService from '@/client/services/apiService'; // Ensure this path is correct
@@ -114,18 +143,25 @@ const emit = defineEmits(['update:formModel']);
 
 const internalFields = ref([]);
 
+// 顶部加缓存
+const enumOptionsCache = new Map();
+
 // Function to fetch enum options for a field
 const fetchEnumOptionsForField = async (field) => {
   if (field.config?.dataSourceType === 'enum' && field.config?.enumTypeId) {
+    if (enumOptionsCache.has(field.config.enumTypeId)) {
+      field.runtimeTransformedOptions = enumOptionsCache.get(field.config.enumTypeId);
+      return;
+    }
     field.loadingOptions = true;
     try {
-      // Assuming an API endpoint like this exists or can be created
-      // It should return an array of { _id, name, translation } for the given enumTypeId
       const response = await clientApiService.getEnumConfigsByType(field.config.enumTypeId);
-      field.runtimeTransformedOptions = (response.data || []).map(conf => ({
+      const options = (response.data || []).map(conf => ({
         label: conf.translation || conf.name,
         value: conf._id,
       }));
+      field.runtimeTransformedOptions = options;
+      enumOptionsCache.set(field.config.enumTypeId, options);
     } catch (error) {
       Message.error(`Failed to load options for field ${field.props.label || field.props.field}: ${error.message}`);
       field.runtimeTransformedOptions = [];
@@ -133,7 +169,7 @@ const fetchEnumOptionsForField = async (field) => {
       field.loadingOptions = false;
     }
   } else if (field.config?.dataSourceType === 'manual' && field.props?.options) {
-    field.runtimeTransformedOptions = field.props.options.map(opt => ({ ...opt })); // Ensure structure is {label, value}
+    field.runtimeTransformedOptions = field.props.options.map(opt => ({ ...opt }));
   } else {
     field.runtimeTransformedOptions = [];
   }
@@ -150,7 +186,16 @@ watchEffect(async () => {
     // Initialize formModel with default values if not already present
     if (!(newField.props.field in newModel)) {
       if (newField.props.defaultValue !== undefined) {
-        newModel[newField.props.field] = newField.props.defaultValue;
+        // inputType 为 integer/float 时转为 number
+        if (newField.type === 'input' && newField.props.inputType && newField.props.inputType !== 'string') {
+          const n = Number(newField.props.defaultValue);
+          newModel[newField.props.field] = Number.isNaN(n) ? undefined : n;
+        } else if (newField.type === 'slider') {
+          const n = Number(newField.props.defaultValue);
+          newModel[newField.props.field] = Number.isNaN(n) ? undefined : n;
+        } else {
+          newModel[newField.props.field] = newField.props.defaultValue;
+        }
       } else if (newField.type === 'checkbox') {
         newModel[newField.props.field] = [];
       } else if (newField.type === 'switch') {
