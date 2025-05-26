@@ -37,7 +37,7 @@
           <a-table-column title="活动名称" data-index="name" :width="200" ellipsis tooltip></a-table-column>
           <a-table-column title="活动时间" :width="350">
             <template #cell="{ record }">
-              {{ formatDate(record.startTime) }} - {{ formatDate(record.endTime) }}
+              {{ formatDateCN(record.startTime) }} - {{ formatDateCN(record.endTime) }}
             </template>
           </a-table-column>
           <a-table-column title="状态" data-index="effectiveStatus" :width="100">
@@ -54,7 +54,7 @@
             </template>
           </a-table-column>
           <a-table-column title="创建时间" data-index="createdAt" :width="180">
-            <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
+            <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
           </a-table-column>
           <a-table-column title="备注" data-index="remarks" :width="180" ellipsis tooltip></a-table-column>
           <a-table-column title="操作" fixed="right" :width="150">
@@ -383,6 +383,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconSearch, IconMinus } from '@arco-design/web-vue/es/icon';
 import apiService from '../services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 const isLoading = ref(false);
 

@@ -61,10 +61,10 @@
                   </a-space>
                 </div>
                 <div class="info-item">
-                  <icon-schedule class="info-icon"/> <strong>创建时间:</strong> {{ formatDate(application.createdAt) }}
+                  <icon-schedule class="info-icon"/> <strong>创建时间:</strong> {{ formatDateCN(application.createdAt) }}
                 </div>
                 <div class="info-item" v-if="application.updatedAt && application.createdAt !== application.updatedAt">
-                  <icon-history class="info-icon"/> <strong>最后更新:</strong> {{ formatDate(application.updatedAt) }}
+                  <icon-history class="info-icon"/> <strong>最后更新:</strong> {{ formatDateCN(application.updatedAt) }}
                 </div>
               </div>
             </a-card>
@@ -128,6 +128,7 @@ import {
   IconFire
 } from '@arco-design/web-vue/es/icon';
 import DynamicFormRenderer from '../components/DynamicFormRenderer.vue';
+import { formatDateCN } from '@/client/utils/date';
 
 const route = useRoute();
 const router = useRouter();
@@ -213,18 +214,6 @@ const getImageUrl = (relativePath) => {
   const staticAssetBase = getStaticAssetBaseUrl();
   const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
   return `${staticAssetBase}${path}`;
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  try {
-    return new Date(dateString).toLocaleString('zh-CN', {
-      year: 'numeric', month: 'long', day: 'numeric',
-      hour: '2-digit', minute: '2-digit'
-    });
-  } catch (e) {
-    return dateString;
-  }
 };
 
 const fetchApplicationDetail = async () => {

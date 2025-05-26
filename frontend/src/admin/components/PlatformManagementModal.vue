@@ -36,13 +36,7 @@
           <a-tag :color="record.totalUsageCount > 0 ? 'red' : 'green'">{{ record.totalUsageCount }}</a-tag>
         </template>
         <template #createdAt="{ record }">
-          {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
-            year: 'numeric', 
-            month: 'short', 
-            day: 'numeric', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }) }}
+          {{ formatDateCN(record.createdAt) }}
         </template>
         <template #actions="{ record }">
           <a-space>
@@ -276,6 +270,7 @@ import { ref, watch, reactive, onMounted } from 'vue';
 import { Message, Modal as AModal, Popconfirm as APopconfirm } from '@arco-design/web-vue';
 import { IconPlus, IconDelete, IconMinus } from '@arco-design/web-vue/es/icon';
 import apiService from '@/admin/services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 const props = defineProps({
   visible: Boolean,

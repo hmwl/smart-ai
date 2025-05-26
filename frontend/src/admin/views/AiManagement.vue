@@ -102,7 +102,8 @@
           </a-table-column>
           <a-table-column title="平台类型" data-index="platformType" :width="120">
             <template #cell="{ record }">
-              <a-tag v-if="record.platformType" color="blue">
+              <a-tag v-if="record.platformType"
+                :color="getPlatformColor(typeof record.platformType === 'object' ? record.platformType.name : record.platformType)">
                 {{ typeof record.platformType === 'object' ? record.platformType.name : record.platformType }}
               </a-tag>
               <span v-else>-</span>
@@ -133,9 +134,9 @@
               </a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="创建时间" data-index="createdAt" key="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+          <a-table-column title="创建时间" data-index="createdAt" key="createdAt" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
-              {{ formatDate(record.createdAt) }}
+              {{ formatDateCN(record.createdAt) }}
             </template>
           </a-table-column>
           <a-table-column title="操作" key="action" :width="220" fixed="right" align="center">
@@ -320,6 +321,7 @@ import {
 import { IconPlus, IconLoading, IconRefresh } from '@arco-design/web-vue/es/icon';
 import apiService, { getStaticAssetBaseUrl } from '../services/apiService';
 import FormBuilderModal from '../components/form-builder/FormBuilderModal.vue';
+import { formatDateCN } from '@/admin/utils/date';
 
 // Explicitly rename components if needed or use directly
 const ARow = Row;
@@ -521,28 +523,6 @@ const filterOption = (input, option) => {
   }
   return false;
 };
-
-// Helper function to format date (keep this one)
-// --- Revision: Use toLocaleString for consistency --- 
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  try {
-      // Use toLocaleString similar to other management pages
-      const date = new Date(dateString);
-      return date.toLocaleString('zh-CN', { 
-          year: 'numeric', 
-          month: 'short', 
-          day: 'numeric', 
-          hour: '2-digit', 
-          minute: '2-digit' 
-      });
-      // return format(new Date(dateString), 'yyyy-MM-dd HH:mm'); // Use existing format helper
-  } catch (e) {
-      console.error("Error formatting date:", dateString, e);
-      return dateString; // Return original string on error
-  }
-};
-// --- End Revision ---
 
 const defaultApiOptions = ref([]);
 
@@ -1013,6 +993,19 @@ onMounted(() => {
   fetchData(); // Fetch AI Applications, AI Types, and Platform Types
   fetchAllApiEntries(); // Fetch all API entries for the form select
 });
+
+// --- Utils ---
+const getPlatformColor = (platform) => {
+  const colors = {
+    OpenAI: 'arcoblue',
+    ComfyUI: 'green',
+    StabilityAI: 'orangered',
+    Midjourney: 'purple',
+    DallE: 'pinkpurple',
+    Custom: 'gray'
+  };
+  return colors[platform] || 'blue';
+};
 
 </script>
 

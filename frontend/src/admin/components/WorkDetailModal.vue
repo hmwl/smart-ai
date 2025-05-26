@@ -65,8 +65,8 @@
             </div>
             <span v-else>-</span>
           </a-descriptions-item>
-          <a-descriptions-item label="创作时间">{{ formatDate(work.createdAt) }}</a-descriptions-item>
-          <a-descriptions-item label="最后更新">{{ formatDate(work.updatedAt) }}</a-descriptions-item>
+          <a-descriptions-item label="创作时间">{{ formatDateCN(work.createdAt) }}</a-descriptions-item>
+          <a-descriptions-item label="最后更新">{{ formatDateCN(work.updatedAt) }}</a-descriptions-item>
           <!-- <a-descriptions-item label="状态">{{ work.status === 'public_market' ? '市场展示中' : '未在市场展示' }}</a-descriptions-item> -->
           <!-- <a-descriptions-item label="源文件">
             <a :href="fullSourceUrl" target="_blank" v-if="work.sourceUrl">{{ fullSourceUrl }}</a>
@@ -90,6 +90,7 @@ import { computed } from 'vue';
 import { Modal as AModal, Descriptions as ADescriptions, DescriptionsItem as ADescriptionsItem, Avatar as AAvatar, Tag as ATag, TypographyParagraph as ATypographyParagraph, Empty as AEmpty } from '@arco-design/web-vue';
 import { IconCodepen, IconFile } from '@arco-design/web-vue/es/icon';
 import { getStaticAssetBaseUrl } from '../services/apiService.js';
+import { formatDateCN } from '@/admin/utils/date';
 
 const API_BASE_URL = getStaticAssetBaseUrl();
 
@@ -123,12 +124,6 @@ const workTypeDisplay = computed(() => {
   };
   return typeMap[props.work.type] || props.work.type;
 });
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return new Date(dateString).toLocaleDateString(undefined, options);
-};
 
 const handleOk = () => {
   emit('update:visible', false);

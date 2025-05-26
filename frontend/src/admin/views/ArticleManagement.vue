@@ -66,12 +66,12 @@
            </a-table-column>
            <a-table-column title="发布日期" data-index="publishDate" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
-                {{ record.publishDate ? formatDate(record.publishDate) : '-' }}
+                {{ record.publishDate ? formatDateCN(record.publishDate) : '-' }}
              </template>
            </a-table-column>
             <a-table-column title="创建时间" data-index="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
-                {{ formatDate(record.createdAt) }}
+                {{ formatDateCN(record.createdAt) }}
              </template>
            </a-table-column>
            <a-table-column title="操作" :width="150" fixed="right">
@@ -159,6 +159,7 @@ import {
 import { IconRefresh, IconPlus, IconLaunch } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
 import apiService from '@/admin/services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 // Get pageId from route props
 const props = defineProps({
@@ -235,13 +236,6 @@ const getInitialArticleForm = () => ({
     status: 'draft', // Default to draft
     publishDate: new Date() // Default to current date and time
 });
-
-// Helper function to format date
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
 
 // Fetch parent page title (optional but nice)
 const fetchPageTitle = async () => {

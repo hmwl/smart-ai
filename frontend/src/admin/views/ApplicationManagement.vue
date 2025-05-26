@@ -66,12 +66,12 @@
            </a-table-column>
            <a-table-column title="创建时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
-                {{ formatDate(record.createdAt) }}
+                {{ formatDateCN(record.createdAt) }}
              </template>
            </a-table-column>
             <a-table-column title="最后更新" data-index="updatedAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
-                {{ formatDate(record.updatedAt) }}
+                {{ formatDateCN(record.updatedAt) }}
              </template>
            </a-table-column>
            <a-table-column title="操作" :width="150" fixed="right">
@@ -145,6 +145,7 @@ import {
 import { IconRefresh, IconPlus } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
 import apiService from '../services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 const applications = ref([]);
 const isLoading = ref(false);
@@ -192,13 +193,6 @@ const getInitialForm = () => ({
     status: 'active',
     config: ''
 });
-
-// Helper function to format date (same as in UserManagement)
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
 
 const fetchApplications = async () => {
   isLoading.value = true;

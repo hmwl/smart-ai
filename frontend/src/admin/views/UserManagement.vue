@@ -68,12 +68,12 @@
            </a-table-column>
            <a-table-column title="注册时间" data-index="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
-                {{ formatDate(record.createdAt) }}
+                {{ formatDateCN(record.createdAt) }}
              </template>
            </a-table-column>
             <a-table-column title="上次登录" data-index="lastLoginAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
-                {{ record.lastLoginAt ? formatDate(record.lastLoginAt) : '从未登录' }}
+                {{ record.lastLoginAt ? formatDateCN(record.lastLoginAt) : '从未登录' }}
              </template>
            </a-table-column>
            <!-- TODO: Add Actions column (Edit, Delete, Change Status) -->
@@ -220,6 +220,7 @@ import {
 import { IconRefresh, IconPlus, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
 import apiService from '@/admin/services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 const users = ref([]);
 const isLoading = ref(false);
@@ -246,13 +247,6 @@ const pagination = reactive({
 const adminUsersCount = computed(() => {
   return users.value.filter(user => user.isAdmin).length;
 });
-
-// Helper function to format date
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
 
 // Helper to get initial form values
 const getInitialUserForm = () => ({

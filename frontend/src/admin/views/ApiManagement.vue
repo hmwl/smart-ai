@@ -102,13 +102,7 @@
           </a-table-column>
           <a-table-column title="创建时间" data-index="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
-               {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
-                  year: 'numeric', 
-                  month: 'short', 
-                  day: 'numeric', 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
-                }) }}
+               {{ formatDateCN(record.createdAt) }}
              </template>
            </a-table-column>
           <a-table-column title="操作" :width="150" fixed="right">
@@ -245,6 +239,7 @@ import {
 import { IconRefresh, IconPlus, IconLaunch, IconSettings } from '@arco-design/web-vue/es/icon';
 import apiService from '@/admin/services/apiService';
 import PlatformManagementModal from '../components/PlatformManagementModal.vue';
+import { formatDateCN } from '@/admin/utils/date';
 
 const apiEntries = ref([]);
 const isLoading = ref(false);

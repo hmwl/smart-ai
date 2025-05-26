@@ -62,13 +62,7 @@
           </a-table-column>
           <a-table-column title="创建时间" data-index="createdAt" key="createdAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
               <template #cell="{ record }">
-                {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
-                  year: 'numeric', 
-                  month: '2-digit', 
-                  day: '2-digit', 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
-                }) }}
+                {{ formatDateCN(record.createdAt) }}
               </template>
           </a-table-column>
           <!-- Actions Updated -->
@@ -131,6 +125,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus } from '@arco-design/web-vue/es/icon';
 import apiService from '../services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 // --- Refs and Reactive State Updated ---
 const aiTypes = ref([]);
@@ -190,8 +185,6 @@ const filteredData = computed(() => {
     return matchesSearch && matchesStatus;
   });
 });
-
-// --- Utility Functions ---
 
 // --- API Interaction Updated ---
 const fetchAiTypes = async () => {

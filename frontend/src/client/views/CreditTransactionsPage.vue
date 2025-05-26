@@ -87,7 +87,7 @@
           </a-table-column>
           <a-table-column title="变动后余额" data-index="balanceAfter" align="center" :width="120"></a-table-column>
           <a-table-column title="交易时间" data-index="createdAt" :width="200">
-            <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
+            <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
           </a-table-column>
           <a-table-column title="描述" data-index="description" ellipsis tooltip></a-table-column>
         </template>
@@ -116,6 +116,7 @@ import {
   Button as AButton,
   Space as ASpace,
 } from '@arco-design/web-vue';
+import { formatDateCN } from '@/client/utils/date';
 
 const transactions = ref([]);
 const isLoading = ref(false);
@@ -130,12 +131,6 @@ const pagination = reactive({
   pageSize: 15,
   total: 0,
 });
-
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return new Date(dateString).toLocaleDateString(undefined, options);
-};
 
 const translateTransactionType = (type) => {
   const map = {

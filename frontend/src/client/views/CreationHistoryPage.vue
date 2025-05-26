@@ -25,7 +25,7 @@
                 <p>{{ item.content || '无内容' }}</p>
               </div>
               <div class="creation-meta">
-                <div class="creation-date">创建时间: {{ formatDate(item.createdAt) }}</div>
+                <div class="creation-date">创建时间: {{ formatDateCN(item.createdAt) }}</div>
                 <div class="creation-app">使用应用: {{ item.appName || '未知应用' }}</div>
               </div>
               <div class="creation-actions">
@@ -54,15 +54,10 @@ import {
   Button as AButton,
   PageHeader as APageHeader
 } from '@arco-design/web-vue';
+import { formatDateCN } from '@/client/utils/date';
 
 const creations = ref([]);
 const loading = ref(false);
-
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return new Date(dateString).toLocaleDateString(undefined, options);
-};
 
 const fetchCreationHistory = async () => {
   loading.value = true;

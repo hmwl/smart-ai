@@ -79,7 +79,7 @@
         </div>
         <a-typography-paragraph :ellipsis="{ rows: 1, showTooltip: true }" class="text-xs mb-0 flex justify-between">
           <p class="text-xs">ID: {{ work._id }}</p>
-          <p class="text-xs">时间: {{ formatDate(work.createdAt) }}</p>
+          <p class="text-xs">时间: {{ formatDateCN(work.createdAt) }}</p>
         </a-typography-paragraph>
       </template>
     </a-card-meta>
@@ -113,6 +113,7 @@ import { computed } from 'vue';
 import { Card as ACard, CardMeta as ACardMeta, Avatar as AAvatar, TypographyParagraph as ATypographyParagraph, TypographyText as ATypographyText, Tag as ATag, Tooltip as ATooltip } from '@arco-design/web-vue';
 import { IconVideoCamera, IconVoice, IconCodepen, IconFile, IconEye, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
 import { getStaticAssetBaseUrl } from '../services/apiService.js';
+import { formatDateCN } from '@/admin/utils/date';
 
 const props = defineProps({
   work: {
@@ -163,12 +164,6 @@ const workTypeDisplay = computed(() => {
   };
   return typeMap[props.work.type] || props.work.type;
 });
-
-const formatDate = (dateString) => {
-  if (!dateString) return '-';
-  const date = new Date(dateString);
-  return date.toLocaleDateString();
-};
 
 const emitDetails = () => emit('details', props.work);
 const emitEdit = () => emit('edit', props.work);

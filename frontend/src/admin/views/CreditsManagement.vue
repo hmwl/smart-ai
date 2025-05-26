@@ -122,7 +122,7 @@
           <a-table-column title="变动后余额" data-index="balanceAfter" align="center" :width="130" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
           <a-table-column title="描述" data-index="description" ellipsis tooltip :width="200"></a-table-column>
           <a-table-column title="交易时间" data-index="createdAt" :width="180" fixed="right">
-            <template #cell="{ record }">{{ formatDate(record.createdAt) }}</template>
+            <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
           </a-table-column>
         </template>
       </a-table>
@@ -148,6 +148,7 @@ import {
 import { IconRefresh, IconSearch, IconDelete } from '@arco-design/web-vue/es/icon';
 import apiService from '../services/apiService';
 import { debounce } from 'lodash-es';
+import { formatDateCN } from '@/admin/utils/date';
 
 // State for Credit Transactions
 const transactions = ref([]);
@@ -169,12 +170,6 @@ const filters = reactive({
 });
 
 // --- Transaction Functions ---
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
-
 const translateTransactionType = (type) => {
   const map = {
     consumption: '消费',

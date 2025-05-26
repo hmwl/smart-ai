@@ -86,13 +86,7 @@
           </a-tag>
         </template>
         <template #createdAt="{ record }">
-          {{ new Date(record.createdAt).toLocaleString('zh-CN', { 
-            year: 'numeric', 
-            month: '2-digit', 
-            day: '2-digit', 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          }) }}
+          {{ formatDateCN(record.createdAt) }}
         </template>
         <template #actions="{ record }">
           <a-space>
@@ -155,6 +149,7 @@ import {
 import apiService from '@/admin/services/apiService';
 import EnumConfigFormModal from '../components/EnumConfigFormModal.vue';
 import EnumTypeManagementModal from '../components/EnumTypeManagementModal.vue';
+import { formatDateCN } from '@/admin/utils/date';
 
 const enumConfigs = ref([]);
 const loading = ref(false);
@@ -338,7 +333,6 @@ const filterOption = (inputValue, option) => {
   // For <a-select> with show-search
   return option.children[0].children.toLowerCase().includes(inputValue.toLowerCase());
 };
-
 
 onMounted(() => {
   fetchPlatformTypes();

@@ -40,7 +40,7 @@
           <a-descriptions-item label="账户状态">
             <a-tag :color="userData.status === 'active' ? 'green' : 'red'">{{ userData.status === 'active' ? '正常' : '禁用' }}</a-tag>
           </a-descriptions-item>
-          <a-descriptions-item label="注册时间">{{ formatDate(userData.createdAt) }}</a-descriptions-item>
+          <a-descriptions-item label="注册时间">{{ formatDateCN(userData.createdAt) }}</a-descriptions-item>
         </a-descriptions>
 
         <!-- Edit Mode: Forms -->
@@ -182,7 +182,7 @@
             <a-descriptions-item label="账户状态">
               <a-tag :color="userData.status === 'active' ? 'green' : 'red'">{{ userData.status === 'active' ? '正常' : '禁用' }}</a-tag>
             </a-descriptions-item>
-            <a-descriptions-item label="注册时间">{{ formatDate(userData.createdAt) }}</a-descriptions-item>
+            <a-descriptions-item label="注册时间">{{ formatDateCN(userData.createdAt) }}</a-descriptions-item>
           </a-descriptions>
 
           <!-- Edit Mode: Forms -->
@@ -331,6 +331,7 @@ import {
   Radio as ARadio,
   Space as ASpace
 } from '@arco-design/web-vue';
+import { formatDateCN } from '@/client/utils/date';
 
 // 定义 props 和 emits
 const props = defineProps({
@@ -521,12 +522,6 @@ const saveAllChanges = async () => {
   } finally {
     savingAll.value = false;
   }
-};
-
-const formatDate = (dateString) => {
-  if (!dateString) return 'N/A';
-  const options = { year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-  return new Date(dateString).toLocaleDateString(undefined, options);
 };
 
 // --- Top-up Modal State and Logic ---

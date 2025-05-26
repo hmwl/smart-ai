@@ -71,7 +71,7 @@
            </a-table-column>
            <a-table-column title="创建时间" data-index="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
-                {{ formatDate(record.createdAt) }}
+                {{ formatDateCN(record.createdAt) }}
              </template>
            </a-table-column>
            <a-table-column title="操作" :width="180" fixed="right">
@@ -226,6 +226,7 @@ import {
 import { IconRefresh, IconPlus, IconLaunch, IconEdit, IconDelete, IconList, IconEye } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
 import apiService from '@/admin/services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 const router = useRouter();
 
@@ -345,13 +346,6 @@ watch(() => pageForm.value.type, (newType, oldType) => {
     // Trigger validation update might still be useful if rules change based on type (not currently the case)
     pageFormRef.value?.clearValidate(['content']); 
 });
-
-// Helper function to format date
-const formatDate = (dateString) => {
-  if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-};
 
 // Fetch pages function
 const fetchPages = async () => {
