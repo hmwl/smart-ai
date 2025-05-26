@@ -310,6 +310,7 @@
     <FormBuilderModal
       v-model:visible="formBuilderModalVisible"
       :application-id="currentAppForFormBuilder?._id"
+      :application-name="currentAppForFormBuilder?.name"
       :platform-type="currentAppForFormBuilder?.platformType"
       @save="onFormBuilderSave"
     />

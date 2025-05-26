@@ -48,7 +48,7 @@
       </div>
 
       <div class="canvas">
-        <h3 class="panel-title">表单预览 (应用ID: {{ applicationId || 'N/A' }})</h3>
+        <h3 class="panel-title">表单预览【{{ props.applicationName || '未命名应用' }} ({{ props.applicationId || 'N/A' }})】</h3>
         <draggable
           class="form-drop-zone"
           :list="formFields"
@@ -108,68 +108,335 @@
             <a-form-item label="占位提示">
               <a-input v-model="selectedField.props.placeholder" />
             </a-form-item>
-            <a-form-item v-if="selectedField.type === 'select' || selectedField.type === 'radio' || selectedField.type === 'checkbox'" label="数据来源">
-              <a-select v-model="selectedField.config.dataSourceType" placeholder="选择数据来源">
-                <a-option value="manual">手动输入</a-option>
-                <a-option value="enum">枚举数据</a-option>
-              </a-select>
-            </a-form-item>
 
-            <div v-if="selectedField.config.dataSourceType === 'manual' && (selectedField.type === 'select' || selectedField.type === 'radio' || selectedField.type === 'checkbox')">
-              <a-form-item label="选项">
-                <div class="manual-options-container">
-                  <div v-for="(option, index) in selectedField.props.options" :key="index" class="option-editor-block">
-                    <div class="flex items-center justify-between"><strong class="option-editor-title">选项 {{ index + 1 }}</strong><a-button type="text" status="danger" @click="removeOption(selectedField, index)"><icon-minus-circle /> 删除</a-button></div>
-                    <a-input v-model="option.label" placeholder="显示文本 (例如：是)" />
-                    <a-input v-model="option.value" placeholder="选项值 (例如：yes)" />
+            <!-- Input Specific Properties -->
+            <template v-if="selectedField.type === 'input'">
+              <a-divider>输入框设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" />
+              </a-form-item>
+              <a-form-item label="类型">
+                <a-select v-model="selectedField.props.inputType">
+                  <a-option value="string">字符串</a-option>
+                  <a-option value="integer">整数</a-option>
+                  <a-option value="float">小数</a-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最小值">
+                <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最大值">
+                <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="步幅">
+                <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              </a-form-item>
+            </template>
+
+            <!-- Textarea Specific Properties -->
+            <template v-if="selectedField.type === 'textarea'">
+              <a-divider>多行文本框设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" />
+              </a-form-item>
+            </template>
+
+            <!-- Slider Specific Properties -->
+            <template v-if="selectedField.type === 'slider'">
+              <a-divider>滑竿设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input-number v-model="selectedField.props.defaultValue" />
+              </a-form-item>
+              <a-form-item label="最小值">
+                <a-input-number v-model="selectedField.props.min" />
+              </a-form-item>
+              <a-form-item label="最大值">
+                <a-input-number v-model="selectedField.props.max" />
+              </a-form-item>
+              <a-form-item label="步幅">
+                <a-input-number v-model="selectedField.props.step" />
+              </a-form-item>
+            </template>
+
+            <!-- Checkbox Group Specific Properties -->
+            <template v-if="selectedField.type === 'checkbox'">
+              <a-divider>复选框组设置</a-divider>
+              <a-form-item label="数据来源">
+                <a-select v-model="selectedField.config.dataSourceType" placeholder="选择数据来源">
+                  <a-option value="manual">手动输入</a-option>
+                  <a-option value="enum">枚举数据</a-option>
+                </a-select>
+              </a-form-item>
+              <div v-if="selectedField.config.dataSourceType === 'manual'">
+                <a-form-item label="选项">
+                  <div class="manual-options-container">
+                    <div v-for="(option, index) in selectedField.props.options" :key="index" class="option-editor-block">
+                      <div class="flex items-center justify-between"><strong class="option-editor-title">选项 {{ index + 1 }}</strong><a-button type="text" status="danger" @click="removeOption(selectedField, index)"><icon-minus-circle /> 删除</a-button></div>
+                      <a-input v-model="option.label" placeholder="显示文本 (例如：是)" />
+                      <a-input v-model="option.value" placeholder="选项值 (例如：yes)" />
+                    </div>
                   </div>
-                </div>
+                </a-form-item>
+                <a-button type="dashed" @click="addOption(selectedField)" style="width:100%; margin-bottom: 20px;"><icon-plus /> 添加选项</a-button>
+              </div>
+              <div v-if="selectedField.config.dataSourceType === 'enum'">
+                <a-form-item label="选择枚举类型">
+                  <a-select 
+                    v-model="selectedField.config.enumTypeId"
+                    placeholder="选择一个枚举类型"
+                    :loading="loadingEnumTypes"
+                    show-search
+                    allow-clear
+                    @focus="fetchEnumTypes" 
+                    @change="onEnumTypeChange(selectedField)" 
+                  >
+                    <a-option v-for="enumType in availableEnumTypes" :key="enumType._id" :value="enumType._id">
+                      {{ enumType.name }} ({{ enumType.platform }})
+                    </a-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item v-if="selectedField.config.enumTypeId" label="选择枚举值 (可多选)">
+                  <a-select
+                    v-model="selectedField.config.enumOptionIds"
+                    placeholder="选择一个或多个枚举值"
+                    :loading="loadingEnumConfigsForType"
+                    multiple
+                    show-search
+                    allow-clear
+                    :max-tag-count="3"
+                  >
+                    <a-option v-for="enumConf in enumConfigsOfSelectedType" :key="enumConf._id" :value="enumConf._id">
+                      {{ enumConf.translation }} ({{ enumConf.name }})
+                    </a-option>
+                  </a-select>
+                </a-form-item>
+              </div>
+              <a-form-item label="默认选中项">
+                <a-checkbox-group v-model="selectedField.props.defaultValue">
+                  <a-checkbox 
+                    v-for="option in getOptionsForDefaultValue(selectedField)" 
+                    :key="option.idValue" 
+                    :value="option.idValue"
+                  >
+                    {{ option.displayLabel }}
+                  </a-checkbox>
+                </a-checkbox-group>
               </a-form-item>
-              <a-button type="dashed" @click="addOption(selectedField)" style="width:100%; margin-bottom: 20px;"><icon-plus /> 添加选项</a-button>
-            </div>
-            
-            <div v-if="selectedField.config.dataSourceType === 'enum' && (selectedField.type === 'select' || selectedField.type === 'radio' || selectedField.type === 'checkbox')">
-              <a-form-item label="选择枚举类型">
-                 <a-select 
-                  v-model="selectedField.config.enumTypeId"
-                  placeholder="选择一个枚举类型"
-                  :loading="loadingEnumTypes"
-                  show-search
-                  allow-clear
-                  @focus="fetchEnumTypes" 
-                  @change="onEnumTypeChange(selectedField)" 
-                 >
-                  <a-option v-for="enumType in availableEnumTypes" :key="enumType._id" :value="enumType._id">
-                    {{ enumType.name }} ({{ enumType.platform }})
-                  </a-option>
+            </template>
+
+            <!-- Radio Group Specific Properties -->
+            <template v-if="selectedField.type === 'radio'">
+              <a-divider>单选框组设置</a-divider>
+              <a-form-item label="数据来源">
+                <a-select v-model="selectedField.config.dataSourceType" placeholder="选择数据来源">
+                  <a-option value="manual">手动输入</a-option>
+                  <a-option value="enum">枚举数据</a-option>
                 </a-select>
               </a-form-item>
+              <div v-if="selectedField.config.dataSourceType === 'manual'">
+                <a-form-item label="选项">
+                  <div class="manual-options-container">
+                    <div v-for="(option, index) in selectedField.props.options" :key="index" class="option-editor-block">
+                      <div class="flex items-center justify-between"><strong class="option-editor-title">选项 {{ index + 1 }}</strong><a-button type="text" status="danger" @click="removeOption(selectedField, index)"><icon-minus-circle /> 删除</a-button></div>
+                      <a-input v-model="option.label" placeholder="显示文本 (例如：是)" />
+                      <a-input v-model="option.value" placeholder="选项值 (例如：yes)" />
+                    </div>
+                  </div>
+                </a-form-item>
+                <a-button type="dashed" @click="addOption(selectedField)" style="width:100%; margin-bottom: 20px;"><icon-plus /> 添加选项</a-button>
+              </div>
+              <div v-if="selectedField.config.dataSourceType === 'enum'">
+                <a-form-item label="选择枚举类型">
+                  <a-select 
+                    v-model="selectedField.config.enumTypeId"
+                    placeholder="选择一个枚举类型"
+                    :loading="loadingEnumTypes"
+                    show-search
+                    allow-clear
+                    @focus="fetchEnumTypes" 
+                    @change="onEnumTypeChange(selectedField)" 
+                  >
+                    <a-option v-for="enumType in availableEnumTypes" :key="enumType._id" :value="enumType._id">
+                      {{ enumType.name }} ({{ enumType.platform }})
+                    </a-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item v-if="selectedField.config.enumTypeId" label="选择枚举值 (可多选)">
+                  <a-select
+                    v-model="selectedField.config.enumOptionIds"
+                    placeholder="选择一个或多个枚举值"
+                    :loading="loadingEnumConfigsForType"
+                    multiple
+                    show-search
+                    allow-clear
+                    :max-tag-count="3"
+                  >
+                    <a-option v-for="enumConf in enumConfigsOfSelectedType" :key="enumConf._id" :value="enumConf._id">
+                      {{ enumConf.translation }} ({{ enumConf.name }})
+                    </a-option>
+                  </a-select>
+                </a-form-item>
+              </div>
+              <a-form-item label="默认选中项">
+                <a-radio-group v-model="selectedField.props.defaultValue">
+                  <a-radio 
+                    v-for="option in getOptionsForDefaultValue(selectedField)" 
+                    :key="option.idValue" 
+                    :value="option.idValue"
+                  >
+                    {{ option.displayLabel }}
+                  </a-radio>
+                </a-radio-group>
+                 <a-button 
+                    type="text" 
+                    size="mini" 
+                    v-if="selectedField.props.defaultValue !== undefined"
+                    @click="selectedField.props.defaultValue = undefined"
+                    style="margin-left: 10px;"
+                  >
+                    清除默认值
+                </a-button>
+              </a-form-item>
+            </template>
 
-              <a-form-item v-if="selectedField.config.enumTypeId" label="选择枚举值 (可多选)">
-                <a-select
-                  v-model="selectedField.config.enumOptionIds"
-                  placeholder="选择一个或多个枚举值"
-                  :loading="loadingEnumConfigsForType"
-                  multiple
-                  show-search
-                  allow-clear
-                  :max-tag-count="3"
-                >
-                  <a-option v-for="enumConf in enumConfigsOfSelectedType" :key="enumConf._id" :value="enumConf._id">
-                    {{ enumConf.translation }} ({{ enumConf.name }})
-                  </a-option>
+            <!-- Select Specific Properties -->
+            <template v-if="selectedField.type === 'select'">
+              <a-divider>下拉框设置</a-divider>
+              <a-form-item label="数据来源">
+                <a-select v-model="selectedField.config.dataSourceType" placeholder="选择数据来源">
+                  <a-option value="manual">手动输入</a-option>
+                  <a-option value="enum">枚举数据</a-option>
                 </a-select>
               </a-form-item>
-            </div>
+              <div v-if="selectedField.config.dataSourceType === 'manual'">
+                <a-form-item label="选项">
+                  <div class="manual-options-container">
+                    <div v-for="(option, index) in selectedField.props.options" :key="index" class="option-editor-block">
+                      <div class="flex items-center justify-between"><strong class="option-editor-title">选项 {{ index + 1 }}</strong><a-button type="text" status="danger" @click="removeOption(selectedField, index)"><icon-minus-circle /> 删除</a-button></div>
+                      <a-input v-model="option.label" placeholder="显示文本 (例如：是)" />
+                      <a-input v-model="option.value" placeholder="选项值 (例如：yes)" />
+                    </div>
+                  </div>
+                </a-form-item>
+                <a-button type="dashed" @click="addOption(selectedField)" style="width:100%; margin-bottom: 20px;"><icon-plus /> 添加选项</a-button>
+              </div>
+              <div v-if="selectedField.config.dataSourceType === 'enum'">
+                <a-form-item label="选择枚举类型">
+                  <a-select 
+                    v-model="selectedField.config.enumTypeId"
+                    placeholder="选择一个枚举类型"
+                    :loading="loadingEnumTypes"
+                    show-search
+                    allow-clear
+                    @focus="fetchEnumTypes" 
+                    @change="onEnumTypeChange(selectedField)" 
+                  >
+                    <a-option v-for="enumType in availableEnumTypes" :key="enumType._id" :value="enumType._id">
+                      {{ enumType.name }} ({{ enumType.platform }})
+                    </a-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item v-if="selectedField.config.enumTypeId" label="选择枚举值 (可多选)">
+                  <a-select
+                    v-model="selectedField.config.enumOptionIds"
+                    placeholder="选择一个或多个枚举值"
+                    :loading="loadingEnumConfigsForType"
+                    multiple
+                    show-search
+                    allow-clear
+                    :max-tag-count="3"
+                  >
+                    <a-option v-for="enumConf in enumConfigsOfSelectedType" :key="enumConf._id" :value="enumConf._id">
+                      {{ enumConf.translation }} ({{ enumConf.name }})
+                    </a-option>
+                  </a-select>
+                </a-form-item>
+              </div>
+              <a-form-item label="默认选中项">
+                <a-checkbox-group v-model="selectedField.props.defaultValue">
+                  <a-checkbox 
+                    v-for="option in getOptionsForDefaultValue(selectedField)" 
+                    :key="option.idValue" 
+                    :value="option.idValue"
+                  >
+                    {{ option.displayLabel }}
+                  </a-checkbox>
+                </a-checkbox-group>
+              </a-form-item>
+            </template>
 
-            <!-- Add more common properties here -->
-            <a-form-item label="是否必填">
-              <a-switch v-model="selectedField.props.required" />
-            </a-form-item>
+            <!-- Input Specific Properties -->
+            <template v-if="selectedField.type === 'input'">
+              <a-divider>输入框设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" />
+              </a-form-item>
+              <a-form-item label="类型">
+                <a-select v-model="selectedField.props.inputType">
+                  <a-option value="string">字符串</a-option>
+                  <a-option value="integer">整数</a-option>
+                  <a-option value="float">小数</a-option>
+                </a-select>
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最小值">
+                <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最大值">
+                <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="步幅">
+                <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              </a-form-item>
+            </template>
+
+            <!-- Textarea Specific Properties -->
+            <template v-if="selectedField.type === 'textarea'">
+              <a-divider>多行文本框设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" />
+              </a-form-item>
+            </template>
+
+            <!-- Slider Specific Properties -->
+            <template v-if="selectedField.type === 'slider'">
+              <a-divider>滑竿设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input-number v-model="selectedField.props.defaultValue" />
+              </a-form-item>
+              <a-form-item label="最小值">
+                <a-input-number v-model="selectedField.props.min" />
+              </a-form-item>
+              <a-form-item label="最大值">
+                <a-input-number v-model="selectedField.props.max" />
+              </a-form-item>
+              <a-form-item label="步幅">
+                <a-input-number v-model="selectedField.props.step" />
+              </a-form-item>
+            </template>
+
+            <!-- Switch Specific Properties -->
+            <template v-if="selectedField.type === 'switch'">
+              <a-divider>开关设置</a-divider>
+              <a-form-item label="选中状态的值" tooltip="开关打开时，字段实际代表的值">
+                <a-input v-model="selectedField.props.checkedValue" placeholder="例如：true, 1, 'on'" />
+              </a-form-item>
+              <a-form-item label="未选中状态的值" tooltip="开关关闭时，字段实际代表的值">
+                <a-input v-model="selectedField.props.uncheckedValue" placeholder="例如：false, 0, 'off'" />
+              </a-form-item>
+              <a-form-item label="默认状态">
+                <a-radio-group v-model="selectedField.props.defaultValue">
+                  <a-radio :value="selectedField.props.checkedValue">选中</a-radio>
+                  <a-radio :value="selectedField.props.uncheckedValue">未选中</a-radio>
+                </a-radio-group>
+              </a-form-item>
+            </template>
 
             <!-- Upload Specific Properties -->
             <template v-if="selectedField.type === 'upload'">
               <a-divider>上传设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" placeholder="可填写默认文件URL或文件名" />
+              </a-form-item>
               <a-form-item label="存储地址" tooltip="实际文件上传的后端接口URL">
                 <a-input v-model="selectedField.props.action" />
               </a-form-item>
@@ -199,131 +466,6 @@
                 <a-input v-model="selectedField.props.placeholder" />
               </a-form-item>
             </template>
-
-            <!-- Select Specific Properties -->
-            <template v-if="selectedField.type === 'select'">
-              <a-divider>下拉框设置</a-divider>
-              <a-form-item label="允许多选">
-                <a-switch v-model="selectedField.props.multiple" @change="onSelectMultipleChange(selectedField)"/>
-              </a-form-item>
-              <a-form-item label="默认值">
-                <a-select 
-                  v-if="selectedField.props.multiple" 
-                  v-model="selectedField.props.defaultValue" 
-                  placeholder="选择一个或多个默认值" 
-                  multiple 
-                  allow-clear
-                >
-                  <a-option v-for="option in getOptionsForDefaultValue(selectedField)" :key="option.idValue" :value="option.idValue">
-                    {{ option.displayLabel }}
-                  </a-option>
-                </a-select>
-                <a-select 
-                  v-else 
-                  v-model="selectedField.props.defaultValue" 
-                  placeholder="选择一个默认值" 
-                  allow-clear
-                >
-                  <a-option v-for="option in getOptionsForDefaultValue(selectedField)" :key="option.idValue" :value="option.idValue">
-                    {{ option.displayLabel }}
-                  </a-option>
-                </a-select>
-              </a-form-item>
-            </template>
-
-            <!-- Switch Specific Properties -->
-            <template v-if="selectedField.type === 'switch'">
-              <a-divider>开关设置</a-divider>
-              <a-form-item label="选中状态的值" tooltip="开关打开时，字段实际代表的值">
-                <a-input v-model="selectedField.props.checkedValue" placeholder="例如：true, 1, 'on'" />
-              </a-form-item>
-              <a-form-item label="未选中状态的值" tooltip="开关关闭时，字段实际代表的值">
-                <a-input v-model="selectedField.props.uncheckedValue" placeholder="例如：false, 0, 'off'" />
-              </a-form-item>
-              <a-form-item label="默认状态">
-                <a-radio-group v-model="selectedField.props.defaultValue">
-                  <a-radio :value="selectedField.props.checkedValue">选中</a-radio>
-                  <a-radio :value="selectedField.props.uncheckedValue">未选中</a-radio>
-                </a-radio-group>
-              </a-form-item>
-            </template>
-
-            <!-- Radio Group Specific Properties -->
-            <template v-if="selectedField.type === 'radio'">
-              <a-divider>单选框组设置</a-divider>
-              <a-form-item label="默认选中项">
-                <a-radio-group v-model="selectedField.props.defaultValue">
-                  <a-radio 
-                    v-for="option in getOptionsForDefaultValue(selectedField)" 
-                    :key="option.idValue" 
-                    :value="option.idValue"
-                  >
-                    {{ option.displayLabel }}
-                  </a-radio>
-                </a-radio-group>
-                 <a-button 
-                    type="text" 
-                    size="mini" 
-                    v-if="selectedField.props.defaultValue !== undefined"
-                    @click="selectedField.props.defaultValue = undefined"
-                    style="margin-left: 10px;"
-                  >
-                    清除默认值
-                </a-button>
-              </a-form-item>
-            </template>
-
-            <!-- Checkbox Group Specific Properties -->
-            <template v-if="selectedField.type === 'checkbox'">
-              <a-divider>复选框组设置</a-divider>
-              <a-form-item label="默认选中项">
-                <a-checkbox-group v-model="selectedField.props.defaultValue">
-                  <a-checkbox 
-                    v-for="option in getOptionsForDefaultValue(selectedField)" 
-                    :key="option.idValue" 
-                    :value="option.idValue"
-                  >
-                    {{ option.displayLabel }}
-                  </a-checkbox>
-                </a-checkbox-group>
-              </a-form-item>
-            </template>
-
-            <!-- New properties for input, textarea, and slider -->
-            <a-form-item v-if="selectedField.type === 'input'" label="类型">
-              <a-select v-model="selectedField.props.inputType">
-                <a-option value="string">字符串</a-option>
-                <a-option value="integer">整数</a-option>
-                <a-option value="float">小数</a-option>
-              </a-select>
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'input' && (selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float')" label="最小值">
-              <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'input' && (selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float')" label="最大值">
-              <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'input' && (selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float')" label="步幅">
-              <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'input'" label="默认值">
-              <a-input v-model="selectedField.props.defaultValue" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'textarea'" label="默认值">
-              <a-input v-model="selectedField.props.defaultValue" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'slider'" label="最小值">
-              <a-input-number v-model="selectedField.props.min" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'slider'" label="最大值">
-              <a-input-number v-model="selectedField.props.max" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'slider'" label="步幅">
-              <a-input-number v-model="selectedField.props.step" />
-            </a-form-item>
-            <a-form-item v-if="selectedField.type === 'slider'" label="默认值">
-              <a-input-number v-model="selectedField.props.defaultValue" />
-            </a-form-item>
 
             <!-- Conditional Logic Section -->
             <template v-if="canHaveConditionalLogic(selectedField.type)">
@@ -470,6 +612,7 @@ import apiService from '@/admin/services/apiService';
 const props = defineProps({
   applicationId: String,
   platformType: String,
+  applicationName: String,
 });
 
 const emit = defineEmits(['save-success']);

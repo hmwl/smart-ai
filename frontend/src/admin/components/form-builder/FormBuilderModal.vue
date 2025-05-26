@@ -17,6 +17,7 @@
       v-if="visible" 
       :application-id="applicationId" 
       :platform-type="props.platformType"
+      :application-name="props.applicationName"
       ref="formBuilderRef"
       @save-success="handleSaveSuccess"
     />
@@ -40,7 +41,11 @@ const props = defineProps({
   platformType: {
     type: String,
     default: null,
-  }
+  },
+  applicationName: {
+    type: String,
+    default: null,
+  },
 });
 
 const emit = defineEmits(['update:visible', 'save']);
