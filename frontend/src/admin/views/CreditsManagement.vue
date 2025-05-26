@@ -121,7 +121,7 @@
           </a-table-column>
           <a-table-column title="变动后余额" data-index="balanceAfter" align="center" :width="130" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
           <a-table-column title="描述" data-index="description" ellipsis tooltip :width="200"></a-table-column>
-          <a-table-column title="交易时间" data-index="createdAt" :width="180" fixed="right">
+          <a-table-column title="交易时间" data-index="createdAt" :width="200" fixed="right">
             <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
           </a-table-column>
         </template>

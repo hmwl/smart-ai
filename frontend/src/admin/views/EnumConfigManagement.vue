@@ -88,6 +88,9 @@
         <template #createdAt="{ record }">
           {{ formatDateCN(record.createdAt) }}
         </template>
+        <template #updatedAt="{ record }">
+          {{ formatDateCN(record.updatedAt) }}
+        </template>
         <template #actions="{ record }">
           <a-space>
             <a-button
@@ -182,7 +185,8 @@ const columns = [
   { title: '平台', key: 'platform', slotName: 'platform', width: 120 },
   { title: '使用数', dataIndex: 'usageCount', key: 'usageCount', slotName: 'usageCount', width: 90, align: 'center' },
   { title: '状态', key: 'status', slotName: 'status', width: 100 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 180, slotName: 'createdAt' },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 200, slotName: 'createdAt' },
+  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 200, slotName: 'updatedAt' },
   { title: '操作', key: 'actions', slotName: 'actions', width: 150, fixed: 'right', align: 'center' },
 ];
 

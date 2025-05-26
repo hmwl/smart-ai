@@ -20,13 +20,13 @@
           class="mb-6"
         >
           <a-descriptions-item label="用户名">{{ userData.username }}</a-descriptions-item>
-          <a-descriptions-item span="2" label="邮箱">{{ userData.email || '未设置' }}</a-descriptions-item>
+          <a-descriptions-item :span="2" label="邮箱">{{ userData.email || '未设置' }}</a-descriptions-item>
           <a-descriptions-item label="昵称">{{ userData.nickname || '未设置' }}</a-descriptions-item>
           <a-descriptions-item label="账户状态">
             <a-tag :color="userData.status === 'active' ? 'green' : 'red'">{{ userData.status === 'active' ? '正常' : '禁用' }}</a-tag>
           </a-descriptions-item>
-          <a-descriptions-item span="2" label="账户积分"><a-statistic :value="userData.creditsBalance" :precision="0" /></a-descriptions-item>
-          <a-descriptions-item span="2" label="注册时间">{{ formatDateCN(userData.createdAt) }}</a-descriptions-item>
+          <a-descriptions-item :span="2" label="账户积分"><a-statistic :value="userData.creditsBalance" :precision="0" /></a-descriptions-item>
+          <a-descriptions-item :span="2" label="注册时间">{{ formatDateCN(userData.createdAt) }}</a-descriptions-item>
         </a-descriptions>
 
         <!-- Edit Mode: Forms -->

@@ -53,8 +53,11 @@
                 {{ record.createdBy ? record.createdBy.username : 'N/A' }}
             </template>
           </a-table-column>
-          <a-table-column title="创建时间" data-index="createdAt" :width="180">
+          <a-table-column title="创建时间" data-index="createdAt" :width="200">
             <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
+          </a-table-column>
+          <a-table-column title="更新时间" data-index="updatedAt" :width="200">
+            <template #cell="{ record }">{{ formatDateCN(record.updatedAt) }}</template>
           </a-table-column>
           <a-table-column title="备注" data-index="remarks" :width="180" ellipsis tooltip></a-table-column>
           <a-table-column title="操作" fixed="right" :width="150">

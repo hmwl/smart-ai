@@ -64,12 +64,12 @@
                 </a-tag>
               </template>
            </a-table-column>
-           <a-table-column title="发布日期" data-index="publishDate" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+           <a-table-column title="发布日期" data-index="publishDate" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
                 {{ record.publishDate ? formatDateCN(record.publishDate) : '-' }}
              </template>
            </a-table-column>
-            <a-table-column title="创建时间" data-index="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+            <a-table-column title="创建时间" data-index="createdAt" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
                 {{ formatDateCN(record.createdAt) }}
              </template>

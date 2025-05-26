@@ -69,7 +69,7 @@
                 {{ formatDateCN(record.createdAt) }}
              </template>
            </a-table-column>
-            <a-table-column title="最后更新" data-index="updatedAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
+            <a-table-column title="更新时间" data-index="updatedAt" :sortable="{ sortDirections: ['ascend', 'descend'] }" :width="200">
              <template #cell="{ record }">
                 {{ formatDateCN(record.updatedAt) }}
              </template>

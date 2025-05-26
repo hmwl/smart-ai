@@ -43,6 +43,12 @@
           {{ record.status === 'active' ? '启用' : '禁用' }}
         </a-tag>
       </template>
+      <template #createdAt="{ record }">
+        {{ formatDateCN(record.createdAt) }}
+      </template>
+      <template #updatedAt="{ record }">
+        {{ formatDateCN(record.updatedAt) }}
+      </template>
       <template #actions="{ record }">
         <a-space>
           <a-button type="text" status="warning" size="mini" @click="openEditTypeForm(record)">
@@ -120,6 +126,7 @@ import { ref, reactive, watch, onMounted, nextTick } from 'vue';
 import { Message, Modal, Tooltip as ATooltip } from '@arco-design/web-vue';
 import { IconPlus, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
 import apiService from '@/admin/services/apiService';
+import { formatDateCN } from '@/admin/utils/date';
 
 const props = defineProps({
   visible: Boolean,
@@ -160,6 +167,8 @@ const columns = [
   { title: '平台', key: 'platform', slotName: 'platform', width: 120 },
   { title: '使用数', key: 'usageCount', slotName: 'usageCount', width: 90, align: 'center' },
   { title: '状态', key: 'status', slotName: 'status', width: 90 },
+  { title: '创建时间', key: 'createdAt', slotName: 'createdAt', width: 200 },
+  { title: '更新时间', key: 'updatedAt', slotName: 'updatedAt', width: 200 },
   { title: '操作', key: 'actions', slotName: 'actions', width: 120, fixed: 'right' },
 ];
 

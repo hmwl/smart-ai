@@ -69,10 +69,15 @@
                 </a-tag>
               </template>
            </a-table-column>
-           <a-table-column title="创建时间" data-index="createdAt" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+           <a-table-column title="创建时间" data-index="createdAt" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
                 {{ formatDateCN(record.createdAt) }}
              </template>
+           </a-table-column>
+           <a-table-column title="更新时间" data-index="updatedAt" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+            <template #cell="{ record }">
+                {{ formatDateCN(record.updatedAt) }}
+            </template>
            </a-table-column>
            <a-table-column title="操作" :width="180" fixed="right">
              <template #cell="{ record }">

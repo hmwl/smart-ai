@@ -19,7 +19,7 @@
         :pagination="false" 
         row-key="_id"
         size="small"
-        :scroll="{ y: 400 }"
+        :scroll="{ x: 'max-content'}"
       >
         <template #status="{ record }">
           <a-tag :color="record.status === 'active' ? 'green' : 'orangered'">
@@ -37,6 +37,9 @@
         </template>
         <template #createdAt="{ record }">
           {{ formatDateCN(record.createdAt) }}
+        </template>
+        <template #updatedAt="{ record }">
+          {{ formatDateCN(record.updatedAt) }}
         </template>
         <template #actions="{ record }">
           <a-space>
@@ -307,6 +310,7 @@ const columns = [
   { title: '总使用数', dataIndex: 'totalUsageCount', key: 'totalUsageCount', slotName: 'totalUsageCount', width: 100, align: 'center' },
   { title: '状态', key: 'status', slotName: 'status', width: 100, align: 'center' },
   { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', slotName: 'createdAt', width: 200 },
+  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', slotName: 'updatedAt', width: 200 },
   { title: '操作', key: 'actions', slotName: 'actions', width: 120, align: 'center', fixed: 'right' },
 ];
 

@@ -65,6 +65,11 @@
                 {{ formatDateCN(record.createdAt) }}
               </template>
           </a-table-column>
+          <a-table-column title="更新时间" data-index="updatedAt" key="updatedAt" :sortable="{ sortDirections: ['ascend', 'descend'] }">
+              <template #cell="{ record }">
+                {{ formatDateCN(record.updatedAt) }}
+              </template>
+          </a-table-column>
           <!-- Actions Updated -->
           <a-table-column title="操作" key="action" :width="150" fixed="right" align="center"> 
               <template #cell="{ record }">
