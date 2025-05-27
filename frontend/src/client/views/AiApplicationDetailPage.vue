@@ -82,6 +82,7 @@
                 :fields="formSchema.fields"
                 v-model:form-model="dynamicFormModel"
                 ref="dynamicFormRendererRef"
+                :allowed-enum-option-ids="allowedEnumOptionIds"
                 class=""
               />
               <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成</a-button>
@@ -215,6 +216,22 @@ const getImageUrl = (relativePath) => {
   const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
   return `${staticAssetBase}${path}`;
 };
+
+const allowedEnumOptionIds = computed(() => {
+  const set = new Set();
+  if (application.value && Array.isArray(application.value.apis)) {
+    application.value.apis.forEach(api => {
+      if (api.config && typeof api.config === 'object') {
+        Object.values(api.config).forEach(val => {
+          if (Array.isArray(val)) {
+            val.forEach(id => set.add(id));
+          }
+        });
+      }
+    });
+  }
+  return set;
+});
 
 const fetchApplicationDetail = async () => {
   loading.value = true;

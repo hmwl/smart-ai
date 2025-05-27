@@ -54,7 +54,7 @@
             v-model="formModel[field.props.field]"
             :placeholder="field.props.placeholder"
             :multiple="field.props.multiple"
-            :loading="field.loadingOptions"
+            :loading="field.loadingOptions" 
             :disabled="field.props.disabled"
             allow-clear
           >
@@ -62,12 +62,16 @@
               v-for="opt in field.runtimeTransformedOptions"
               :key="opt.value"
               :value="opt.value"
+              :disabled="opt.disabled"
             >
               <span style="display: flex; align-items: center;">
-                <span>{{ opt.label }}</span>
-                <a-tooltip v-if="opt.description">
+                <span :style="opt.disabled ? 'color: #bfbfbf;' : ''">{{ opt.label }}</span>
+                <a-tooltip v-if="opt.description || opt.disabled">
                   <icon-question-circle style="margin-left: 6px; color: var(--color-text-3); font-size: 14px; vertical-align: middle;" />
-                  <template #content>{{ opt.description }}</template>
+                  <template #content>
+                    <div v-if="opt.description">{{ opt.description }}</div>
+                    <div v-if="opt.disabled" style="color: #bfbfbf;">该选项未开放</div>
+                  </template>
                 </a-tooltip>
               </span>
             </a-option>
@@ -75,22 +79,28 @@
         </template>
         <template v-else-if="field.type === 'radio'">
           <a-radio-group v-model="formModel[field.props.field]" :disabled="field.props.disabled">
-            <a-radio v-for="opt in field.runtimeTransformedOptions" :key="opt.value" :value="opt.value">
-              <span>{{ opt.label }}</span>
-              <a-tooltip v-if="opt.description">
+            <a-radio v-for="opt in field.runtimeTransformedOptions" :key="opt.value" :value="opt.value" :disabled="opt.disabled">
+              <span :style="opt.disabled ? 'color: #bfbfbf;' : ''">{{ opt.label }}</span>
+              <a-tooltip v-if="opt.description || opt.disabled">
                 <icon-question-circle style="margin-left: 4px; color: var(--color-text-3); font-size: 14px; vertical-align: middle;" />
-                <template #content>{{ opt.description }}</template>
+                <template #content>
+                  <div v-if="opt.description">{{ opt.description }}</div>
+                  <div v-if="opt.disabled" style="color: #bfbfbf;">该选项未开放</div>
+                </template>
               </a-tooltip>
             </a-radio>
           </a-radio-group>
         </template>
         <template v-else-if="field.type === 'checkbox'">
           <a-checkbox-group v-model="formModel[field.props.field]" :disabled="field.props.disabled">
-            <a-checkbox v-for="opt in field.runtimeTransformedOptions" :key="opt.value" :value="opt.value">
-              <span>{{ opt.label }}</span>
-              <a-tooltip v-if="opt.description">
+            <a-checkbox v-for="opt in field.runtimeTransformedOptions" :key="opt.value" :value="opt.value" :disabled="opt.disabled">
+              <span :style="opt.disabled ? 'color: #bfbfbf;' : ''">{{ opt.label }}</span>
+              <a-tooltip v-if="opt.description || opt.disabled">
                 <icon-question-circle style="margin-left: 4px; color: var(--color-text-3); font-size: 14px; vertical-align: middle;" />
-                <template #content>{{ opt.description }}</template>
+                <template #content>
+                  <div v-if="opt.description">{{ opt.description }}</div>
+                  <div v-if="opt.disabled" style="color: #bfbfbf;">该选项未开放</div>
+                </template>
               </a-tooltip>
             </a-checkbox>
           </a-checkbox-group>
@@ -244,6 +254,10 @@ const props = defineProps({
     required: true,
     default: () => ({})
   },
+  allowedEnumOptionIds: {
+    type: Object, // Set
+    default: () => new Set()
+  },
   // Add any other props like layout, etc., if needed
 });
 
@@ -276,40 +290,90 @@ const clearCache = () => {
 
 // ====== END ======
 
-// Function to fetch enum options for a field
+const platformFieldOptionsCache = new Map();
+
 const fetchEnumOptionsForField = async (field) => {
   if (field.config?.dataSourceType === 'enum' && field.config?.enumTypeId) {
-    // 新增：平台字段枚举，直接用 options
-    if (String(field.config.enumTypeId).startsWith('platform_') && Array.isArray(field.config.platformFieldOptions)) {
-      field.runtimeTransformedOptions = field.config.platformFieldOptions.map(opt => ({
-        label: opt.value,
-        value: opt.key,
-        description: opt.description || ''
-      }));
-      return;
+    // 平台字段：先查缓存，无则请求
+    if (String(field.config.enumTypeId).startsWith('platform_')) {
+      const parts = String(field.config.enumTypeId).split('_');
+      if (parts.length >= 3) {
+        const platformId = parts[1];
+        const fieldKey = parts.slice(2).join('_');
+        const cacheKey = `${platformId}_${fieldKey}`;
+        let options = platformFieldOptionsCache.get(cacheKey);
+        if (!options) {
+          try {
+            const res = await clientApiService.getPlatformFieldOptions(platformId, fieldKey);
+            if (Array.isArray(res.data)) {
+              options = res.data;
+              platformFieldOptionsCache.set(cacheKey, options);
+            } else {
+              options = [];
+            }
+          } catch (e) {
+            field.runtimeTransformedOptions = [];
+            return;
+          }
+        }
+        field.config.platformFieldOptions = options; // 也同步到 config
+        const allowedIds = field.config.enumOptionIds || [];
+        let filtered = options;
+        if (Array.isArray(allowedIds) && allowedIds.length > 0) {
+          filtered = options.filter(opt => allowedIds.includes(opt.key));
+        }
+        field.runtimeTransformedOptions = filtered.map(opt => ({
+          label: opt.value,
+          value: opt.key,
+          description: opt.description || '',
+          disabled: props.allowedEnumOptionIds.size > 0 && !props.allowedEnumOptionIds.has(opt.key)
+        }));
+        return;
+      }
     }
+    // 普通枚举管理
     if (enumOptionsCache.has(field.config.enumTypeId)) {
-      field.runtimeTransformedOptions = enumOptionsCache.get(field.config.enumTypeId);
+      const allowedIds = field.config.enumOptionIds || [];
+      let cached = enumOptionsCache.get(field.config.enumTypeId);
+      if (Array.isArray(allowedIds) && allowedIds.length > 0) {
+        cached = cached.filter(opt => allowedIds.includes(opt.value));
+      }
+      field.runtimeTransformedOptions = cached.map(opt => ({
+        ...opt,
+        disabled: false
+      }));
       return;
     }
     field.loadingOptions = true;
     try {
       const response = await clientApiService.getEnumConfigsByType(field.config.enumTypeId);
-      const options = (response.data || []).map(conf => ({
-        label: conf.translation || conf.name,
-        value: conf._id,
-        description: conf.description || ''
-      }));
-      field.runtimeTransformedOptions = options;
-      enumOptionsCache.set(field.config.enumTypeId, options);
-    } catch (error) {
-      Message.error(`Failed to load options for field ${field.props.label || field.props.field}: ${error.message}`);
+      if (Array.isArray(response.data)) {
+        const allowedIds = field.config.enumOptionIds || [];
+        let filtered = response.data;
+        if (Array.isArray(allowedIds) && allowedIds.length > 0) {
+          filtered = response.data.filter(opt => allowedIds.includes(opt._id));
+        }
+        field.runtimeTransformedOptions = filtered.map(opt => ({
+          label: opt.translation || opt.name,
+          value: opt._id,
+          description: opt.description || '',
+          disabled: false
+        }));
+        enumOptionsCache.set(field.config.enumTypeId, response.data.map(opt => ({
+          label: opt.translation || opt.name,
+          value: opt._id,
+          description: opt.description || '',
+        })));
+      } else {
+        field.runtimeTransformedOptions = [];
+      }
+    } catch (e) {
       field.runtimeTransformedOptions = [];
     } finally {
       field.loadingOptions = false;
     }
   } else if (field.config?.dataSourceType === 'manual' && field.props?.options) {
-    field.runtimeTransformedOptions = field.props.options.map(opt => ({ ...opt, description: opt.description || '' }));
+    field.runtimeTransformedOptions = field.props.options.map(opt => ({ ...opt, description: opt.description || '', disabled: false }));
   } else {
     field.runtimeTransformedOptions = [];
   }

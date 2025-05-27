@@ -106,4 +106,10 @@ apiClient.getEnumConfigsByType = (enumTypeId) => {
   return apiClient.get(`/public/enum-types/${enumTypeId}/configs`); // Example: GET /api/public/enum-types/ETXYZ123/configs
 };
 
+// 获取平台字段 options（含 description）
+apiClient.getPlatformFieldOptions = (platformId, fieldKey) => {
+  if (!platformId || !fieldKey) return Promise.reject(new Error('platformId 和 fieldKey 必填'));
+  return apiClient.get(`/public/platforms/${platformId}/fields/${fieldKey}/options`);
+};
+
 export default apiClient; 

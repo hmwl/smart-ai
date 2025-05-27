@@ -189,4 +189,19 @@ router.delete('/:id', authenticateToken, isAdmin, getPlatform, async (req, res) 
     }
 });
 
+// 公共接口：获取平台字段 options
+const PlatformModel = require('../models/Platform');
+router.get('/:platformId/fields/:fieldKey/options', async (req, res) => {
+  try {
+    const { platformId, fieldKey } = req.params;
+    const platform = await PlatformModel.findById(platformId);
+    if (!platform) return res.status(404).json({ message: '平台不存在' });
+    const field = (platform.configFields || []).find(f => f.key === fieldKey);
+    if (!field) return res.status(404).json({ message: '字段不存在' });
+    res.json(field.options || []);
+  } catch (e) {
+    res.status(500).json({ message: e.message });
+  }
+});
+
 module.exports = router; 

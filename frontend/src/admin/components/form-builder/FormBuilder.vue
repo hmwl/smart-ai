@@ -843,18 +843,18 @@ const selectField = async (field) => {
         enumConfigsOfSelectedType.value = field.runtimeAvailableEnumOptions;
       } else {
         // 原有逻辑
-        loadingEnumConfigsForType.value = true;
-        try {
-          const response = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
-          const specificEnumConfigs = response.data?.data || [];
+      loadingEnumConfigsForType.value = true;
+      try {
+        const response = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
+        const specificEnumConfigs = response.data?.data || [];
           field.runtimeAvailableEnumOptions = specificEnumConfigs;
           enumConfigsOfSelectedType.value = specificEnumConfigs;
-        } catch (error) {
-          Message.error(`加载枚举类型 "${field.config.enumTypeId}" 的配置项失败: ` + (error.response?.data?.message || error.message));
-          field.runtimeAvailableEnumOptions = [];
-          enumConfigsOfSelectedType.value = [];
-        } finally {
-          loadingEnumConfigsForType.value = false;
+      } catch (error) {
+        Message.error(`加载枚举类型 "${field.config.enumTypeId}" 的配置项失败: ` + (error.response?.data?.message || error.message));
+        field.runtimeAvailableEnumOptions = [];
+        enumConfigsOfSelectedType.value = [];
+      } finally {
+        loadingEnumConfigsForType.value = false;
         }
       }
     } else {
@@ -1014,57 +1014,57 @@ const saveForm = async () => {
           }));
         }
         return {
-          id: field.id, // Component ID
-          type: field.type,
-          props: {
-            label: field.props.label, // 标签名称
-            placeholder: field.props.placeholder, // 占位提示
-            required: field.props.required, // 是否必填
-            options: field.props.options, // For select, radio, checkbox (manual mode)
-            field: field.props.field, // unique field name / key
-            autoSize: field.props.autoSize, // for textarea
-            action: field.props.action,
-            accept: field.props.accept,
-            multiple: field.props.multiple,
-            limit: field.props.limit,
-            listType: field.props.listType,
-            drag: field.props.drag,
-            autoUpload: field.props.autoUpload,
-            checkedValue: field.props.checkedValue, // For switch
-            uncheckedValue: field.props.uncheckedValue, // For switch
-            nodeId: field.props.nodeId, // Save nodeId
-            defaultValue: field.props.defaultValue, // For switch default state, but also for other types later
-            key: field.props.key, // ComfyUI专用唯一key
-            inputType: field.props.inputType, // input 类型
-            min: field.props.min, // input/slider 最小值
-            max: field.props.max, // input/slider 最大值
-            step: field.props.step, // input/slider 步幅
-            description: field.props.description, // 说明字段
-            ...(field.type === 'color-picker' ? {
-              colorType: field.props.colorType ?? 'solid',
-              gradientType: field.props.gradientType ?? 'linear',
-              gradientAngle: field.props.gradientAngle ?? 0,
-              radialX: field.props.radialX ?? 50,
-              radialY: field.props.radialY ?? 50,
-              conicAngle: field.props.conicAngle ?? 0,
-              gradientStart: field.props.gradientStart ?? '#1677ff',
-              gradientEnd: field.props.gradientEnd ?? '#ff4d4f',
-              gradientStartPercent: field.props.gradientStartPercent ?? 0,
-              gradientEndPercent: field.props.gradientEndPercent ?? 100,
-            } : {}),
-          },
-          config: {
-            label: field.config.label, // Original component type label for reference
-            dataSourceType: field.config.dataSourceType, // manual or enum
-            enumTypeId: field.config.enumTypeId, // NEW: Save enum type ID
-            enumOptionIds: field.config.enumOptionIds, // NEW: Save selected enum option IDs
-            enableConditionalLogic: field.config.enableConditionalLogic,
-            conditionalLogicRules: field.config.conditionalLogicRules,
-            conditionalLogicOperator: field.config.conditionalLogicOperator,
-            conditionalLogicVisibilityAction: field.config.conditionalLogicVisibilityAction,
-            conditionalLogicRequiredAction: field.config.conditionalLogicRequiredAction,
+        id: field.id, // Component ID
+        type: field.type,
+        props: {
+          label: field.props.label, // 标签名称
+          placeholder: field.props.placeholder, // 占位提示
+          required: field.props.required, // 是否必填
+          options: field.props.options, // For select, radio, checkbox (manual mode)
+          field: field.props.field, // unique field name / key
+          autoSize: field.props.autoSize, // for textarea
+          action: field.props.action,
+          accept: field.props.accept,
+          multiple: field.props.multiple,
+          limit: field.props.limit,
+          listType: field.props.listType,
+          drag: field.props.drag,
+          autoUpload: field.props.autoUpload,
+          checkedValue: field.props.checkedValue, // For switch
+          uncheckedValue: field.props.uncheckedValue, // For switch
+          nodeId: field.props.nodeId, // Save nodeId
+          defaultValue: field.props.defaultValue, // For switch default state, but also for other types later
+          key: field.props.key, // ComfyUI专用唯一key
+          inputType: field.props.inputType, // input 类型
+          min: field.props.min, // input/slider 最小值
+          max: field.props.max, // input/slider 最大值
+          step: field.props.step, // input/slider 步幅
+          description: field.props.description, // 说明字段
+          ...(field.type === 'color-picker' ? {
+            colorType: field.props.colorType ?? 'solid',
+            gradientType: field.props.gradientType ?? 'linear',
+            gradientAngle: field.props.gradientAngle ?? 0,
+            radialX: field.props.radialX ?? 50,
+            radialY: field.props.radialY ?? 50,
+            conicAngle: field.props.conicAngle ?? 0,
+            gradientStart: field.props.gradientStart ?? '#1677ff',
+            gradientEnd: field.props.gradientEnd ?? '#ff4d4f',
+            gradientStartPercent: field.props.gradientStartPercent ?? 0,
+            gradientEndPercent: field.props.gradientEndPercent ?? 100,
+          } : {}),
+        },
+        config: {
+          label: field.config.label, // Original component type label for reference
+          dataSourceType: field.config.dataSourceType, // manual or enum
+          enumTypeId: field.config.enumTypeId, // NEW: Save enum type ID
+          enumOptionIds: field.config.enumOptionIds, // NEW: Save selected enum option IDs
+          enableConditionalLogic: field.config.enableConditionalLogic,
+          conditionalLogicRules: field.config.conditionalLogicRules,
+          conditionalLogicOperator: field.config.conditionalLogicOperator,
+          conditionalLogicVisibilityAction: field.config.conditionalLogicVisibilityAction,
+          conditionalLogicRequiredAction: field.config.conditionalLogicRequiredAction,
             ...extraConfig
-          }
+        }
         };
       }),
     };
@@ -1119,13 +1119,13 @@ const loadForm = async () => {
               translation: opt.value,
             }));
           } else {
-            try {
-              const enumResponse = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
-              field.runtimeAvailableEnumOptions = enumResponse.data?.data || [];
-            } catch (error) {
-              console.error(`Failed to load enum configs for field ${field.id} (typeId: ${field.config.enumTypeId}) during form load:`, error);
+          try {
+            const enumResponse = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
+            field.runtimeAvailableEnumOptions = enumResponse.data?.data || [];
+          } catch (error) {
+            console.error(`Failed to load enum configs for field ${field.id} (typeId: ${field.config.enumTypeId}) during form load:`, error);
               field.runtimeAvailableEnumOptions = [];
-            }
+          }
           }
           return field;
         });

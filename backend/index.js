@@ -100,6 +100,7 @@ app.use('/api/platforms', authenticateToken, isAdmin, platformRoutes);
 
 // Mount public routes
 app.use('/api/public', publicRoutes); // Restore public routes
+app.use('/api/public/platforms', platformRoutes); // Mount the new public platform API
 app.use('/api/public/payment-config', paymentConfigRoutes); // Added for payment config
 app.use('/api/public/market', publicMarketRoutes); // Added for public market
 app.use('/api/public', publicEnumApiRoutes); // Mount the new public enum API

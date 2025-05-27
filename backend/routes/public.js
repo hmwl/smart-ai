@@ -401,10 +401,14 @@ router.get('/ai-applications/active', async (req, res) => {
 router.get('/ai-applications/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    let application = await AiApplication.findOne({ _id: id /*, status: 'active' */ })
+    let application = await AiApplication.findOne({ _id: id })
       .populate('type', 'name uri _id')
+      .populate({
+        path: 'apis',
+        select: '_id name platformName platformType apiUrl config'
+      })
       .select('-__v')
-      .lean(); // Use lean here
+      .lean();
 
     if (!application) {
       return res.status(404).json({ message: 'AI 应用未找到' });
