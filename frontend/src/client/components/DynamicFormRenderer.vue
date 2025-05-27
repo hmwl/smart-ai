@@ -3,11 +3,16 @@
     <template v-for="field in visibleFields" :key="field.props.field">
       <a-form-item
         :field="field.props.field"
-        :label="field.props.label"
-        :tooltip="field.props.tooltip" 
-        :help="field.props.helpText"
-        :hide-label="!field.props.label" 
       >
+        <template #label>
+          <span>
+            {{ field.props.label }}
+            <a-tooltip v-if="field.props.description">
+              <icon-question-circle />
+              <template #content>{{ field.props.description }}</template>
+            </a-tooltip>
+          </span>
+        </template>
         <!-- Conditional rendering for each field type -->
         <template v-if="field.type === 'input'">
           <a-input v-if="!field.props.inputType || field.props.inputType === 'string'"
@@ -107,6 +112,88 @@
             </template>
           </a-upload>
         </template>
+        <template v-else-if="field.type === 'color-picker'">
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <a-popover
+              v-model:popup-visible="field._colorPickerVisible"
+              position="right"
+              trigger="click"
+              :arrow="false"
+            >
+              <template #content>
+                <div style="min-width: 360px; max-width: 400px;">
+                  <div style="margin-bottom: 18px;">
+                    <a-radio-group v-model="field.props.colorType">
+                      <a-radio value="solid">纯色</a-radio>
+                      <a-radio value="gradient">渐变</a-radio>
+                    </a-radio-group>
+                  </div>
+                  <div v-if="field.props.colorType === 'solid'" class="flex items-center gap-2">
+                    <a-color-picker v-model="formModel[field.props.field]" style="width: 60px;" />{{ formModel[field.props.field] }}
+                  </div>
+                  <div v-else>
+                    <div style="display: flex; gap: 8px; align-items: center; width: 100%; justify-content: space-between; margin-bottom: 18px;">
+                      <div style="flex:1;" class="flex items-center gap-2">
+                        <span>起始色</span>
+                        <a-color-picker v-model="field.props.gradientStart" style="width: 60px;" />
+                        <span class="text-xs w-14">{{ field.props.gradientStart }}</span>
+                      </div>
+                      <div style="flex:1;" class="flex items-center gap-2">
+                        <span>结束色</span>
+                        <a-color-picker v-model="field.props.gradientEnd" style="width: 60px;" />
+                        <span class="text-xs w-14">{{ field.props.gradientEnd }}</span>
+                      </div>
+                    </div>
+                    <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 12px;">
+                      <div style="flex:1;">
+                        <span style="font-size: 13px;">起始色占比</span>
+                        <a-slider v-model="field.props.gradientStartPercent" :min="0" :max="100" :step="1" style="width: 120px; margin-left: 8px;" />
+                        <span style="margin-left: 18px;">{{ field.props.gradientStartPercent ?? 0 }}%</span>
+                      </div>
+                      <div style="flex:1;">
+                        <span style="font-size: 13px;">结束色占比</span>
+                        <a-slider v-model="field.props.gradientEndPercent" :min="0" :max="100" :step="1" style="width: 120px; margin-left: 8px;" />
+                        <span style="margin-left: 18px;">{{ field.props.gradientEndPercent ?? 100 }}%</span>
+                      </div>
+                    </div>
+                    <div style="margin-bottom: 18px;">
+                      <a-radio-group v-model="field.props.gradientType">
+                        <a-radio value="linear">线性渐变</a-radio>
+                        <a-radio value="radial">径向渐变</a-radio>
+                        <a-radio value="conic">角度渐变</a-radio>
+                      </a-radio-group>
+                    </div>
+                    <div v-if="field.props.gradientType === 'linear'" style="margin-bottom: 8px;">
+                      <span>方向 (角度)</span>
+                      <a-slider v-model="field.props.gradientAngle" :min="0" :max="360" :step="1" style="width: 180px; display: inline-block; margin-left: 8px;" />
+                      <span style="margin-left: 8px;">{{ field.props.gradientAngle || 0 }}°</span>
+                    </div>
+                    <div v-if="field.props.gradientType === 'radial'" style="margin-bottom: 8px;">
+                      <div>
+                        <span>中心位置 X</span>
+                        <a-slider v-model="field.props.radialX" :min="0" :max="100" :step="1" style="width: 120px; display: inline-block; margin-left: 8px;" />
+                        <span style="margin-left: 8px;">{{ field.props.radialX !== undefined ? field.props.radialX : 50 }}%</span>
+                      </div>
+                      <div>
+                        <span>中心位置 Y</span>
+                        <a-slider v-model="field.props.radialY" :min="0" :max="100" :step="1" style="width: 120px; display: inline-block; margin-left: 8px;" />
+                        <span style="margin-left: 8px;">{{ field.props.radialY !== undefined ? field.props.radialY : 50 }}%</span>
+                      </div>
+                    </div>
+                    <div v-if="field.props.gradientType === 'conic'" style="margin-bottom: 8px;">
+                      <span>旋转角度</span>
+                      <a-slider v-model="field.props.conicAngle" :min="0" :max="360" :step="1" style="width: 180px; display: inline-block; margin-left: 8px;" />
+                      <span style="margin-left: 8px;">{{ field.props.conicAngle || 0 }}°</span>
+                    </div>
+                  </div>
+                </div>
+              </template>
+              <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;" @click="initCache">
+                <div :style="getColorPreviewStyle(field.props, formModel[field.props.field])" style="width: 80px; height: 32px; border-radius: 4px;"></div>
+              </div>
+            </a-popover>
+          </div>
+        </template>
         <template v-else>
           <span style="color: red;">未知或不支持的组件类型: {{ field.type }}</span>
         </template>
@@ -116,7 +203,7 @@
 </template>
 
 <script setup>
-import { ref, watchEffect, defineProps, defineEmits, computed } from 'vue';
+import { ref, watchEffect, defineProps, defineEmits, computed, watch, nextTick } from 'vue';
 import {
   Form as AForm, FormItem as AFormItem, Input as AInput, Textarea as ATextarea,
   Select as ASelect, RadioGroup as ARadioGroup, CheckboxGroup as ACheckboxGroup,
@@ -145,6 +232,28 @@ const internalFields = ref([]);
 
 // 顶部加缓存
 const enumOptionsCache = new Map();
+
+// ====== 表单初始数据缓存与重置机制 ======
+const initialFormModel = ref(null);
+
+// 初始化缓存（弹窗打开或颜色块点击时调用）
+const initCache = () => {
+  initialFormModel.value = JSON.parse(JSON.stringify(props.formModel));
+};
+
+// 还原表单（取消时调用）
+const resetForm = () => {
+  if (initialFormModel.value) {
+    emit('update:formModel', JSON.parse(JSON.stringify(initialFormModel.value)));
+  }
+};
+
+// 清空缓存（确定、取消、关闭、刷新时调用）
+const clearCache = () => {
+  initialFormModel.value = null;
+};
+
+// ====== END ======
 
 // Function to fetch enum options for a field
 const fetchEnumOptionsForField = async (field) => {
@@ -359,7 +468,42 @@ const validateForm = async () => {
 // Expose validateForm method to be called from parent
 defineExpose({
   validateForm,
-  getFormData: () => props.formModel
+  getFormData: () => props.formModel,
+  initCache,
+  resetForm,
+  clearCache,
+});
+
+const getColorPreviewStyle = (props, solidValue) => {
+  if (props.colorType === 'solid') {
+    return { background: solidValue || props.solidColor || '#1677ff' };
+  } else if (props.colorType === 'gradient') {
+    // 兼容起止色占比
+    const startPercent = typeof props.gradientStartPercent === 'number' ? props.gradientStartPercent : 0;
+    const endPercent = typeof props.gradientEndPercent === 'number' ? props.gradientEndPercent : 100;
+    if (props.gradientType === 'linear') {
+      const angle = typeof props.gradientAngle === 'number' ? props.gradientAngle : 0;
+      return { background: `linear-gradient(${angle}deg, ${props.gradientStart || '#1677ff'} ${startPercent}%, ${props.gradientEnd || '#ff4d4f'} ${endPercent}%)` };
+    } else if (props.gradientType === 'radial') {
+      const x = typeof props.radialX === 'number' ? props.radialX : 50;
+      const y = typeof props.radialY === 'number' ? props.radialY : 50;
+      return { background: `radial-gradient(circle at ${x}% ${y}%, ${props.gradientStart || '#1677ff'} ${startPercent}%, ${props.gradientEnd || '#ff4d4f'} ${endPercent}%)` };
+    } else if (props.gradientType === 'conic') {
+      const angle = typeof props.conicAngle === 'number' ? props.conicAngle : 0;
+      return { background: `conic-gradient(from ${angle}deg, ${props.gradientStart || '#1677ff'} ${startPercent}%, ${props.gradientEnd || '#ff4d4f'} ${endPercent}%)` };
+    }
+  }
+  return { background: '#1677ff' };
+};
+
+// 初始化 gradientStartPercent/gradientEndPercent
+watchEffect(() => {
+  for (const field of props.fields) {
+    if (field.type === 'color-picker' && field.props.colorType === 'gradient') {
+      if (typeof field.props.gradientStartPercent !== 'number') field.props.gradientStartPercent = 0;
+      if (typeof field.props.gradientEndPercent !== 'number') field.props.gradientEndPercent = 100;
+    }
+  }
 });
 
 </script>

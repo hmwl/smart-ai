@@ -65,7 +65,13 @@
             >
               <div class="canvas-field-label-container">
                 <label v-if="element.props && (element.props.label || element.props.nodeId)" class="canvas-field-label">
-                  <span v-if="element.props.label">{{ element.props.label }}</span>
+                  <span v-if="element.props.label">
+                    {{ element.props.label }}
+                    <a-tooltip v-if="element.props.description">
+                      <icon-question-circle />
+                      <template #content>{{ element.props.description }}</template>
+                    </a-tooltip>
+                  </span>
                   <span v-if="element.props.nodeId" class="canvas-field-node-id">
                     (ID: {{ element.props.nodeId }} {{ element.props.key ? `[${element.props.key}]` : '' }})
                   </span>
@@ -102,11 +108,17 @@
             <a-form-item v-if="isComfyUI" label="Key (唯一标识)" required>
               <a-input v-model="selectedField.props.key" placeholder="请输入唯一Key（如：prompt、steps）" />
             </a-form-item>
-            <a-form-item label="标签文字">
+            <a-form-item>
+              <template #label>
+                <span>标签文字<a-tooltip v-if="selectedField.props.description"><icon-question-circle /><template #content>{{selectedField.props.description}}</template></a-tooltip></span>
+              </template>
               <a-input v-model="selectedField.props.label" />
             </a-form-item>
             <a-form-item label="占位提示">
               <a-input v-model="selectedField.props.placeholder" />
+            </a-form-item>
+            <a-form-item label="说明">
+              <a-input v-model="selectedField.props.description" placeholder="可填写该字段的说明" />
             </a-form-item>
 
             <!-- Input Specific Properties -->
@@ -467,6 +479,68 @@
               </a-form-item>
             </template>
 
+            <!-- Color Picker Specific Properties -->
+            <template v-if="selectedField.type === 'color-picker'">
+              <a-divider>颜色选择器设置</a-divider>
+              <a-form-item label="默认值">
+                <div v-if="selectedField.props.colorType === 'solid'">
+                  <a-color-picker v-model="selectedField.props.defaultValue" style="width: 60px;" />
+                </div>
+                <div v-else>
+                  <div style="display: flex; gap: 8px; align-items: center;">
+                    <span>起始色</span>
+                    <a-color-picker v-model="selectedField.props.gradientStart" style="width: 60px;" />
+                    <span>结束色</span>
+                    <a-color-picker v-model="selectedField.props.gradientEnd" style="width: 60px;" />
+                  </div>
+                </div>
+              </a-form-item>
+              <a-form-item label="颜色类型">
+                <a-radio-group v-model="selectedField.props.colorType">
+                  <a-radio value="solid">纯色</a-radio>
+                  <a-radio value="gradient">渐变</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.colorType === 'gradient'" label="渐变类型">
+                <a-radio-group v-model="selectedField.props.gradientType">
+                  <a-radio value="linear">线性渐变</a-radio>
+                  <a-radio value="radial">径向渐变</a-radio>
+                  <a-radio value="conic">角度渐变</a-radio>
+                </a-radio-group>
+              </a-form-item>
+              <!-- 渐变起止色占比设置（所有渐变类型都显示） -->
+              <a-form-item v-if="selectedField.props.colorType === 'gradient'" label="起始色占比">
+                <a-slider v-model="selectedField.props.gradientStartPercent" :min="0" :max="100" :step="1" style="width: 180px;" />
+                <span style="margin-left: 8px;">{{ selectedField.props.gradientStartPercent ?? 0 }}%</span>
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.colorType === 'gradient'" label="结束色占比">
+                <a-slider v-model="selectedField.props.gradientEndPercent" :min="0" :max="100" :step="1" style="width: 180px;" />
+                <span style="margin-left: 8px;">{{ selectedField.props.gradientEndPercent ?? 100 }}%</span>
+              </a-form-item>
+              <!-- 线性渐变方向（角度滑竿） -->
+              <a-form-item v-if="selectedField.props.colorType === 'gradient' && selectedField.props.gradientType === 'linear'" label="方向 (角度)">
+                <a-slider v-model="selectedField.props.gradientAngle" :min="0" :max="360" :step="1" style="width: 180px;" />
+                <span style="margin-left: 8px;">{{ selectedField.props.gradientAngle || 0 }}°</span>
+              </a-form-item>
+              <!-- 径向渐变位置 -->
+              <a-form-item v-if="selectedField.props.colorType === 'gradient' && selectedField.props.gradientType === 'radial'" label="中心位置 X">
+                <a-slider v-model="selectedField.props.radialX" :min="0" :max="100" :step="1" style="width: 180px;" />
+                <span style="margin-left: 8px;">{{ selectedField.props.radialX !== undefined ? selectedField.props.radialX : 50 }}%</span>
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.colorType === 'gradient' && selectedField.props.gradientType === 'radial'" label="中心位置 Y">
+                <a-slider v-model="selectedField.props.radialY" :min="0" :max="100" :step="1" style="width: 180px;" />
+                <span style="margin-left: 8px;">{{ selectedField.props.radialY !== undefined ? selectedField.props.radialY : 50 }}%</span>
+              </a-form-item>
+              <!-- 角度渐变 -->
+              <a-form-item v-if="selectedField.props.colorType === 'gradient' && selectedField.props.gradientType === 'conic'" label="旋转角度">
+                <a-slider v-model="selectedField.props.conicAngle" :min="0" :max="360" :step="1" style="width: 180px;" />
+                <span style="margin-left: 8px;">{{ selectedField.props.conicAngle || 0 }}°</span>
+              </a-form-item>
+              <a-form-item label="预览">
+                <div :style="getColorPreviewStyle(selectedField.props)" style="width: 80px; height: 32px; border-radius: 4px; border: 1px solid #eee;"></div>
+              </a-form-item>
+            </template>
+
             <!-- Conditional Logic Section -->
             <template v-if="canHaveConditionalLogic(selectedField.type)">
               <a-divider>条件逻辑</a-divider>
@@ -585,7 +659,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, defineExpose, defineProps, defineEmits, computed } from 'vue';
+import { ref, onMounted, defineExpose, defineProps, defineEmits, computed, watchEffect } from 'vue';
 import draggable from 'vuedraggable';
 import { 
     Input as AInput,
@@ -600,7 +674,8 @@ import {
     Button as AButton,
     Message,
     Divider,
-    Slider as ASlider
+    Slider as ASlider,
+    ColorPicker as AColorPicker
 } from '@arco-design/web-vue';
 import {
   IconDragArrow, IconDelete, IconPlus, IconMinusCircle,
@@ -643,6 +718,17 @@ const availableComponents = ref([
       placeholder: '点击或拖拽文件上传'
     }
   },
+  { type: 'color-picker', label: '颜色选择器', icon: 'icon-palette', defaultProps: {
+    label: '颜色选择器',
+    colorType: 'solid', // solid/gradient
+    solidColor: '#1677ff',
+    gradientType: 'linear', // linear/radial
+    gradientDirection: 'to right', // 线性方向
+    gradientStart: '#1677ff',
+    gradientEnd: '#ff4d4f',
+    description: '',
+    defaultValue: '#1677ff',
+  } },
 ]);
 
 const formFields = ref([]);
@@ -688,6 +774,19 @@ const cloneComponent = (original) => {
       required: false,
       nodeId: '', // Initialize nodeId
       key: (original.props && typeof original.props.key !== 'undefined') ? original.props.key : '', // 兼容 palette 拖拽
+      // 修复 color-picker 渐变属性初始值（全量）
+      ...(original.type === 'color-picker' ? {
+        colorType: 'solid',
+        gradientType: 'linear',
+        gradientAngle: 0,
+        radialX: 50,
+        radialY: 50,
+        conicAngle: 0,
+        gradientStart: '#1677ff',
+        gradientEnd: '#ff4d4f',
+        gradientStartPercent: 0,
+        gradientEndPercent: 100,
+      } : {}),
     }, 
     config: {
       ...(original.config || {}),
@@ -874,6 +973,19 @@ const saveForm = async () => {
           min: field.props.min, // input/slider 最小值
           max: field.props.max, // input/slider 最大值
           step: field.props.step, // input/slider 步幅
+          description: field.props.description, // 说明字段
+          ...(field.type === 'color-picker' ? {
+            colorType: field.props.colorType ?? 'solid',
+            gradientType: field.props.gradientType ?? 'linear',
+            gradientAngle: field.props.gradientAngle ?? 0,
+            radialX: field.props.radialX ?? 50,
+            radialY: field.props.radialY ?? 50,
+            conicAngle: field.props.conicAngle ?? 0,
+            gradientStart: field.props.gradientStart ?? '#1677ff',
+            gradientEnd: field.props.gradientEnd ?? '#ff4d4f',
+            gradientStartPercent: field.props.gradientStartPercent ?? 0,
+            gradientEndPercent: field.props.gradientEndPercent ?? 100,
+          } : {}),
         },
         config: {
           label: field.config.label, // Original component type label for reference
@@ -1017,6 +1129,18 @@ const loadForm = async () => {
           if (field.type === 'checkbox' && !Array.isArray(field.props.defaultValue)) {
             // Checkbox defaultValue should always be an array
             field.props.defaultValue = field.props.defaultValue !== undefined && field.props.defaultValue !== null ? [field.props.defaultValue] : [];
+          }
+          if (field.type === 'color-picker') {
+            if (!('colorType' in field.props)) field.props.colorType = 'solid';
+            if (!('gradientType' in field.props)) field.props.gradientType = 'linear';
+            if (!('gradientAngle' in field.props)) field.props.gradientAngle = 0;
+            if (!('radialX' in field.props)) field.props.radialX = 50;
+            if (!('radialY' in field.props)) field.props.radialY = 50;
+            if (!('conicAngle' in field.props)) field.props.conicAngle = 0;
+            if (!('gradientStart' in field.props)) field.props.gradientStart = '#1677ff';
+            if (!('gradientEnd' in field.props)) field.props.gradientEnd = '#ff4d4f';
+            if (!('gradientStartPercent' in field.props)) field.props.gradientStartPercent = 0;
+            if (!('gradientEndPercent' in field.props)) field.props.gradientEndPercent = 100;
           }
         }
         if (field.config.conditionalLogic && typeof field.config.conditionalLogic === 'object' && !Array.isArray(field.config.conditionalLogic)) {
@@ -1283,6 +1407,44 @@ const onSelectMultipleChange = (field) => {
     }
   }
 };
+
+const getColorPreviewStyle = (props) => {
+  if (props.colorType === 'solid') {
+    return { background: props.defaultValue || props.solidColor || '#1677ff' };
+  } else if (props.colorType === 'gradient') {
+    const startPercent = typeof props.gradientStartPercent === 'number' ? props.gradientStartPercent : 0;
+    const endPercent = typeof props.gradientEndPercent === 'number' ? props.gradientEndPercent : 100;
+    if (props.gradientType === 'linear') {
+      const angle = typeof props.gradientAngle === 'number' ? props.gradientAngle : 0;
+      return { background: `linear-gradient(${angle}deg, ${props.gradientStart || '#1677ff'} ${startPercent}%, ${props.gradientEnd || '#ff4d4f'} ${endPercent}%)` };
+    } else if (props.gradientType === 'radial') {
+      const x = typeof props.radialX === 'number' ? props.radialX : 50;
+      const y = typeof props.radialY === 'number' ? props.radialY : 50;
+      return { background: `radial-gradient(circle at ${x}% ${y}%, ${props.gradientStart || '#1677ff'} ${startPercent}%, ${props.gradientEnd || '#ff4d4f'} ${endPercent}%)` };
+    } else if (props.gradientType === 'conic') {
+      const angle = typeof props.conicAngle === 'number' ? props.conicAngle : 0;
+      return { background: `conic-gradient(from ${angle}deg, ${props.gradientStart || '#1677ff'} ${startPercent}%, ${props.gradientEnd || '#ff4d4f'} ${endPercent}%)` };
+    }
+  }
+  return { background: '#1677ff' };
+};
+
+// 在属性面板渲染前，确保 color-picker 所有渐变属性有默认值
+watchEffect(() => {
+  if (selectedField.value && selectedField.value.type === 'color-picker') {
+    const props = selectedField.value.props;
+    if (!('colorType' in props)) props.colorType = 'solid';
+    if (!('gradientType' in props)) props.gradientType = 'linear';
+    if (typeof props.gradientAngle !== 'number') props.gradientAngle = 0;
+    if (typeof props.radialX !== 'number') props.radialX = 50;
+    if (typeof props.radialY !== 'number') props.radialY = 50;
+    if (typeof props.conicAngle !== 'number') props.conicAngle = 0;
+    if (!('gradientStart' in props)) props.gradientStart = '#1677ff';
+    if (!('gradientEnd' in props)) props.gradientEnd = '#ff4d4f';
+    if (typeof props.gradientStartPercent !== 'number') props.gradientStartPercent = 0;
+    if (typeof props.gradientEndPercent !== 'number') props.gradientEndPercent = 100;
+  }
+});
 
 </script>
 
