@@ -136,12 +136,12 @@
                       <div style="flex:1;" class="flex items-center gap-2">
                         <span>起始色</span>
                         <a-color-picker v-model="field.props.gradientStart" style="width: 60px;" />
-                        <span class="text-xs w-14">{{ field.props.gradientStart }}</span>
+                        <span class="text-xs w-18">{{ field.props.gradientStart }}</span>
                       </div>
                       <div style="flex:1;" class="flex items-center gap-2">
                         <span>结束色</span>
                         <a-color-picker v-model="field.props.gradientEnd" style="width: 60px;" />
-                        <span class="text-xs w-14">{{ field.props.gradientEnd }}</span>
+                        <span class="text-xs w-18">{{ field.props.gradientEnd }}</span>
                       </div>
                     </div>
                     <div style="display: flex; gap: 16px; align-items: center; margin-bottom: 12px;">
@@ -188,7 +188,7 @@
                   </div>
                 </div>
               </template>
-              <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;" @click="initCache">
+              <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;border-radius: 4px;background-image: linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee),linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee);background-size: 16px 16px;background-position: 0 0, 8px 8px;background-color: #fff;" @click="initCache">
                 <div :style="getColorPreviewStyle(field.props, formModel[field.props.field])" style="width: 80px; height: 32px; border-radius: 4px;"></div>
               </div>
             </a-popover>

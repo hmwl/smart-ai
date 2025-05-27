@@ -537,7 +537,9 @@
                 <span style="margin-left: 8px;">{{ selectedField.props.conicAngle || 0 }}°</span>
               </a-form-item>
               <a-form-item label="预览">
-                <div :style="getColorPreviewStyle(selectedField.props)" style="width: 80px; height: 32px; border-radius: 4px; border: 1px solid #eee;"></div>
+                <div style="display: flex; align-items: center; gap: 12px; cursor: pointer;border-radius: 4px;background-image: linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee),linear-gradient(45deg, #eee 25%, transparent 25%, transparent 75%, #eee 75%, #eee);background-size: 16px 16px;background-position: 0 0, 8px 8px;background-color: #fff;" @click="initCache">
+                  <div :style="getColorPreviewStyle(selectedField.props)" style="width: 80px; height: 32px; border-radius: 4px; border: 1px solid #eee;"></div>
+                </div>
               </a-form-item>
             </template>
 
