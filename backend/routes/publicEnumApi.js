@@ -57,7 +57,7 @@ router.get('/enum-types/:enumTypeId/configs', async (req, res) => {
       enumType: enumTypeId, 
       status: 'active' 
     })
-    .select('_id name translation platform') // Adjust fields as needed
+    .select('_id name translation platform description') // 加上 description 字段
     .lean();
 
     // It's okay to return an empty array if no configs are found for this type.

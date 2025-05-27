@@ -53,26 +53,47 @@
           <a-select
             v-model="formModel[field.props.field]"
             :placeholder="field.props.placeholder"
-            :options="field.runtimeTransformedOptions" 
             :multiple="field.props.multiple"
-            :loading="field.loadingOptions" 
+            :loading="field.loadingOptions"
             :disabled="field.props.disabled"
             allow-clear
-          />
+          >
+            <a-option
+              v-for="opt in field.runtimeTransformedOptions"
+              :key="opt.value"
+              :value="opt.value"
+            >
+              <span style="display: flex; align-items: center;">
+                <span>{{ opt.label }}</span>
+                <a-tooltip v-if="opt.description">
+                  <icon-question-circle style="margin-left: 6px; color: var(--color-text-3); font-size: 14px; vertical-align: middle;" />
+                  <template #content>{{ opt.description }}</template>
+                </a-tooltip>
+              </span>
+            </a-option>
+          </a-select>
         </template>
         <template v-else-if="field.type === 'radio'">
-          <a-radio-group
-            v-model="formModel[field.props.field]"
-            :options="field.runtimeTransformedOptions"
-            :disabled="field.props.disabled"
-          />
+          <a-radio-group v-model="formModel[field.props.field]" :disabled="field.props.disabled">
+            <a-radio v-for="opt in field.runtimeTransformedOptions" :key="opt.value" :value="opt.value">
+              <span>{{ opt.label }}</span>
+              <a-tooltip v-if="opt.description">
+                <icon-question-circle style="margin-left: 4px; color: var(--color-text-3); font-size: 14px; vertical-align: middle;" />
+                <template #content>{{ opt.description }}</template>
+              </a-tooltip>
+            </a-radio>
+          </a-radio-group>
         </template>
         <template v-else-if="field.type === 'checkbox'">
-          <a-checkbox-group
-            v-model="formModel[field.props.field]"
-            :options="field.runtimeTransformedOptions"
-            :disabled="field.props.disabled"
-          />
+          <a-checkbox-group v-model="formModel[field.props.field]" :disabled="field.props.disabled">
+            <a-checkbox v-for="opt in field.runtimeTransformedOptions" :key="opt.value" :value="opt.value">
+              <span>{{ opt.label }}</span>
+              <a-tooltip v-if="opt.description">
+                <icon-question-circle style="margin-left: 4px; color: var(--color-text-3); font-size: 14px; vertical-align: middle;" />
+                <template #content>{{ opt.description }}</template>
+              </a-tooltip>
+            </a-checkbox>
+          </a-checkbox-group>
         </template>
         <template v-else-if="field.type === 'switch'">
           <a-switch 
@@ -258,6 +279,15 @@ const clearCache = () => {
 // Function to fetch enum options for a field
 const fetchEnumOptionsForField = async (field) => {
   if (field.config?.dataSourceType === 'enum' && field.config?.enumTypeId) {
+    // 新增：平台字段枚举，直接用 options
+    if (String(field.config.enumTypeId).startsWith('platform_') && Array.isArray(field.config.platformFieldOptions)) {
+      field.runtimeTransformedOptions = field.config.platformFieldOptions.map(opt => ({
+        label: opt.value,
+        value: opt.key,
+        description: opt.description || ''
+      }));
+      return;
+    }
     if (enumOptionsCache.has(field.config.enumTypeId)) {
       field.runtimeTransformedOptions = enumOptionsCache.get(field.config.enumTypeId);
       return;
@@ -268,6 +298,7 @@ const fetchEnumOptionsForField = async (field) => {
       const options = (response.data || []).map(conf => ({
         label: conf.translation || conf.name,
         value: conf._id,
+        description: conf.description || ''
       }));
       field.runtimeTransformedOptions = options;
       enumOptionsCache.set(field.config.enumTypeId, options);
@@ -278,7 +309,7 @@ const fetchEnumOptionsForField = async (field) => {
       field.loadingOptions = false;
     }
   } else if (field.config?.dataSourceType === 'manual' && field.props?.options) {
-    field.runtimeTransformedOptions = field.props.options.map(opt => ({ ...opt }));
+    field.runtimeTransformedOptions = field.props.options.map(opt => ({ ...opt, description: opt.description || '' }));
   } else {
     field.runtimeTransformedOptions = [];
   }

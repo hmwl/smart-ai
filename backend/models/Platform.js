@@ -32,6 +32,11 @@ const configFieldSchema = new mongoose.Schema({
       type: String,
       required: true,
       trim: true,
+    },
+    description: {
+      type: String,
+      trim: true,
+      default: ''
     }
   }], // 用于select和multiSelect类型的选项
   required: {

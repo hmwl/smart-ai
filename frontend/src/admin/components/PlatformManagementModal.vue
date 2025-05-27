@@ -237,6 +237,13 @@
                       size="small"
                       class="flex-1"
                     />
+                    <a-input 
+                      v-model="option.description" 
+                      placeholder="选项说明（可选）" 
+                      size="small"
+                      class="flex-1"
+                      style="margin-top: 4px;"
+                    />
                     <a-button 
                       type="text" 
                       status="danger" 
@@ -439,7 +446,7 @@ const onFieldTypeChange = (field, index) => {
 };
 
 const addOption = (field) => {
-  field.options.push({ key: '', value: '' });
+  field.options.push({ key: '', value: '', description: '' });
 };
 
 const removeOption = (field, index) => {

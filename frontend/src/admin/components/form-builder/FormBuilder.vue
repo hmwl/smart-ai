@@ -829,29 +829,37 @@ const onUpdateCanvas = (event) => {
 
 const selectField = async (field) => {
   selectedField.value = field;
-  // If the selected field is configured for enum data source
   if (field.config.dataSourceType === 'enum' && (field.type === 'select' || field.type === 'radio' || field.type === 'checkbox')) {
-    await fetchEnumTypes(); // Ensure enum types are loaded/available for the first dropdown
+    await fetchEnumTypes();
     if (field.config.enumTypeId) {
-      // Fetch all available options for this enum type and store them on the field itself
-      // This makes them available if this field is used as a trigger, even if not currently selected for property editing.
-      // Also populate enumConfigsOfSelectedType for the properties panel.
-      loadingEnumConfigsForType.value = true;
-      try {
-        const response = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
-        const specificEnumConfigs = response.data?.data || [];
-        field.runtimeAvailableEnumOptions = specificEnumConfigs; // Store on the field
-        enumConfigsOfSelectedType.value = specificEnumConfigs; // For the property panel dropdown
-      } catch (error) {
-        Message.error(`加载枚举类型 "${field.config.enumTypeId}" 的配置项失败: ` + (error.response?.data?.message || error.message));
-        field.runtimeAvailableEnumOptions = [];
-        enumConfigsOfSelectedType.value = [];
-      } finally {
-        loadingEnumConfigsForType.value = false;
+      const selectedType = availableEnumTypes.value.find(t => t._id === field.config.enumTypeId);
+      if (selectedType?.isPlatformField && Array.isArray(field.config.platformFieldOptions)) {
+        // 平台枚举，直接用 config.platformFieldOptions
+        field.runtimeAvailableEnumOptions = field.config.platformFieldOptions.map(opt => ({
+          _id: opt.key,
+          name: opt.value,
+          translation: opt.value,
+        }));
+        enumConfigsOfSelectedType.value = field.runtimeAvailableEnumOptions;
+      } else {
+        // 原有逻辑
+        loadingEnumConfigsForType.value = true;
+        try {
+          const response = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
+          const specificEnumConfigs = response.data?.data || [];
+          field.runtimeAvailableEnumOptions = specificEnumConfigs;
+          enumConfigsOfSelectedType.value = specificEnumConfigs;
+        } catch (error) {
+          Message.error(`加载枚举类型 "${field.config.enumTypeId}" 的配置项失败: ` + (error.response?.data?.message || error.message));
+          field.runtimeAvailableEnumOptions = [];
+          enumConfigsOfSelectedType.value = [];
+        } finally {
+          loadingEnumConfigsForType.value = false;
+        }
       }
     } else {
       field.runtimeAvailableEnumOptions = [];
-      enumConfigsOfSelectedType.value = []; // Clear if no type is selected
+      enumConfigsOfSelectedType.value = [];
     }
   }
 };
@@ -876,19 +884,50 @@ const removeOption = (field, optionIndex) => {
 
 // New function to fetch Enum Types
 const fetchEnumTypes = async () => {
-  if (availableEnumTypes.value.length > 0 && !loadingEnumTypes.value) return; // Don't re-fetch if already populated unless forced
   loadingEnumTypes.value = true;
   try {
-    const response = await apiService.getEnumTypes({ limit: 500, status: 'active' }); // Assuming getEnumTypes supports params
-    if (response.data && Array.isArray(response.data)) { // API directly returns array of types
-      availableEnumTypes.value = response.data;
-    } else if (response.data && response.data.data && Array.isArray(response.data.data)) { // API returns { data: [...] }
-      availableEnumTypes.value = response.data.data;
-    } else {
-      availableEnumTypes.value = [];
+    // 1. 获取枚举类型
+    const enumRes = await apiService.getEnumTypes({ limit: 500, status: 'active' });
+    let enumTypes = [];
+    if (enumRes.data && Array.isArray(enumRes.data)) {
+      enumTypes = enumRes.data;
+    } else if (enumRes.data && enumRes.data.data) {
+      enumTypes = enumRes.data.data;
     }
+
+    // 2. 获取平台字段
+    let platformFieldTypes = [];
+    try {
+      const platformRes = await apiService.getPlatforms && await apiService.getPlatforms();
+      if (platformRes && platformRes.data && Array.isArray(platformRes.data)) {
+        platformRes.data.forEach(platform => {
+          (platform.configFields || []).forEach(field => {
+            if (["select", "multiSelect"].includes(field.type)) {
+              platformFieldTypes.push({
+                _id: `platform_${platform._id}_${field.key}`,
+                name: `${platform.name} - ${field.label}`,
+                platform: platform.name,
+                type: field.type,
+                options: field.options,
+                isPlatformField: true, // 标记来源
+                platformId: platform._id,
+                fieldKey: field.key,
+              });
+            }
+          });
+        });
+      }
+    } catch (e) {
+      // 平台接口失败不影响主流程
+    }
+
+    // 3. 合并
+    availableEnumTypes.value = [
+      ...enumTypes.map(t => ({ ...t, isPlatformField: false })),
+      ...platformFieldTypes
+    ];
   } catch (error) {
-    Message.error('加载枚举类型列表失败: ' + (error.response?.data?.message || error.message));
+    Message.error('加载枚举类型/平台字段失败: ' + (error.response?.data?.message || error.message));
     availableEnumTypes.value = [];
   } finally {
     loadingEnumTypes.value = false;
@@ -923,8 +962,18 @@ const onEnumTypeChange = async (field) => {
     field.config.enumOptionIds = []; 
     field.runtimeAvailableEnumOptions = []; // Clear stored runtime options
     enumConfigsOfSelectedType.value = []; 
-    if (field.config.enumTypeId) {
-      // Refetch and store on field, also update shared state for properties panel
+    const selectedType = availableEnumTypes.value.find(t => t._id === field.config.enumTypeId);
+    if (selectedType?.isPlatformField) {
+      // 平台字段，直接用 options
+      const options = selectedType.options || [];
+      field.runtimeAvailableEnumOptions = options.map(opt => ({
+        _id: opt.key,
+        name: opt.value,
+        translation: opt.value,
+      }));
+      enumConfigsOfSelectedType.value = field.runtimeAvailableEnumOptions;
+    } else if (field.config.enumTypeId) {
+      // 原有逻辑：枚举类型
       loadingEnumConfigsForType.value = true;
       try {
         const response = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
@@ -949,58 +998,75 @@ const saveForm = async () => {
   }
   try {
     const schemaToSave = {
-      fields: formFields.value.map(field => ({
-        id: field.id, // Component ID
-        type: field.type,
-        props: {
-          label: field.props.label, // 标签名称
-          placeholder: field.props.placeholder, // 占位提示
-          required: field.props.required, // 是否必填
-          options: field.props.options, // For select, radio, checkbox (manual mode)
-          field: field.props.field, // unique field name / key
-          autoSize: field.props.autoSize, // for textarea
-          action: field.props.action,
-          accept: field.props.accept,
-          multiple: field.props.multiple,
-          limit: field.props.limit,
-          listType: field.props.listType,
-          drag: field.props.drag,
-          autoUpload: field.props.autoUpload,
-          checkedValue: field.props.checkedValue, // For switch
-          uncheckedValue: field.props.uncheckedValue, // For switch
-          nodeId: field.props.nodeId, // Save nodeId
-          defaultValue: field.props.defaultValue, // For switch default state, but also for other types later
-          key: field.props.key, // ComfyUI专用唯一key
-          inputType: field.props.inputType, // input 类型
-          min: field.props.min, // input/slider 最小值
-          max: field.props.max, // input/slider 最大值
-          step: field.props.step, // input/slider 步幅
-          description: field.props.description, // 说明字段
-          ...(field.type === 'color-picker' ? {
-            colorType: field.props.colorType ?? 'solid',
-            gradientType: field.props.gradientType ?? 'linear',
-            gradientAngle: field.props.gradientAngle ?? 0,
-            radialX: field.props.radialX ?? 50,
-            radialY: field.props.radialY ?? 50,
-            conicAngle: field.props.conicAngle ?? 0,
-            gradientStart: field.props.gradientStart ?? '#1677ff',
-            gradientEnd: field.props.gradientEnd ?? '#ff4d4f',
-            gradientStartPercent: field.props.gradientStartPercent ?? 0,
-            gradientEndPercent: field.props.gradientEndPercent ?? 100,
-          } : {}),
-        },
-        config: {
-          label: field.config.label, // Original component type label for reference
-          dataSourceType: field.config.dataSourceType, // manual or enum
-          enumTypeId: field.config.enumTypeId, // NEW: Save enum type ID
-          enumOptionIds: field.config.enumOptionIds, // NEW: Save selected enum option IDs
-          enableConditionalLogic: field.config.enableConditionalLogic,
-          conditionalLogicRules: field.config.conditionalLogicRules,
-          conditionalLogicOperator: field.config.conditionalLogicOperator,
-          conditionalLogicVisibilityAction: field.config.conditionalLogicVisibilityAction,
-          conditionalLogicRequiredAction: field.config.conditionalLogicRequiredAction,
+      fields: formFields.value.map(field => {
+        // 检查是否平台字段枚举
+        let extraConfig = {};
+        if (
+          field.config.dataSourceType === 'enum' &&
+          typeof field.config.enumTypeId === 'string' &&
+          field.config.enumTypeId.startsWith('platform_') &&
+          Array.isArray(field.runtimeAvailableEnumOptions)
+        ) {
+          // 保存 options 到 config
+          extraConfig.platformFieldOptions = field.runtimeAvailableEnumOptions.map(opt => ({
+            key: opt._id,
+            value: opt.translation || opt.name
+          }));
         }
-      })),
+        return {
+          id: field.id, // Component ID
+          type: field.type,
+          props: {
+            label: field.props.label, // 标签名称
+            placeholder: field.props.placeholder, // 占位提示
+            required: field.props.required, // 是否必填
+            options: field.props.options, // For select, radio, checkbox (manual mode)
+            field: field.props.field, // unique field name / key
+            autoSize: field.props.autoSize, // for textarea
+            action: field.props.action,
+            accept: field.props.accept,
+            multiple: field.props.multiple,
+            limit: field.props.limit,
+            listType: field.props.listType,
+            drag: field.props.drag,
+            autoUpload: field.props.autoUpload,
+            checkedValue: field.props.checkedValue, // For switch
+            uncheckedValue: field.props.uncheckedValue, // For switch
+            nodeId: field.props.nodeId, // Save nodeId
+            defaultValue: field.props.defaultValue, // For switch default state, but also for other types later
+            key: field.props.key, // ComfyUI专用唯一key
+            inputType: field.props.inputType, // input 类型
+            min: field.props.min, // input/slider 最小值
+            max: field.props.max, // input/slider 最大值
+            step: field.props.step, // input/slider 步幅
+            description: field.props.description, // 说明字段
+            ...(field.type === 'color-picker' ? {
+              colorType: field.props.colorType ?? 'solid',
+              gradientType: field.props.gradientType ?? 'linear',
+              gradientAngle: field.props.gradientAngle ?? 0,
+              radialX: field.props.radialX ?? 50,
+              radialY: field.props.radialY ?? 50,
+              conicAngle: field.props.conicAngle ?? 0,
+              gradientStart: field.props.gradientStart ?? '#1677ff',
+              gradientEnd: field.props.gradientEnd ?? '#ff4d4f',
+              gradientStartPercent: field.props.gradientStartPercent ?? 0,
+              gradientEndPercent: field.props.gradientEndPercent ?? 100,
+            } : {}),
+          },
+          config: {
+            label: field.config.label, // Original component type label for reference
+            dataSourceType: field.config.dataSourceType, // manual or enum
+            enumTypeId: field.config.enumTypeId, // NEW: Save enum type ID
+            enumOptionIds: field.config.enumOptionIds, // NEW: Save selected enum option IDs
+            enableConditionalLogic: field.config.enableConditionalLogic,
+            conditionalLogicRules: field.config.conditionalLogicRules,
+            conditionalLogicOperator: field.config.conditionalLogicOperator,
+            conditionalLogicVisibilityAction: field.config.conditionalLogicVisibilityAction,
+            conditionalLogicRequiredAction: field.config.conditionalLogicRequiredAction,
+            ...extraConfig
+          }
+        };
+      }),
     };
 
     if (isComfyUI.value) {
@@ -1046,14 +1112,22 @@ const loadForm = async () => {
       const enumFieldsPromises = fieldsToProcess
         .filter(field => field.config?.dataSourceType === 'enum' && field.config?.enumTypeId)
         .map(async (field) => {
-          try {
-            const enumResponse = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
-            field.runtimeAvailableEnumOptions = enumResponse.data?.data || [];
-          } catch (error) {
-            console.error(`Failed to load enum configs for field ${field.id} (typeId: ${field.config.enumTypeId}) during form load:`, error);
-            field.runtimeAvailableEnumOptions = []; // Ensure it's an empty array on error
+          if (typeof field.config.enumTypeId === 'string' && field.config.enumTypeId.startsWith('platform_') && Array.isArray(field.config.platformFieldOptions)) {
+            field.runtimeAvailableEnumOptions = field.config.platformFieldOptions.map(opt => ({
+              _id: opt.key,
+              name: opt.value,
+              translation: opt.value,
+            }));
+          } else {
+            try {
+              const enumResponse = await apiService.getEnumConfigs({ enumTypeId: field.config.enumTypeId, status: 'active', limit: 500 });
+              field.runtimeAvailableEnumOptions = enumResponse.data?.data || [];
+            } catch (error) {
+              console.error(`Failed to load enum configs for field ${field.id} (typeId: ${field.config.enumTypeId}) during form load:`, error);
+              field.runtimeAvailableEnumOptions = [];
+            }
           }
-          return field; // Return the processed field
+          return field;
         });
       
       const processedEnumFields = await Promise.all(enumFieldsPromises);
@@ -1371,16 +1445,17 @@ const onVisibilityActionChange = () => {
 const getOptionsForDefaultValue = (field) => {
   if (!field) return [];
   if (field.config?.dataSourceType === 'manual') {
-    // For manual, ensure it provides the same structure if needed, or handle downstream.
-    // Assuming downstream (template) expects displayLabel & idValue if enum can provide it.
-    // So, let's normalize manual options as well.
     return (field.props?.options || []).map(opt => ({
       displayLabel: opt.label,
       idValue: opt.value
     }));
   }
   if (field.config?.dataSourceType === 'enum') {
-    // Options should be those selected by user in enumOptionIds, mapped from runtimeAvailableEnumOptions
+    if (typeof field.config.enumTypeId === 'string' && field.config.enumTypeId.startsWith('platform_') && Array.isArray(field.config.platformFieldOptions) && Array.isArray(field.config.enumOptionIds)) {
+      return field.config.platformFieldOptions
+        .filter(opt => field.config.enumOptionIds.includes(opt.key))
+        .map(opt => ({ displayLabel: opt.value, idValue: opt.key }));
+    }
     if (Array.isArray(field.runtimeAvailableEnumOptions) && Array.isArray(field.config.enumOptionIds)) {
       return field.runtimeAvailableEnumOptions
         .filter(conf => field.config.enumOptionIds.includes(conf._id))
@@ -1606,11 +1681,11 @@ watchEffect(() => {
 .option-editor-block {
   display: flex;
   flex-direction: column;
-  gap: 8px; /* Gap between items within a block */
+  gap: 8px /* Gap between items within a block */;
   padding: 12px;
   border: 1px solid var(--color-border-2);
   border-radius: 4px;
-  margin-bottom: 12px; /* Gap between option blocks */
+  margin-bottom: 12px /* Gap between option blocks */;
   background-color: var(--color-fill-1);
   width: 100%; /* Make each block take full width of its container */
   box-sizing: border-box; /* Ensure padding and border don't add to width */
