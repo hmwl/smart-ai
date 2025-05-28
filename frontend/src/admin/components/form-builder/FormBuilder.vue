@@ -377,38 +377,6 @@
               </a-form-item>
             </template>
 
-            <!-- Input Specific Properties -->
-            <template v-if="selectedField.type === 'input'">
-              <a-divider>输入框设置</a-divider>
-              <a-form-item label="默认值">
-                <a-input v-model="selectedField.props.defaultValue" />
-              </a-form-item>
-              <a-form-item label="类型">
-                <a-select v-model="selectedField.props.inputType">
-                  <a-option value="string">字符串</a-option>
-                  <a-option value="integer">整数</a-option>
-                  <a-option value="float">小数</a-option>
-                </a-select>
-              </a-form-item>
-              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最小值">
-                <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
-              </a-form-item>
-              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最大值">
-                <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
-              </a-form-item>
-              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="步幅">
-                <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
-              </a-form-item>
-            </template>
-
-            <!-- Textarea Specific Properties -->
-            <template v-if="selectedField.type === 'textarea'">
-              <a-divider>多行文本框设置</a-divider>
-              <a-form-item label="默认值">
-                <a-input v-model="selectedField.props.defaultValue" />
-              </a-form-item>
-            </template>
-
             <!-- Slider Specific Properties -->
             <template v-if="selectedField.type === 'slider'">
               <a-divider>滑竿设置</a-divider>
@@ -430,10 +398,10 @@
             <template v-if="selectedField.type === 'switch'">
               <a-divider>开关设置</a-divider>
               <a-form-item label="选中状态的值" tooltip="开关打开时，字段实际代表的值">
-                <a-input v-model="selectedField.props.checkedValue" placeholder="例如：true, 1, 'on'" />
+                <a-input :model-value="String(selectedField.props.checkedValue ?? '')" @update:model-value="val => selectedField.props.checkedValue = val" placeholder="例如：true, 1, 'on'" />
               </a-form-item>
               <a-form-item label="未选中状态的值" tooltip="开关关闭时，字段实际代表的值">
-                <a-input v-model="selectedField.props.uncheckedValue" placeholder="例如：false, 0, 'off'" />
+                <a-input :model-value="String(selectedField.props.uncheckedValue ?? '')" @update:model-value="val => selectedField.props.uncheckedValue = val" placeholder="例如：false, 0, 'off'" />
               </a-form-item>
               <a-form-item label="默认状态">
                 <a-radio-group v-model="selectedField.props.defaultValue">

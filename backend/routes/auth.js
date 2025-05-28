@@ -9,18 +9,20 @@ const authenticateToken = require('../middleware/authenticateToken'); // 引入�
 const AiApplication = require('../models/AiApplication'); // Added AiApplication model
 const CreditTransaction = require('../models/CreditTransaction'); // Added CreditTransaction model
 const PromotionActivity = require('../models/PromotionActivity'); // Added PromotionActivity model
+const fs = require('fs');
+const path = require('path');
 
 // Dynamically load platform services
-const ComfyUIService = require('../services/platform_integrations/comfyuiService');
-const OpenAIService = require('../services/platform_integrations/openaiService');
-// Import other services as they are added, e.g.:
-// const StabilityAIService = require('../services/platform_integrations/stabilityaiService');
+const platformsDir = path.join(__dirname, '../services/platforms');
+const platformServiceMap = {};
 
-const platformServiceMap = {
-  ComfyUI: ComfyUIService,
-  OpenAI: OpenAIService,
-  // StabilityAI: StabilityAIService, // Add when service is implemented
-};
+fs.readdirSync(platformsDir).forEach(file => {
+  if (file.endsWith('Service.js')) {
+    const serviceName = file.replace('Service.js', '');
+    const platformKey = serviceName.charAt(0).toUpperCase() + serviceName.slice(1);
+    platformServiceMap[platformKey] = require(path.join(platformsDir, file));
+  }
+});
 
 // POST /api/auth/login - 用户登录
 router.post('/login', async (req, res) => {

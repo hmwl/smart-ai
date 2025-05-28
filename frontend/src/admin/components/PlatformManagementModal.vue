@@ -82,8 +82,30 @@
       <a-form ref="platformFormRef" :model="platformForm" :rules="rules" layout="vertical">
         <a-row :gutter="16">
           <a-col :span="12">
-            <a-form-item field="name" label="平台名称">
+            <a-form-item field="name" label="平台名称" tooltip="平台名称将作为枚举类型前缀使用">
               <a-input v-model="platformForm.name" placeholder="请输入平台名称，例如：OpenAI" />
+              <template #extra>
+                <div>添加平台后，请在服务端代码添加平台配置文件
+                <a-popconfirm
+                  trigger="click"
+                  ok-text="知道了"
+                  :cancel-button-props="{ style: { display: 'none' } }"
+                >
+                  <template #content>
+                    <div style="white-space: pre-line; font-size: 13px; line-height: 1.7;">
+                      1. 在本页面添加平台后，需在服务端 <code>/services/platforms</code> 目录下添加对应的 Service 文件（如 <code>openaiService.js</code>）；<br>
+                      2. 服务文件名需以 <code>Service.js</code> 结尾，平台名称需与文件名（去掉 <code>Service.js</code> 后首字母大写）一致，例如 <code>openaiService.js</code> → <code>OpenAI</code>；<br>
+                      3. 服务端会自动加载该目录下所有 Service 文件，无需手动修改其他后端代码；<br>
+                      4. 平台名称建议与实际业务平台保持一致，避免重名；<br>
+                      5. 修改服务文件后请重启服务端以生效；<br>
+                      6. 对应平台的业务逻辑请都在对应<code>Service.js</code>文件中实现。<br><br>
+                      如有疑问请联系管理员
+                    </div>
+                  </template>
+                  <a-link style="margin-left: 8px; font-size: 12px;">操作帮助</a-link>
+                </a-popconfirm>
+              </div>
+              </template>
             </a-form-item>
           </a-col>
           <a-col :span="12">
@@ -462,5 +484,10 @@ onMounted(() => {
 </script>
 
 <style scoped>
-/* Add any specific styles if needed */
+:deep(code) {
+  background-color: #f0f0f0;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 12px;
+}
 </style> 
