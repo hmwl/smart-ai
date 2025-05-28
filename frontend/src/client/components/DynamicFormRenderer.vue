@@ -16,11 +16,12 @@
         <!-- Conditional rendering for each field type -->
         <template v-if="field.type === 'input'">
           <a-input v-if="!field.props.inputType || field.props.inputType === 'string'"
-            v-model="formModel[field.props.field]"
+            :model-value="String(props.formModel[field.props.field] ?? '')"
+            @update:model-value="val => props.formModel[field.props.field] = val"
             :placeholder="field.props.placeholder"
             :disabled="field.props.disabled"
           />
-          <a-input-number v-else
+          <a-input-number v-else-if="field.props.inputType === 'integer' || field.props.inputType === 'float'"
             v-model="formModel[field.props.field]"
             :placeholder="field.props.placeholder"
             :min="field.props.min"
@@ -28,6 +29,21 @@
             :step="field.props.step || (field.props.inputType === 'integer' ? 1 : 0.01)"
             :disabled="field.props.disabled"
           />
+          <a-input-number
+            v-else-if="field.props.inputType === 'randomInt'"
+            v-model="props.formModel[field.props.field]"
+            :placeholder="field.props.placeholder"
+            :min="field.props.min"
+            :max="field.props.max"
+            :step="field.props.step || 1"
+            :disabled="field.props.disabled"
+          >
+            <template #append>
+              <a-tooltip content="点击生成随机数">
+                <icon-sync style="cursor:pointer;" @click="generateRandomInt(field)" />
+              </a-tooltip>
+            </template>
+          </a-input-number>
         </template>
         <template v-else-if="field.type === 'slider'">
           <a-row align="middle" style="width:100%;">
@@ -240,7 +256,7 @@ import {
   Select as ASelect, RadioGroup as ARadioGroup, CheckboxGroup as ACheckboxGroup,
   Switch as ASwitch, Upload as AUpload, Button as AButton, Message, Slider as ASlider
 } from '@arco-design/web-vue';
-import { IconUpload } from '@arco-design/web-vue/es/icon';
+import { IconUpload, IconSync } from '@arco-design/web-vue/es/icon';
 import clientApiService from '@/client/services/apiService'; // Ensure this path is correct
 
 const props = defineProps({
@@ -601,6 +617,16 @@ watchEffect(() => {
   }
 });
 
+// 生成随机整数/数组
+function generateRandomInt(field) {
+  const min = typeof field.props.min === 'number' ? field.props.min : 0;
+  const max = typeof field.props.max === 'number' ? field.props.max : 100;
+  const step = typeof field.props.step === 'number' ? field.props.step : 1;
+  const range = Math.floor((max - min) / step) + 1;
+  const result = min + Math.floor(Math.random() * range) * step;
+  // 保持类型与 integer 一致，赋值为数字
+  props.formModel[field.props.field] = result;
+}
 </script>
 
 <style scoped>

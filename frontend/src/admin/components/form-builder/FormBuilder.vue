@@ -138,16 +138,17 @@
                   <a-option value="string">字符串</a-option>
                   <a-option value="integer">整数</a-option>
                   <a-option value="float">小数</a-option>
+                  <a-option value="randomInt">随机数</a-option>
                 </a-select>
               </a-form-item>
-              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最小值">
-                <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float' || selectedField.props.inputType === 'randomInt'" label="最小值">
+                <a-input-number v-model="selectedField.props.min" :step="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'randomInt' ? 1 : 0.01" />
               </a-form-item>
-              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="最大值">
-                <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float' || selectedField.props.inputType === 'randomInt'" label="最大值">
+                <a-input-number v-model="selectedField.props.max" :step="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'randomInt' ? 1 : 0.01" />
               </a-form-item>
-              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float'" label="步幅">
-                <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' ? 1 : 0.01" />
+              <a-form-item v-if="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'float' || selectedField.props.inputType === 'randomInt'" label="步幅">
+                <a-input-number v-model="selectedField.props.step" :step="selectedField.props.inputType === 'integer' || selectedField.props.inputType === 'randomInt' ? 1 : 0.01" />
               </a-form-item>
             </template>
 
@@ -380,23 +381,6 @@
                     {{ option.displayLabel }}
                   </a-checkbox>
                 </a-checkbox-group>
-              </a-form-item>
-            </template>
-
-            <!-- Slider Specific Properties -->
-            <template v-if="selectedField.type === 'slider'">
-              <a-divider>滑竿设置</a-divider>
-              <a-form-item label="默认值">
-                <a-input-number v-model="selectedField.props.defaultValue" />
-              </a-form-item>
-              <a-form-item label="最小值">
-                <a-input-number v-model="selectedField.props.min" />
-              </a-form-item>
-              <a-form-item label="最大值">
-                <a-input-number v-model="selectedField.props.max" />
-              </a-form-item>
-              <a-form-item label="步幅">
-                <a-input-number v-model="selectedField.props.step" />
               </a-form-item>
             </template>
 
