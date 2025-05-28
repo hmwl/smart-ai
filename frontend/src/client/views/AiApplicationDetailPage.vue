@@ -338,7 +338,9 @@ const launchApp = async () => {
 };
 
 const launchAppWithConfig = () => {
-    launchApp();
+  // 打印表单数据
+  console.log('提交的表单数据:', dynamicFormModel.value);
+  launchApp();
 }
 
 onMounted(() => {

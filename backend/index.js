@@ -108,6 +108,9 @@ app.use('/api/public', publicEnumApiRoutes); // Mount the new public enum API
 // Mount the new tags router
 app.use('/api/tags', tagsRouter);
 
+// 注册 comfyui 路由
+app.use('/api/comfyui', require('./routes/comfyui'));
+
 // --- Special Backend Routes (like /app) ---
 // Handle /app?id=... specifically
 app.get('/app', async (req, res, next) => {

@@ -3,16 +3,22 @@
     <!-- ComfyUI Specific Header -->
     <div v-if="isComfyUI" class="comfyui-header">
       <a-upload
-        action="/api/placeholder-upload-endpoint" 
+        name="comfyuiFile"
+        action="/api/comfyui/upload" 
         :show-file-list="false"
         accept=".json" 
+        :before-upload="beforeComfyUIJsonUpload"
         @success="handleComfyUIJsonUpload"
         @error="handleComfyUIJsonError"
+        :data="{ applicationId: props.applicationId }"
       >
         <a-button type="primary">
           <template #icon><icon-upload /></template> 上传 ComfyUI JSON
         </a-button>
       </a-upload>
+      <span v-if="comfyUIJsonFileName" class="uploaded-file-info" style="margin-left: 16px; display: inline-block; color: #52c41a; font-size: 13px;">
+        <icon-check-circle style="margin-right: 4px;" />已上传：{{ comfyUIJsonFileName }}
+      </span>
       <div class="comfyui-outputs">
         <a-input v-model="comfyUIOutputNodeId" placeholder="输出节点ID" style="width: 150px;" />
         <a-select v-model="comfyUIOutputType" placeholder="输出类型" style="width: 150px;">
@@ -649,7 +655,7 @@ import {
 } from '@arco-design/web-vue';
 import {
   IconDragArrow, IconDelete, IconPlus, IconMinusCircle,
-  IconUpload
+  IconUpload, IconCheckCircle
 } from '@arco-design/web-vue/es/icon';
 import { v4 as uuidv4 } from 'uuid';
 import apiService from '@/admin/services/apiService';
@@ -717,6 +723,8 @@ const comfyUIJsonFile = ref(null);
 const comfyUIOutputNodeId = ref('');
 const comfyUIOutputType = ref(undefined);
 const comfyUICustomOutputKey = ref('');
+const comfyUIJsonFileName = ref('');
+const comfyUIJsonFileInfo = ref(null); // 保存完整文件信息
 
 // Map component types to actual Vue components
 const vueComponentMap = {
@@ -1042,9 +1050,7 @@ const saveForm = async () => {
         outputNodeId: comfyUIOutputNodeId.value,
         outputType: comfyUIOutputType.value,
         customOutputKey: comfyUIOutputType.value === 'custom' ? comfyUICustomOutputKey.value : undefined,
-        // We are not saving the uploaded JSON file itself in this schema,
-        // The backend should handle the JSON file upload separately if needed when it's uploaded.
-        // Or, if the JSON content needs to be part of this save, it should be read and included.
+        jsonFile: (comfyUIJsonFileInfo.value && (comfyUIJsonFileInfo.value.fileName || comfyUIJsonFileInfo.value.name)) ? comfyUIJsonFileInfo.value : undefined,
       };
     }
 
@@ -1109,6 +1115,11 @@ const loadForm = async () => {
         comfyUIOutputNodeId.value = loadedSchema.comfyUIConfig.outputNodeId || '';
         comfyUIOutputType.value = loadedSchema.comfyUIConfig.outputType || undefined;
         comfyUICustomOutputKey.value = loadedSchema.comfyUIConfig.customOutputKey || '';
+        comfyUIJsonFileName.value = (loadedSchema.comfyUIConfig.jsonFile && loadedSchema.comfyUIConfig.jsonFile.originalName)
+          || (loadedSchema.comfyUIConfig.jsonFile && loadedSchema.comfyUIConfig.jsonFile.fileName)
+          || loadedSchema.comfyUIConfig.jsonFileName
+          || '';
+        comfyUIJsonFileInfo.value = (loadedSchema.comfyUIConfig.jsonFile && loadedSchema.comfyUIConfig.jsonFile.fileName) ? loadedSchema.comfyUIConfig.jsonFile : null;
       }
 
       formFields.value.forEach(field => {
@@ -1201,6 +1212,7 @@ const loadForm = async () => {
         comfyUIOutputNodeId.value = '';
         comfyUIOutputType.value = undefined;
         comfyUICustomOutputKey.value = '';
+        comfyUIJsonFileName.value = '';
       }
     }
   } catch (error) {
@@ -1210,6 +1222,7 @@ const loadForm = async () => {
         comfyUIOutputNodeId.value = '';
         comfyUIOutputType.value = undefined;
         comfyUICustomOutputKey.value = '';
+        comfyUIJsonFileName.value = '';
       }
     } else {
       Message.error('加载表单配置失败: ' + (error.response?.data?.message || error.message));
@@ -1218,23 +1231,39 @@ const loadForm = async () => {
           comfyUIOutputNodeId.value = '';
           comfyUIOutputType.value = undefined;
           comfyUICustomOutputKey.value = '';
+          comfyUIJsonFileName.value = '';
       }
     }
   }
 };
 
 // ComfyUI JSON Upload Handlers
-const handleComfyUIJsonUpload = (response, fileItem) => {
-  // Assuming the backend processes the JSON and maybe returns a path or status
-  // For now, just log and store the file ref if needed for other processing
-  Message.success(`${fileItem.file.name} 上传成功 (模拟).`);
-  comfyUIJsonFile.value = fileItem.file; // Store the original file object
-  // If the backend returns data from the JSON, you might process it here.
-  // e.g., extract node IDs for a dropdown, etc.
+const handleComfyUIJsonUpload = (fileItem) => {
+  // fileItem.response 才是真正的后端返回
+  const fileInfo = fileItem && fileItem.response && fileItem.response.file ? fileItem.response.file : null;
+  if (fileInfo) {
+    comfyUIJsonFileInfo.value = {
+      fileName: fileInfo.fileName,
+      filePath: fileInfo.filePath,
+      originalName: fileInfo.originalName,
+      size: fileInfo.size,
+      mimetype: fileInfo.mimetype
+    };
+    comfyUIJsonFileName.value = fileInfo.originalName;
+    Message.success(`${fileInfo.originalName} 上传成功。`);
+    console.log('上传成功，fileInfo:', fileInfo);
+    console.log('comfyUIJsonFileInfo.value:', comfyUIJsonFileInfo.value);
+  } else {
+    comfyUIJsonFileInfo.value = null;
+    comfyUIJsonFileName.value = '';
+    Message.error('上传响应异常');
+  }
+  comfyUIJsonFile.value = null;
 };
 
 const handleComfyUIJsonError = (error, fileItem) => {
-  Message.error(`${fileItem.file.name} 上传失败 (模拟).`);
+  const fileName = fileItem && fileItem.file ? fileItem.file.name : '未知文件';
+  Message.error(`${fileName} 上传失败。`);
   console.error('ComfyUI JSON Upload Error:', error);
 };
 
@@ -1490,6 +1519,16 @@ watchEffect(() => {
     if (typeof props.gradientEndPercent !== 'number') props.gradientEndPercent = 100;
   }
 });
+
+// 上传前校验，只允许 .json 文件
+const beforeComfyUIJsonUpload = (file) => {
+  const isJson = file.type === 'application/json' || file.name.endsWith('.json');
+  if (!isJson) {
+    Message.error('只能上传 JSON 文件');
+    return false;
+  }
+  return true;
+};
 
 </script>
 
