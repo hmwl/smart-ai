@@ -607,6 +607,33 @@
                 </a-form-item>
               </div>
             </template>
+            
+            <!-- Canvas Board Specific Properties -->
+            <template v-if="selectedField.type === 'canvas-board'">
+              <a-divider>画板设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" placeholder="可填写默认文件URL或文件名" />
+              </a-form-item>
+              <a-form-item label="存储地址" tooltip="实际文件上传的后端接口URL">
+                <a-input v-model="selectedField.props.action" />
+              </a-form-item>
+              <a-form-item label="占位提示">
+                <a-input v-model="selectedField.props.placeholder" />
+              </a-form-item>
+              <a-form-item label="默认宽度">
+                <a-input-number v-model="selectedField.props.width" :min="10" :max="2048" placeholder="默认宽度(px)" />
+              </a-form-item>
+              <a-form-item label="默认高度">
+                <a-input-number v-model="selectedField.props.height" :min="10" :max="2048" placeholder="默认高度(px)" />
+              </a-form-item>
+              <a-form-item label="是否为蒙版类型">
+                <a-switch v-model="selectedField.props.isMask" />
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.isMask" label="蒙版透明度">
+                <a-slider v-model="selectedField.props.maskOpacity" :min="0" :max="1" :step="0.01" />
+                <span style="margin-left: 8px;">{{ Math.round((selectedField.props.maskOpacity ?? 0.1) * 100) }}%</span>
+              </a-form-item>
+            </template>
 
           </a-form>
         </div>
@@ -643,6 +670,7 @@ import {
 } from '@arco-design/web-vue/es/icon';
 import { v4 as uuidv4 } from 'uuid';
 import apiService from '@/admin/services/apiService';
+import CanvasBoard from './CanvasBoard.vue';
 
 const props = defineProps({
   applicationId: String,
@@ -689,6 +717,19 @@ const availableComponents = ref([
     description: '',
     defaultValue: '#1677ff',
   } },
+  {
+    type: 'canvas-board',
+    label: '画板',
+    icon: 'icon-edit',
+    defaultProps: {
+      label: '画板',
+      placeholder: '请上传图片或点击编辑',
+      defaultValue: '',
+      action: '/api/files/upload',
+      isMask: false,
+      maskOpacity: 0.1,
+    }
+  },
 ]);
 
 const formFields = ref([]);
@@ -720,6 +761,7 @@ const vueComponentMap = {
   switch: ASwitch,
   upload: AUpload,
   slider: ASlider,
+  'canvas-board': CanvasBoard,
 };
 
 const getVueComponent = (type) => {
@@ -1011,6 +1053,11 @@ const saveForm = async () => {
             gradientEnd: field.props.gradientEnd ?? '#ff4d4f',
             gradientStartPercent: field.props.gradientStartPercent ?? 0,
             gradientEndPercent: field.props.gradientEndPercent ?? 100,
+          } : {}),
+          ...(field.type === 'canvas-board' ? {
+            width: field.props.width,
+            height: field.props.height,
+            isMask: field.props.isMask,
           } : {}),
         },
         config: {
@@ -1610,9 +1657,9 @@ const beforeComfyUIJsonUpload = (file) => {
 .form-field-wrapper {
   padding: 10px;
   margin-bottom: 8px;
-  border: 1px solid var(--color-border-3);
+  border: 1px solid var(--color-border-2);
   border-radius: 4px;
-  background-color: var(--color-fill-2);
+  background-color: var(--color-fill-1);
   cursor: pointer;
   position: relative;
 }

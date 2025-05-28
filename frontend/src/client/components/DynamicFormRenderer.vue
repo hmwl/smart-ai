@@ -241,6 +241,18 @@
             </a-popover>
           </div>
         </template>
+        <template v-else-if="field.type === 'canvas-board'">
+          <CanvasBoard
+            v-model="formModel[field.props.field]"
+            :placeholder="field.props.placeholder"
+            :action="field.props.action"
+            :is-mask="field.props.isMask"
+            :mask-opacity="field.props.maskOpacity"
+            :default-value="field.props.defaultValue"
+            :width="field.props.width"
+            :height="field.props.height"
+          />
+        </template>
         <template v-else>
           <span style="color: red;">未知或不支持的组件类型: {{ field.type }}</span>
         </template>
@@ -258,6 +270,7 @@ import {
 } from '@arco-design/web-vue';
 import { IconUpload, IconSync } from '@arco-design/web-vue/es/icon';
 import clientApiService from '@/client/services/apiService'; // Ensure this path is correct
+import CanvasBoard from '@/admin/components/form-builder/CanvasBoard.vue';
 
 const props = defineProps({
   fields: {
