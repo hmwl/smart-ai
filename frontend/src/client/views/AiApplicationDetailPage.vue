@@ -263,44 +263,256 @@ const goBack = () => {
   router.push({ name: 'AiApplicationsList' }); // Navigate back to the list page using the correct route name
 };
 
-const launchApp = async () => {
-  if (!isLoggedIn.value) {
-    if (openLoginModal) {
-      openLoginModal();
+// Helper function to convert base64 to Blob (can be moved to a utils file)
+async function base64ToBlob(base64, type = 'application/octet-stream') {
+  const base64WithoutPrefix = base64.startsWith('data:') ? base64.split(',')[1] : base64;
+  if (!base64WithoutPrefix) return null; // Handle empty or invalid base64 string
+  try {
+    const byteCharacters = atob(base64WithoutPrefix);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
     }
-    return;
+    const byteArray = new Uint8Array(byteNumbers);
+    return new Blob([byteArray], { type });
+  } catch (e) {
+    console.error('Error in atob (base64ToBlob):', e);
+    return null;
+  }
+}
+
+// New helper to upload a single base64 file
+async function uploadBase64AsFile(base64Data, fieldSchema, uploadType, defaultSubpath = 'general_uploads') {
+  if (!base64Data || !base64Data.startsWith('data:image')) {
+    return base64Data; // Not a base64 image, return as is (might be an existing URL)
   }
 
+  let uploadUrl;
+  let actionValue = fieldSchema?.props?.action || defaultSubpath;
+  
+  // Handle legacy action values - convert old full paths to subpaths
+  if (actionValue === '/api/files/upload') {
+    actionValue = 'general_uploads'; // Convert legacy path to subpath
+  }
+  
+  // Check if action is still a complete URL path or just a subPath
+  if (actionValue.startsWith('/api/')) {
+    // Action is a complete URL path, but we need to remove /api since apiClient already has it as baseURL
+    uploadUrl = actionValue.substring(4); // Remove '/api' prefix
+  } else {
+    // Action is a subPath, construct the relative URL (apiClient will add /api)
+    uploadUrl = `/files/form-upload/${actionValue}`;
+  }
+
+  const blob = await base64ToBlob(base64Data, base64Data.substring(base64Data.indexOf(':') + 1, base64Data.indexOf(';')));
+  if (!blob) {
+    Message.error(`生成 ${uploadType} 文件内容失败，无法上传。`);
+    throw new Error(`Failed to convert base64 to Blob for ${uploadType}`);
+  }
+  
+  const formData = new FormData();
+  const fileExtension = blob.type.split('/')[1] || 'png';
+  formData.append('file', blob, `${uploadType}-${Date.now()}.${fileExtension}`);
+  formData.append('type', uploadType);
+
+  try {
+    // Debug: Check if user token exists
+    const token = localStorage.getItem('clientAccessToken');
+    
+    // Using apiClient.post assuming it handles FormData and auth correctly.
+    // If apiClient is a simple wrapper around axios, this should work.
+    // If it stringifies body by default, direct fetch or a custom apiClient method for FormData might be needed.
+    const response = await apiClient.post(uploadUrl, formData, {
+      headers: {
+        // Axios might set Content-Type automatically for FormData
+        // 'Content-Type': 'multipart/form-data', // Usually not needed for Axios with FormData
+      }
+    });
+    // Assuming apiClient throws for non-2xx or response structure is { data: { filePath: '...'} }
+    const result = response.data; 
+    if (result && result.filePath) {
+      return result.filePath;
+    }
+    throw new Error(result?.message || `${uploadType} upload succeeded but no filePath returned.`);
+  } catch (error) {
+    Message.error(`上传 ${fieldSchema?.props?.label || uploadType} 图片失败: ${error.response?.data?.message || error.message}`);
+    console.error(`Error uploading ${uploadType}:`, error);
+    throw error; 
+  }
+}
+
+// New helper to upload a regular file
+async function uploadFile(file, fieldSchema) {
+
+  // Check if file is valid
+  if (!file || (typeof file !== 'object') || !(file instanceof File)) {
+    throw new Error('Invalid file object provided to uploadFile');
+  }
+
+  let uploadUrl;
+  let actionValue = fieldSchema?.props?.action || 'general_uploads';
+  
+  // Handle legacy action values - convert old full paths to subpaths
+  if (actionValue === '/api/files/upload') {
+    actionValue = 'general_uploads';
+  }
+  
+  // Check if action is still a complete URL path or just a subPath
+  if (actionValue.startsWith('/api/')) {
+    // Action is a complete URL path, but we need to remove /api since apiClient already has it as baseURL
+    uploadUrl = actionValue.substring(4); // Remove '/api' prefix
+  } else {
+    // Action is a subPath, construct the relative URL (apiClient will add /api)
+    uploadUrl = `/files/form-upload/${actionValue}`;
+  }
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('type', 'user_upload');
+  try {
+    const response = await apiClient.post(uploadUrl, formData, {
+      headers: {
+        // Content-Type will be set automatically for FormData
+      }
+    });
+    
+    const result = response.data;
+    if (result && result.filePath) {
+      return result.filePath;
+    }
+    throw new Error(result?.message || 'File upload succeeded but no filePath returned.');
+  } catch (error) {
+    Message.error(`上传文件失败: ${error.response?.data?.message || error.message}`);
+    console.error('Error uploading file:', error);
+    throw error;
+  }
+}
+
+const launchApp = async () => {
+  if (!isLoggedIn.value) {
+    if (openLoginModal) openLoginModal();
+    return;
+  }
   if (!application.value) return;
 
-  let formConfigData = {};
-  // Only attempt validation if there are actual form fields defined in the schema
+  let formIsValid = true;
   if (formSchema.value && formSchema.value.fields && formSchema.value.fields.length > 0) {
     if (dynamicFormRendererRef.value) {
-      const isValid = await dynamicFormRendererRef.value.validateForm();
-      if (!isValid) {
-        Message.error('存在必填项未填写，请检查。');
-        // Form validation errors are typically handled within DynamicFormRenderer or by its validateForm method.
-        return; // Stop execution if form is invalid
+      formIsValid = await dynamicFormRendererRef.value.validateForm();
+      if (!formIsValid) {
+        Message.error('存在必填项未填写或格式不正确，请检查。');
+        return;
       }
-      // Assuming getFormData() is also exposed if you prefer that over v-model direct usage
-      formConfigData = dynamicFormRendererRef.value.getFormData ? dynamicFormRendererRef.value.getFormData() : { ...dynamicFormModel.value };
-    } else {
-      // This case implies the form schema has fields, but the renderer component isn't mounted/available.
-      // This could be a timing issue or an error in conditional rendering of the form.
-      Message.warning('表单渲染器尚未准备好或不存在，请稍后再试。');
-      return;
     }
-  } else {
-    // No form fields to validate, proceed with empty formConfigData for the launch API call.
-    formConfigData = {};
+  }
+
+  // Deep clone the form model to avoid mutating original state during processing
+  const processedFormConfigData = JSON.parse(JSON.stringify(dynamicFormModel.value));
+  let uploadsProcessedSuccessfully = true;
+  const loadingUploadMsg = Message.loading('正在处理表单数据并上传文件...');
+
+  try {
+    if (formSchema.value && formSchema.value.fields) {
+      for (const field of formSchema.value.fields) {
+        const fieldKey = field.props?.field;
+        
+        if (fieldKey && processedFormConfigData.hasOwnProperty(fieldKey)) {
+          let fieldValue = processedFormConfigData[fieldKey];
+
+          if (typeof fieldValue === 'string' && fieldValue.startsWith('data:image')) { // Handles direct base64 (e.g. canvas drawing)
+            Message.info(`正在上传 ${field.props.label || '画板内容'}...`);
+            // Use proper subpath, don't pass old URL values as defaultSubpath
+            const defaultSubpathForCanvas = 'app_canvas_files';
+            processedFormConfigData[fieldKey] = await uploadBase64AsFile(fieldValue, field, 'canvas', defaultSubpathForCanvas);
+          } else if (typeof fieldValue === 'string') {
+            try {
+              const parsedValue = JSON.parse(fieldValue);
+              if (parsedValue && parsedValue.type === 'mask_data') {
+                Message.info(`正在上传 ${field.props.label || '蒙版数据'}...`);
+                // Use proper subpath, don't pass old URL values as defaultSubpath
+                const defaultSubpathForMask = 'app_mask_files';
+                
+                const originalPath = await uploadBase64AsFile(parsedValue.original, field, 'mask_original', defaultSubpathForMask);
+                const maskPath = await uploadBase64AsFile(parsedValue.mask, field, 'mask_drawing', defaultSubpathForMask);
+                
+                processedFormConfigData[fieldKey] = JSON.stringify({ original: originalPath, mask: maskPath });
+              }
+            } catch (e) {
+              // Not a JSON string from our mask_data, or not our specific type, leave as is
+            }
+          } else if (Array.isArray(fieldValue)) {
+            
+            if (field.type === 'upload' || field.componentName === 'upload') {
+              // Handle upload component files
+              const uploadedFiles = [];
+              for (const fileItem of fieldValue) {
+                // Get the actual File object - try different approaches for ArcoDesign
+                let actualFile = fileItem?.originFileObj || fileItem?.file;
+                
+                // Check if actualFile is a valid File object, not just truthy
+                const isValidFile = actualFile && actualFile instanceof File;
+                
+                // If we don't have a valid File object but have a blob URL, try to fetch it
+                if (!isValidFile && fileItem?.url && fileItem.url.startsWith('blob:')) {
+                  try {
+                    const response = await fetch(fileItem.url);
+                    const blob = response.ok ? await response.blob() : null;
+                    if (blob) {
+                      // Create a File object from the blob
+                      actualFile = new File([blob], fileItem.name || 'upload-file', {
+                        type: blob.type || 'application/octet-stream'
+                      });
+                    }
+                  } catch (error) {
+                    console.error(`LaunchApp debug - Failed to fetch blob:`, error);
+                  }
+                }
+                
+                if (actualFile && actualFile instanceof File && fileItem?.status !== 'done') {
+                  // This is a file object that needs to be uploaded
+                  Message.info(`正在上传文件 ${fileItem.name}...`);
+                  const uploadedPath = await uploadFile(actualFile, field);
+                  uploadedFiles.push({
+                    name: fileItem.name,
+                    url: uploadedPath,
+                    status: 'done',
+                    uid: fileItem.uid
+                  });
+                } else if (fileItem?.url && fileItem?.status === 'done') {
+                  // This is already uploaded or has a URL
+                  uploadedFiles.push(fileItem);
+                } else {
+                  console.warn(`LaunchApp debug - Skipping file item (no valid file found):`, fileItem);
+                  console.warn(`LaunchApp debug - actualFile:`, actualFile);
+                  console.warn(`LaunchApp debug - actualFile instanceof File:`, actualFile instanceof File);
+                  console.warn(`LaunchApp debug - fileItem.status:`, fileItem?.status);
+                }
+              }
+              processedFormConfigData[fieldKey] = uploadedFiles;
+            }
+          }
+        }
+      }
+    }
+  } catch (uploadError) {
+    uploadsProcessedSuccessfully = false;
+    // Error message already shown by uploadBase64AsFile
+    // loadingUploadMsg.close(); // Close loading message if an upload fails
+    // return; // Stop if any upload fails
+  } finally {
+    if(typeof loadingUploadMsg.close === 'function') loadingUploadMsg.close();
+  }
+
+  if (!uploadsProcessedSuccessfully) {
+    Message.error('部分文件上传失败，请重试。');
+    return;
   }
 
   const appName = application.value.name;
   const originalCreditsToConsume = application.value.creditsConsumed;
-  let finalCreditsToDisplay = originalCreditsToConsume;
-
+  let finalCreditsToDisplay = originalCreditsToConsume; // Default to original
   if (application.value.activePromotion) {
+    // ... (discount logic remains the same)
     const promo = application.value.activePromotion;
     if (promo.discountType === 'percentage' && promo.discountValue !== null) {
       finalCreditsToDisplay = Math.max(0, Math.round(originalCreditsToConsume * (1 - parseFloat(promo.discountValue) / 100)));
@@ -315,31 +527,32 @@ const launchApp = async () => {
     okText: '确认生成',
     cancelText: '取消',
     onOk: async () => {
+      const finalLoadingMsg = Message.loading('正在执行应用，请稍候...');
       try {
+        // 打印最终提交的表单数据
+        console.log('最终提交的表单数据:', JSON.stringify(processedFormConfigData, null, 2));
+        
         const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`, {
-          formConfig: formConfigData 
+          formConfig: processedFormConfigData // Use the processed data with filePaths
         });
         
         const actualCreditsConsumed = response.data.creditsConsumed;
         Message.success(response.data.message || `应用 "${appName}" 执行成功！${actualCreditsConsumed > 0 ? `已消耗 ${actualCreditsConsumed} 积分。` : ''}`);
         
-        if (refreshUserData) { 
-          refreshUserData();
-        }
+        if (refreshUserData) refreshUserData();
         
       } catch (error) {
         Message.error(error.response?.data?.message || error.message || '执行应用失败');
         console.error('Error launching application:', error);
+      } finally {
+        if(typeof finalLoadingMsg.close === 'function') finalLoadingMsg.close();
       }
     },
-    onCancel: () => {
-    }
+    onCancel: () => {}
   });
 };
 
 const launchAppWithConfig = () => {
-  // 打印表单数据
-  console.log('提交的表单数据:', dynamicFormModel.value);
   launchApp();
 }
 

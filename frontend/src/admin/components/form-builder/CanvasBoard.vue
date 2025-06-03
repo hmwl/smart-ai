@@ -64,6 +64,7 @@
               @mouseenter="onCanvasEnter"
               @mousemove="onCanvasMove"
               @mouseleave="onCanvasLeave"
+              canvas-id="mainCanvasBoard"
             />
             <div v-if="cursorPreview.visible" class="canvas-cursor-preview" :style="cursorPreviewStyle"></div>
             <!-- 蒙版类型时，canvas下方显示原图+黑色透明层 -->
@@ -80,12 +81,12 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted, nextTick, computed } from 'vue';
+import { ref, watch, onMounted, nextTick, computed, inject } from 'vue';
 import { Message } from '@arco-design/web-vue';
-import { IconClose, IconLink, IconUnlock } from '@arco-design/web-vue/es/icon';
+import { IconClose, IconLock, IconUnlock } from '@arco-design/web-vue/es/icon';
 
 const props = defineProps({
-  modelValue: String, // base64 或 url
+  modelValue: String, // base64, url, or JSON string for mask {original, mask}
   action: String, // 上传接口
   placeholder: { type: String, default: '点击编辑画板' },
   isMask: { type: Boolean, default: false },
@@ -236,23 +237,29 @@ function onCancel() {
   restoreInitialState();
   unbindCanvasEvents();
 }
-function onOk() {
-  // 蒙版类型：返回原图和蒙版图
-  if (props.isMask) {
-    const maskData = getMaskImage();
-    emit('update:modelValue', JSON.stringify({ original: imageUrl.value, mask: maskData }));
-  } else {
-    const data = canvasRef.value.toDataURL('image/png');
-    emit('update:modelValue', data);
-    imageUrl.value = data;
+async function onOk() {
+  try {
+    if (props.isMask) {
+      const maskBase64 = getMaskImage();
+      emit('update:modelValue', JSON.stringify({ original: imageUrl.value, mask: maskBase64, type: 'mask_data' }));
+      Message.success('蒙版数据已准备好');
+    } else {
+      const imageBase64 = canvasRef.value.toDataURL('image/png');
+      emit('update:modelValue', imageBase64);
+      Message.success('画板数据已准备好');
+    }
+    modalVisible.value = false;
+    unbindCanvasEvents();
+  } catch (error) {
+    Message.error('准备数据失败: ' + error.message);
+    console.error('Error in onOk preparing data:', error);
   }
-  modalVisible.value = false;
-  unbindCanvasEvents();
 }
 
 function setupCanvas() {
   const canvas = canvasRef.value;
-  const ctx = canvas.getContext('2d');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
   // 清空
   ctx.clearRect(0, 0, displayWidth.value, displayHeight.value);
   if (props.isMask && imageUrl.value) {
@@ -406,34 +413,40 @@ async function onFileChange(e) {
   if (!file) return;
   if (!file.type.startsWith('image/')) {
     Message.error('只能上传图片文件');
-    e.target.value = '';
+    if(e.target) e.target.value = '';
     return;
   }
-  // 上传
-  const formData = new FormData();
-  formData.append('file', file);
+
   try {
-    const resp = await fetch(props.action, {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await resp.json();
-    const url = data?.url || data?.fileUrl || data?.fileName;
-    if (url) {
-      imageUrl.value = url;
-      emit('upload-success', url);
-      Message.success('图片上传成功');
-      nextTick(() => {
-        openModal();
-      });
+    const base64String = await fileToBase64(file);
+    imageUrl.value = base64String;
+    
+    Message.success('图片已加载，可以开始绘制。');
+    if (props.isMask) { 
+        nextTick(() => {
+          openModal();
+        });
     } else {
-      Message.error('上传响应异常');
+        nextTick(() => {
+          openModal();
+        });
     }
+
   } catch (err) {
-    Message.error('图片上传失败');
+    Message.error('加载图片失败: ' + (err.message || err));
+    console.error('Error in onFileChange converting to base64:', err);
   } finally {
-    e.target.value = '';
+    if (e.target) e.target.value = '';
   }
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = error => reject(error);
+  });
 }
 
 function bindCanvasEvents() {

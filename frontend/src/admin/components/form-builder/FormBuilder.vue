@@ -696,7 +696,7 @@ const availableComponents = ref([
     icon: 'icon-upload', 
     defaultProps: { 
       label: '上传文件', 
-      action: '/api/files/upload', // Default placeholder upload URL
+      action: 'general_uploads', // Changed from '/api/files/upload' to subPath
       accept: '', // e.g., 'image/*,.pdf'
       multiple: false,
       limit: 1,
@@ -725,7 +725,7 @@ const availableComponents = ref([
       label: '画板',
       placeholder: '请上传图片或点击编辑',
       defaultValue: '',
-      action: '/api/files/upload',
+      action: 'canvas_uploads', // Changed from '/api/files/upload' to subPath
       isMask: false,
       maskOpacity: 0.1,
     }

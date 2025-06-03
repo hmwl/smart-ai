@@ -131,15 +131,16 @@
         </template>
         <template v-else-if="field.type === 'upload'">
           <a-upload
-            :action="field.props.action || '/api/files/upload'" 
+            :action="getUploadUrl(field.props.action)" 
             :file-list="formModel[field.props.field] || []"
             :accept="field.props.accept"
             :multiple="field.props.multiple"
             :limit="field.props.multiple ? field.props.limit : 1"
             :list-type="field.props.listType || 'text'"
             :drag="field.props.drag"
-            :auto-upload="field.props.autoUpload !== undefined ? field.props.autoUpload : true"
+            :auto-upload="false"
             :placeholder="field.props.placeholder || '点击或拖拽文件上传'"
+            :headers="getUploadHeaders()"
             @change="(fileList, fileItem) => handleUploadChange(fileList, fileItem, field.props.field)"
             @success="(fileItem) => handleUploadSuccess(fileItem, field.props.field)"
             @error="(fileItem) => handleUploadError(fileItem, field.props.field)"
@@ -320,6 +321,39 @@ const clearCache = () => {
 // ====== END ======
 
 const platformFieldOptionsCache = new Map();
+
+// Helper function to construct correct upload URL
+const getUploadUrl = (actionValue) => {
+  if (!actionValue) {
+    return '/api/files/form-upload/general_uploads';
+  }
+  
+  // Handle legacy action values - convert old full paths to subpaths
+  if (actionValue === '/api/files/upload') {
+    actionValue = 'general_uploads';
+  }
+  
+  // Check if action is still a complete URL path or just a subPath
+  if (actionValue.startsWith('/api/')) {
+    // Action is a complete URL path, use it directly
+    return actionValue;
+  } else {
+    // Action is a subPath, construct the full URL
+    return `/api/files/form-upload/${actionValue}`;
+  }
+};
+
+// Helper function to get upload headers with authentication
+const getUploadHeaders = () => {
+  const token = localStorage.getItem('clientAccessToken');
+  const headers = {};
+  
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  
+  return headers;
+};
 
 const fetchEnumOptionsForField = async (field) => {
   if (field.config?.dataSourceType === 'enum' && field.config?.enumTypeId) {
