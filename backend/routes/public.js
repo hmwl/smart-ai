@@ -18,24 +18,24 @@ async function populatePageRoutes(items) {
     }
     const populatedItems = [];
     for (const item of items) {
-        let populatedItem = { ...item }; 
+        let populatedItem = { ...item };
         if (item.type === 'page' && item.pageId) {
             try {
-                const page = await Page.findOne({ _id: item.pageId, status: 'active' }).select('route').lean(); 
+                const page = await Page.findOne({ _id: item.pageId, status: 'active' }).select('route').lean();
                 if (page) {
-                    populatedItem.route = page.route; 
+                    populatedItem.route = page.route;
                 } else {
                     console.warn(`[WARN] Menu item '${item.title}' (pageId: ${item.pageId}): Corresponding active page not found or route missing. Skipping.`);
-                    continue; 
+                    continue;
                 }
             } catch (pageError) {
                 console.error(`[ERROR] Error finding page ${item.pageId} for menu item '${item.title}':`, pageError);
-                continue; 
+                continue;
             }
         } else if (item.type === 'submenu' && item.children && item.children.length > 0) {
             populatedItem.children = await populatePageRoutes(item.children);
         }
-        delete populatedItem.pageId; 
+        delete populatedItem.pageId;
         populatedItems.push(populatedItem.toObject ? populatedItem.toObject() : populatedItem);
     }
     return populatedItems;
@@ -122,7 +122,7 @@ router.get('/pages/lookup', async (req, res) => {
             return res.status(404).json({ message: 'Page not found or not active' });
         }
 
-        let responseData = { 
+        let responseData = {
             page: { ...page }, // Copy page data
             templateContent: null,
             customJs: '',
@@ -146,19 +146,19 @@ router.get('/pages/lookup', async (req, res) => {
                 const articles = await Article.find({ page: page._id, status: 'active' })
                                               .sort({ publishDate: -1, createdAt: -1 })
                                               .select('title author publishDate createdAt slug excerpt') // Added excerpt
-                                              .lean(); 
+                                              .lean();
                 responseData.articles = articles;
             } catch (articleError) {
                  console.error(`Error fetching articles for collection page ${page._id}:`, articleError);
                  // Decide how to handle: send empty articles or error? Send empty for now.
-                 responseData.articles = []; 
+                 responseData.articles = [];
             }
         } else {
             // Handle case where page type is valid but required template is missing/not populated
             console.warn(`Page ${page._id} (${page.type}) is missing its required template content.`);
             // Send null templateContent, frontend should handle this
         }
-        
+
         // 加密 templateContent 和 customJs
         if (rawTemplateContent) {
             responseData.encryptedTemplateContent = encryptAesGcm(rawTemplateContent);
@@ -173,7 +173,7 @@ router.get('/pages/lookup', async (req, res) => {
         // 不再返回明文
         delete responseData.templateContent;
         delete responseData.customJs;
-        
+
         res.json(responseData);
 
     } catch (err) {
@@ -266,7 +266,7 @@ router.get('/articles/:id', async (req, res) => {
             templateContent: article.page.templateItem.content
         };
         // Clean up nested populated objects in the main article object if necessary
-        delete responseData.article.page; 
+        delete responseData.article.page;
 
         res.json(responseData);
 
@@ -376,17 +376,18 @@ router.get('/ai-applications/active', async (req, res) => {
 
     let applications = await AiApplication.find(query)
       .populate('type', 'name uri _id')
+      .select('_id name description tags coverImageUrl type status creditsConsumed createdAt updatedAt')
       .sort({ createdAt: -1 })
       .skip((parseInt(page) - 1) * parseInt(limit))
       .limit(parseInt(limit))
       .lean(); // Use lean here as we will modify it
-      
+
     const totalApplications = await AiApplication.countDocuments(query);
 
     applications = await attachActivePromotions(applications); // Attach promotions
 
-    res.json({ 
-        applications, 
+    res.json({
+        applications,
         totalPages: Math.ceil(totalApplications / parseInt(limit)),
         currentPage: parseInt(page),
         totalApplications
@@ -394,35 +395,6 @@ router.get('/ai-applications/active', async (req, res) => {
   } catch (error) {
     console.error('Error fetching active AI applications:', error);
     res.status(500).json({ message: '获取 AI 应用列表失败' });
-  }
-});
-
-// GET /api/public/ai-applications/:id - Get a single AI application by ID
-router.get('/ai-applications/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    let application = await AiApplication.findOne({ _id: id })
-      .populate('type', 'name uri _id')
-      .populate({
-        path: 'apis',
-        select: '_id name platformName platformType apiUrl config'
-      })
-      .select('-__v')
-      .lean();
-
-    if (!application) {
-      return res.status(404).json({ message: 'AI 应用未找到' });
-    }
-
-    application = await attachActivePromotions(application); // Attach promotion
-
-    res.json(application);
-  } catch (err) {
-    if (err.name === 'CastError') {
-        return res.status(400).json({ message: '无效的应用ID格式' });
-    }
-    console.error(`Error fetching AI application ${req.params.id}:`, err);
-    res.status(500).json({ message: '获取应用详情失败' });
   }
 });
 
@@ -474,7 +446,7 @@ router.get('/recharge-promotions', async (req, res) => {
             // Note: maxDiscountCapRMB for points type means the cap is on the value of the gifted points if 1 point = 1 RMB equivalent or similar logic needed.
             // For now, we just display it. Or it might mean cap on how many times this can be triggered to give points related to a total discount value.
             // Let's assume it means the equivalent value of points should not exceed this cap.
-            displayInfo += ` (优惠价值上限 ${fr.maxDiscountCapRMB}元)`; 
+            displayInfo += ` (优惠价值上限 ${fr.maxDiscountCapRMB}元)`;
           }
         }
       }
@@ -501,4 +473,4 @@ router.get('/recharge-promotions', async (req, res) => {
   }
 });
 
-module.exports = router; 
+module.exports = router;

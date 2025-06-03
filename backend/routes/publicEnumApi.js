@@ -53,19 +53,19 @@ router.get('/enum-types/:enumTypeId/configs', async (req, res) => {
     //   return res.status(404).json({ message: '指定枚举类型不存在 (EnumType not found)' });
     // }
 
-    const enumConfigs = await EnumConfig.find({ 
-      enumType: enumTypeId, 
-      status: 'active' 
+    const enumConfigs = await EnumConfig.find({
+      enumType: enumTypeId,
+      status: 'active'
     })
-    .select('_id name translation platform description') // 加上 description 字段
+    .select('_id name description') // 移除 translation 和 platform 字段
     .lean();
 
     // It's okay to return an empty array if no configs are found for this type.
-    res.json(enumConfigs); 
+    res.json(enumConfigs);
   } catch (error) {
     console.error('Error fetching enum configs by type:', error);
     res.status(500).json({ message: '按类型获取枚举配置列表失败: ' + error.message });
   }
 });
 
-module.exports = router; 
+module.exports = router;

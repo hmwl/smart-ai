@@ -3,6 +3,7 @@
     <template v-for="field in visibleFields" :key="field.props.field">
       <a-form-item
         :field="field.props.field"
+        :class="{ 'has-bottom-widgets': hasBottomWidgets(field) }"
       >
         <template #label>
           <span>
@@ -70,7 +71,7 @@
             v-model="formModel[field.props.field]"
             :placeholder="field.props.placeholder"
             :multiple="field.props.multiple"
-            :loading="field.loadingOptions" 
+            :loading="field.loadingOptions"
             :disabled="field.props.disabled"
             allow-clear
           >
@@ -122,16 +123,16 @@
           </a-checkbox-group>
         </template>
         <template v-else-if="field.type === 'switch'">
-          <a-switch 
-            v-model="formModel[field.props.field]" 
-            :checked-value="field.props.checkedValue !== undefined ? field.props.checkedValue : true" 
-            :unchecked-value="field.props.uncheckedValue !== undefined ? field.props.uncheckedValue : false" 
+          <a-switch
+            v-model="formModel[field.props.field]"
+            :checked-value="field.props.checkedValue !== undefined ? field.props.checkedValue : true"
+            :unchecked-value="field.props.uncheckedValue !== undefined ? field.props.uncheckedValue : false"
             :disabled="field.props.disabled"
           />
         </template>
         <template v-else-if="field.type === 'upload'">
           <a-upload
-            :action="getUploadUrl(field.props.action)" 
+            :action="getUploadUrl(field.props.action)"
             :file-list="formModel[field.props.field] || []"
             :accept="field.props.accept"
             :multiple="field.props.multiple"
@@ -243,19 +244,40 @@
           </div>
         </template>
         <template v-else-if="field.type === 'canvas-board'">
-          <CanvasBoard
-            v-model="formModel[field.props.field]"
-            :placeholder="field.props.placeholder"
-            :action="field.props.action"
-            :is-mask="field.props.isMask"
-            :mask-opacity="field.props.maskOpacity"
-            :default-value="field.props.defaultValue"
-            :width="field.props.width"
-            :height="field.props.height"
-          />
+          <div class="canvas-board-container" :style="{ position: 'relative', width: '100%' }">
+            <CanvasBoard
+              v-model="formModel[field.props.field]"
+              :placeholder="field.props.placeholder"
+              :is-mask="field.props.isMask"
+              :mask-opacity="field.props.maskOpacity"
+              :width="field.props.width"
+              :height="field.props.height"
+              :max-width="field.props.maxWidth || 2048"
+              :max-height="field.props.maxHeight || 2048"
+              :action="field.props.action"
+              :widget-list="widgetList"
+              :widget-usages="field.props.widgetUsages"
+              @widget-click="(widget) => onWidgetButtonClick(widget, field)"
+            />
+          </div>
         </template>
         <template v-else>
           <span style="color: red;">未知或不支持的组件类型: {{ field.type }}</span>
+        </template>
+
+        <!-- 为所有字段类型渲染挂件按钮 -->
+        <template v-if="field.props.widgetUsages && field.props.widgetUsages.length > 0">
+          <div
+            v-for="(usage, index) in field.props.widgetUsages"
+            :key="index"
+            class="widget-button"
+            :class="[usage.position || 'topRight']"
+            :style="getWidgetButtonStyle(usage.position, index, field.props.widgetUsages)"
+            :title="usage.alias || getWidgetNameById(usage.widgetId)"
+            @click="onWidgetButtonClick(usage, field)"
+          >
+            {{ usage.alias || getWidgetNameById(usage.widgetId) }}
+          </div>
         </template>
       </a-form-item>
     </template>
@@ -288,7 +310,11 @@ const props = defineProps({
     type: Object, // Set
     default: () => new Set()
   },
-  // Add any other props like layout, etc., if needed
+  // 新增：挂件列表
+  widgetList: {
+    type: Array,
+    default: () => []
+  }
 });
 
 const emit = defineEmits(['update:formModel']);
@@ -327,12 +353,12 @@ const getUploadUrl = (actionValue) => {
   if (!actionValue) {
     return '/api/files/form-upload/general_uploads';
   }
-  
+
   // Handle legacy action values - convert old full paths to subpaths
   if (actionValue === '/api/files/upload') {
     actionValue = 'general_uploads';
   }
-  
+
   // Check if action is still a complete URL path or just a subPath
   if (actionValue.startsWith('/api/')) {
     // Action is a complete URL path, use it directly
@@ -347,11 +373,11 @@ const getUploadUrl = (actionValue) => {
 const getUploadHeaders = () => {
   const token = localStorage.getItem('clientAccessToken');
   const headers = {};
-  
+
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
-  
+
   return headers;
 };
 
@@ -417,13 +443,13 @@ const fetchEnumOptionsForField = async (field) => {
           filtered = response.data.filter(opt => allowedIds.includes(opt._id));
         }
         field.runtimeTransformedOptions = filtered.map(opt => ({
-          label: opt.translation || opt.name,
+          label: opt.translation || opt.name, // 优先使用 translation，fallback 到 name
           value: opt._id,
           description: opt.description || '',
           disabled: false
         }));
         enumOptionsCache.set(field.config.enumTypeId, response.data.map(opt => ({
-          label: opt.translation || opt.name,
+          label: opt.translation || opt.name, // 优先使用 translation，fallback 到 name
           value: opt._id,
           description: opt.description || '',
         })));
@@ -481,11 +507,11 @@ watchEffect(async () => {
       console.warn('Upload field was not an array, re-initializing as empty array. Data might be lost if not handled.');
       newModel[newField.props.field] = [];
     }
-    
+
     await fetchEnumOptionsForField(newField); // Fetch options if needed
     processedFields.push(newField);
   }
-  
+
   internalFields.value = processedFields;
   // Only emit update if the model actually changed to avoid infinite loops
   // A deep comparison might be better if default value logic is complex
@@ -500,8 +526,8 @@ const handleUploadChange = (fileList, fileItem, formFieldKey) => {
     if (f.response && f.status === 'done') {
       return {
         ...f,
-        url: f.response.url || f.url, 
-        serverFileId: f.response.fileId 
+        url: f.response.url || f.url,
+        serverFileId: f.response.fileId
       };
     }
     return f;
@@ -554,11 +580,11 @@ const visibleFields = computed(() => {
 
       let overallConditionMet;
       if (operator === 'AND') {
-        overallConditionMet = rules.every(rule => 
+        overallConditionMet = rules.every(rule =>
           checkCondition(rule.triggerFieldId, rule.conditionType, rule.conditionValue)
         );
       } else { // OR
-        overallConditionMet = rules.some(rule => 
+        overallConditionMet = rules.some(rule =>
           checkCondition(rule.triggerFieldId, rule.conditionType, rule.conditionValue)
         );
       }
@@ -674,11 +700,199 @@ function generateRandomInt(field) {
   // 保持类型与 integer 一致，赋值为数字
   props.formModel[field.props.field] = result;
 }
+
+function onWidgetButtonClick(usage, field) {
+  // 获取显示名称：优先使用别名，没有别名则动态获取挂件名称
+  const displayName = usage.alias || getWidgetNameById(usage.widgetId);
+  Message.info(`点击了挂件：${displayName}`);
+}
+
+function getWidgetNameById(widgetId) {
+  // 如果没有提供 widgetId，返回默认文本
+  if (!widgetId) return '功能按钮';
+
+  // 如果提供了 widgetList 并且找到了对应的 widget，动态获取其名称
+  if (props.widgetList && Array.isArray(props.widgetList)) {
+    const found = props.widgetList.find(w => (w._id === widgetId) || (w.id === widgetId));
+    if (found) {
+      // 动态读取挂件的 name 值（注意：这里不使用 alias，alias 在调用处处理）
+      return found.name || found.displayName || '功能按钮';
+    }
+  }
+
+  // 默认返回中文文本
+  return '功能按钮';
+}
+
+// 检查字段是否包含下方挂件
+function hasBottomWidgets(field) {
+  if (!field.props.widgetUsages || !Array.isArray(field.props.widgetUsages)) {
+    return false;
+  }
+
+  return field.props.widgetUsages.some(usage =>
+    usage.position === 'bottomLeftSide' ||
+    usage.position === 'bottomCenter' ||
+    usage.position === 'bottomRightSide'
+  );
+}
+
+// 计算挂件按钮的动态样式，避免多个挂件重叠
+function getWidgetButtonStyle(position, index, allUsages) {
+  if (!position || !allUsages) return {};
+
+  // 计算当前位置的挂件在同一位置中的索引
+  let positionIndex = 0;
+  for (let i = 0; i < index; i++) {
+    if (allUsages[i].position === position) {
+      positionIndex++;
+    }
+  }
+
+  const buttonWidth = 80; // 估算按钮宽度
+  const buttonHeight = 28; // 估算按钮高度
+  const gap = 8; // 按钮间距
+
+  let offsetX = 0;
+  let offsetY = 0;
+
+  // 根据位置和索引计算偏移量
+  switch (position) {
+    case 'topLeft':
+    case 'bottomLeft':
+      // 左侧位置：垂直排列
+      offsetY = positionIndex * (buttonHeight + gap);
+      break;
+
+    case 'topRight':
+    case 'bottomRight':
+      // 右侧位置：垂直排列
+      offsetY = positionIndex * (buttonHeight + gap);
+      break;
+
+    case 'bottomLeftSide':
+      // 下方左侧：水平排列
+      offsetX = positionIndex * (buttonWidth + gap);
+      break;
+
+    case 'bottomCenter':
+      // 下方中间：水平排列，居中对齐
+      const samePositionCount = allUsages.filter(usage => usage.position === position).length;
+      const totalWidth = samePositionCount * buttonWidth + (samePositionCount - 1) * gap;
+      const startOffset = -(totalWidth / 2) + (buttonWidth / 2);
+      offsetX = startOffset + positionIndex * (buttonWidth + gap);
+      break;
+
+    case 'bottomRightSide':
+      // 下方右侧：水平排列，从右向左
+      offsetX = -positionIndex * (buttonWidth + gap);
+      break;
+  }
+
+  return {
+    '--widget-offset-x': `${offsetX}px`,
+    '--widget-offset-y': `${offsetY}px`,
+    transform: position === 'bottomCenter'
+      ? `translateX(calc(-50% + ${offsetX}px))`
+      : undefined
+  };
+}
 </script>
 
 <style scoped>
 /* Add any specific styles for your dynamic form renderer here */
-.arco-form-item-label-col > label { /* Example to ensure labels are visible if they become empty */
-  min-height: 1em; 
+
+/* Canvas Board Widget Buttons */
+.widget-button {
+  position: absolute;
+  z-index: 10;
+  background-color: var(--color-primary-light-1);
+  color: var(--color-white);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+  box-shadow: 0 2px 8px 0 rgba(0, 0, 0, 0.15);
+  border: 1px solid var(--color-primary-light-3);
+}
+
+.widget-button:hover {
+  background-color: var(--color-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* Position classes - 对应FormBuilder中的位置选项 */
+/* 使用CSS变量来支持动态偏移，避免多个挂件重叠 */
+.widget-button.topLeft {
+  top: calc(38px + var(--widget-offset-y, 0px));
+  left: calc(8px + var(--widget-offset-x, 0px));
+}
+
+.widget-button.topRight {
+  top: calc(38px + var(--widget-offset-y, 0px));
+  right: calc(8px + var(--widget-offset-x, 0px));
+}
+
+.widget-button.bottomLeft {
+  bottom: calc(8px + var(--widget-offset-y, 0px));
+  left: calc(8px + var(--widget-offset-x, 0px));
+}
+
+.widget-button.bottomRight {
+  bottom: calc(8px + var(--widget-offset-y, 0px));
+  right: calc(8px + var(--widget-offset-x, 0px));
+}
+
+/* 正下方的三个位置 */
+.widget-button.bottomLeftSide {
+  bottom: calc(-32px - var(--widget-offset-y, 0px));
+  left: calc(0px + var(--widget-offset-x, 0px));
+}
+
+.widget-button.bottomCenter {
+  bottom: calc(-32px - var(--widget-offset-y, 0px));
+  left: 50%;
+  /* transform 在 getWidgetButtonStyle 中动态设置 */
+}
+
+.widget-button.bottomRightSide {
+  bottom: calc(-32px - var(--widget-offset-y, 0px));
+  right: calc(0px + var(--widget-offset-x, 0px));
+}
+
+/* 确保包含挂件的表单项容器有正确的定位和空间 */
+.arco-form-item {
+  position: relative;
+}
+
+/* 为包含下方挂件的表单项添加额外的底部边距 */
+.arco-form-item:has(.widget-button.bottomLeftSide),
+.arco-form-item:has(.widget-button.bottomCenter),
+.arco-form-item:has(.widget-button.bottomRightSide) {
+  margin-bottom: 48px; /* 增加底部边距以容纳下方挂件 */
+}
+
+/* 兼容性：如果浏览器不支持:has选择器，使用类名 */
+.arco-form-item.has-bottom-widgets {
+  margin-bottom: 48px;
+}
+
+/* 确保画板容器有正确的定位 */
+.canvas-board-container {
+  position: relative;
+  width: 100%;
+  display: inline-block;
+}
+
+/* 确保表单控件容器有正确的定位 */
+.arco-form-item-wrapper {
+  position: relative;
+}
+
+.arco-form-item-label-col > label {
+  min-height: 1em;
 }
 </style>

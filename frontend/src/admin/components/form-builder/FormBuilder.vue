@@ -500,6 +500,33 @@
                 </div>
               </a-form-item>
             </template>
+            
+            <!-- Canvas Board Specific Properties -->
+            <template v-if="selectedField.type === 'canvas-board'">
+              <a-divider>画板设置</a-divider>
+              <a-form-item label="默认值">
+                <a-input v-model="selectedField.props.defaultValue" placeholder="可填写默认文件URL或文件名" />
+              </a-form-item>
+              <a-form-item label="存储地址" tooltip="实际文件上传的后端接口URL">
+                <a-input v-model="selectedField.props.action" />
+              </a-form-item>
+              <a-form-item label="占位提示">
+                <a-input v-model="selectedField.props.placeholder" />
+              </a-form-item>
+              <a-form-item label="默认宽度">
+                <a-input-number v-model="selectedField.props.width" :min="10" :max="2048" placeholder="默认宽度(px)" />
+              </a-form-item>
+              <a-form-item label="默认高度">
+                <a-input-number v-model="selectedField.props.height" :min="10" :max="2048" placeholder="默认高度(px)" />
+              </a-form-item>
+              <a-form-item label="是否为蒙版类型">
+                <a-switch v-model="selectedField.props.isMask" />
+              </a-form-item>
+              <a-form-item v-if="selectedField.props.isMask" label="蒙版透明度">
+                <a-slider v-model="selectedField.props.maskOpacity" :min="0" :max="1" :step="0.01" />
+                <span style="margin-left: 8px;">{{ Math.round((selectedField.props.maskOpacity ?? 0.2) * 100) }}%</span>
+              </a-form-item>
+            </template>
 
             <!-- Conditional Logic Section -->
             <template v-if="canHaveConditionalLogic(selectedField.type)">
@@ -607,32 +634,39 @@
                 </a-form-item>
               </div>
             </template>
-            
-            <!-- Canvas Board Specific Properties -->
-            <template v-if="selectedField.type === 'canvas-board'">
-              <a-divider>画板设置</a-divider>
-              <a-form-item label="默认值">
-                <a-input v-model="selectedField.props.defaultValue" placeholder="可填写默认文件URL或文件名" />
-              </a-form-item>
-              <a-form-item label="存储地址" tooltip="实际文件上传的后端接口URL">
-                <a-input v-model="selectedField.props.action" />
-              </a-form-item>
-              <a-form-item label="占位提示">
-                <a-input v-model="selectedField.props.placeholder" />
-              </a-form-item>
-              <a-form-item label="默认宽度">
-                <a-input-number v-model="selectedField.props.width" :min="10" :max="2048" placeholder="默认宽度(px)" />
-              </a-form-item>
-              <a-form-item label="默认高度">
-                <a-input-number v-model="selectedField.props.height" :min="10" :max="2048" placeholder="默认高度(px)" />
-              </a-form-item>
-              <a-form-item label="是否为蒙版类型">
-                <a-switch v-model="selectedField.props.isMask" />
-              </a-form-item>
-              <a-form-item v-if="selectedField.props.isMask" label="蒙版透明度">
-                <a-slider v-model="selectedField.props.maskOpacity" :min="0" :max="1" :step="0.01" />
-                <span style="margin-left: 8px;">{{ Math.round((selectedField.props.maskOpacity ?? 0.2) * 100) }}%</span>
-              </a-form-item>
+
+            <!-- Widget Usage Section: 使用挂件配置区 -->
+            <template v-if="selectedField">
+              <a-divider>使用挂件</a-divider>
+              <div v-for="(usage, idx) in selectedField.props.widgetUsages || []" :key="usage._usageId || idx" class="option-editor-block widget-usage-block">
+                <div class="flex items-center justify-between">
+                  <strong class="option-editor-title">挂件 {{ idx + 1 }}</strong>
+                  <a-button type="text" status="danger" size="mini" @click="removeWidgetUsage(idx)" style="float: right;"><icon-delete /> 删除</a-button>
+                </div>
+                <a-form-item label="挂件" :required="true" :validate-status="usage.widgetId ? '' : 'error'">
+                  <a-select v-model="usage.widgetId" placeholder="选择挂件" allow-clear @change="onWidgetChange(idx)" :disabled="!widgetOptions.length">
+                    <a-option v-for="w in availableWidgetOptions(idx)" :key="w._id" :value="w._id">{{ w.name }} ({{ w._id }})</a-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item label="别名">
+                  <a-input v-model="usage.alias" placeholder="可选" allow-clear />
+                </a-form-item>
+                <a-form-item label="位置" :required="true" :validate-status="usage.position ? '' : 'error'">
+                  <a-select v-model="usage.position" placeholder="选择位置">
+                    <a-option value="topLeft">左上</a-option>
+                    <a-option value="topRight">右上</a-option>
+                    <a-option value="bottomLeft">左下</a-option>
+                    <a-option value="bottomRight">右下</a-option>
+                    <a-option value="bottomLeftSide">正下方-左</a-option>
+                    <a-option value="bottomCenter">正下方-中</a-option>
+                    <a-option value="bottomRightSide">正下方-右</a-option>
+                  </a-select>
+                </a-form-item>
+                <a-form-item label="启用">
+                  <a-switch v-model="usage.enabled" />
+                </a-form-item>
+              </div>
+              <a-button type="dashed" @click="addWidgetUsage" style="width:100%; margin-bottom: 20px;"><icon-plus /> 添加挂件</a-button>
             </template>
 
           </a-form>
@@ -646,7 +680,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, defineExpose, defineProps, defineEmits, computed, watchEffect } from 'vue';
+import { ref, onMounted, defineExpose, defineProps, defineEmits, computed, watchEffect, nextTick } from 'vue';
 import draggable from 'vuedraggable';
 import { 
     Input as AInput,
@@ -1098,6 +1132,8 @@ const saveForm = async () => {
             isMask: field.props.isMask,
             maskOpacity: field.props.maskOpacity, // 新增，确保保存
           } : {}),
+          // 新增：无论什么类型都保存 widgetUsages
+          widgetUsages: Array.isArray(field.props.widgetUsages) ? field.props.widgetUsages : []
         },
         config: {
           label: field.config.label, // Original component type label for reference
@@ -1341,6 +1377,7 @@ onMounted(() => {
   // Load existing form configuration if applicationId is present
   loadForm();
   fetchEnumTypes(); // Fetch enum types when component mounts, for the properties panel.
+  fetchWidgetOptions();
 });
 
 // Expose methods to parent component (e.g., the modal)
@@ -1600,6 +1637,54 @@ const beforeComfyUIJsonUpload = (file) => {
   return true;
 };
 
+// 挂件列表
+const widgetOptions = ref([]);
+
+// 拉取挂件列表
+const fetchWidgetOptions = async () => {
+  try {
+    const res = await apiService.getAIWidgets({ status: 'enabled' });
+    widgetOptions.value = res?.data?.list || res?.data || res?.list || [];
+  } catch (e) {
+    widgetOptions.value = [];
+  }
+};
+
+// 获取可选挂件（去重，当前已选的不能再选）
+function availableWidgetOptions(currentIdx) {
+  if (!selectedField.value) return widgetOptions.value;
+  const props = selectedField.value.props;
+  if (!props || !Array.isArray(props.widgetUsages)) return widgetOptions.value;
+  const usedIds = props.widgetUsages.map((u, i) => i === currentIdx ? null : u.widgetId).filter(Boolean);
+  return widgetOptions.value.filter(w => !usedIds.includes(w._id));
+}
+
+// 添加挂件
+function addWidgetUsage() {
+  if (!selectedField.value) return;
+  const props = selectedField.value.props || (selectedField.value.props = {});
+  if (!Array.isArray(props.widgetUsages)) props.widgetUsages = [];
+  props.widgetUsages.push({
+    _usageId: Math.random().toString(36).slice(2),
+    widgetId: '',
+    alias: '',
+    position: '',
+    enabled: true
+  });
+  nextTick(() => {});
+}
+// 删除挂件
+function removeWidgetUsage(idx) {
+  if (!selectedField.value) return;
+  const props = selectedField.value.props;
+  if (!props || !Array.isArray(props.widgetUsages)) return;
+  props.widgetUsages.splice(idx, 1);
+}
+// 挂件选择变化时，自动去重
+function onWidgetChange(idx) {
+  // 这里可扩展校验逻辑
+}
+
 </script>
 
 <style scoped>
@@ -1829,5 +1914,38 @@ const beforeComfyUIJsonUpload = (file) => {
   border-radius: 4px;
   margin-top: 8px;
   line-height: 1.6;
+}
+
+.widget-usage-block {
+  /* 复用 option-editor-block 的样式 */
+  margin-bottom: 12px;
+  background-color: var(--color-fill-1);
+  position: relative;
+}
+.widget-usage-block .option-editor-title {
+  font-weight: 500;
+  color: var(--color-text-2);
+}
+.widget-usage-block .arco-form-item {
+  margin-bottom: 12px;
+}
+.widget-usage-block .arco-form-item:last-child {
+  margin-bottom: 0;
+}
+.widget-usage-block .arco-form-item label {
+  font-weight: 500;
+}
+.widget-usage-block .arco-form-item .arco-input,
+.widget-usage-block .arco-form-item .arco-select {
+  width: 100%;
+}
+.widget-usage-block .arco-form-item .arco-select {
+  height: 32px;
+}
+.widget-usage-block .arco-form-item .arco-switch {
+  margin-top: 8px;
+}
+.widget-usage-block .arco-form-item .arco-button {
+  margin-top: 12px;
 }
 </style> 

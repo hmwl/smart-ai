@@ -79,6 +79,9 @@ const formUploadsRoutes = require('./routes/formUploads');
 // Import AIWidget routes
 const aiWidgetRoutes = require('./routes/aiWidget'); // 新增 AIWidget 路由
 
+// Import authenticated client routes
+const authClientRoutes = require('./routes/authClient'); // 新增认证客户端路由
+
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
@@ -110,12 +113,14 @@ app.use('/api/files/form-upload', authenticateToken, formUploadsRoutes);
 // Mount AIWidget routes (admin only)
 app.use('/api/ai-widgets', authenticateToken, isAdmin, aiWidgetRoutes);
 
+// Mount authenticated client routes (需要身份验证但不需要管理员权限)
+app.use('/api/auth/client', authenticateToken, authClientRoutes);
+
 // Mount public routes
 app.use('/api/public', publicRoutes); // Restore public routes
 app.use('/api/public/platforms', platformRoutes); // Mount the new public platform API
 app.use('/api/public/payment-config', paymentConfigRoutes); // Added for payment config
 app.use('/api/public/market', publicMarketRoutes); // Added for public market
-app.use('/api/public', publicEnumApiRoutes); // Mount the new public enum API
 
 // Mount the new tags router
 app.use('/api/tags', tagsRouter);

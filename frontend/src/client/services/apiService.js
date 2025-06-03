@@ -12,7 +12,7 @@ export const getStaticAssetBaseUrl = () => {
 
 // Base URL for client-specific APIs
 // Adjust if your client APIs are served from a different path e.g. /api/client
-const API_BASE_PATH = '/api'; 
+const API_BASE_PATH = '/api';
 
 const apiClient = axios.create({
   baseURL: API_BASE_PATH,
@@ -98,12 +98,12 @@ apiClient.getPublicMarketTags = (params) => {
   return apiClient.get('/public/market/tags', { params }); // Path relative to API_BASE_PATH ('/api')
 };
 
-// Method to get enum configurations by EnumType ID
+// Method to get enum configurations by EnumType ID (需要身份验证)
 apiClient.getEnumConfigsByType = (enumTypeId) => {
   if (!enumTypeId) {
     return Promise.reject(new Error('Enum Type ID is required to fetch enum configs.'));
   }
-  return apiClient.get(`/public/enum-types/${enumTypeId}/configs`); // Example: GET /api/public/enum-types/ETXYZ123/configs
+  return apiClient.get(`/auth/client/enum-types/${enumTypeId}/configs`); // Example: GET /api/auth/client/enum-types/ETXYZ123/configs
 };
 
 // 获取平台字段 options（含 description）
@@ -112,4 +112,9 @@ apiClient.getPlatformFieldOptions = (platformId, fieldKey) => {
   return apiClient.get(`/public/platforms/${platformId}/fields/${fieldKey}/options`);
 };
 
-export default apiClient; 
+// 获取AI挂件列表 (需要身份验证)
+apiClient.getAIWidgets = (params) => {
+  return apiClient.get('/auth/client/ai-widgets', { params });
+};
+
+export default apiClient;

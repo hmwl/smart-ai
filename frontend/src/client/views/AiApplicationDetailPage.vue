@@ -22,12 +22,12 @@
               <a-divider />
               <div class="info-section">
                 <div class="info-item">
-                  <icon-tag class="info-icon"/> <strong>类型:</strong> 
+                  <icon-tag class="info-icon"/> <strong>类型:</strong>
                   <a-tag v-if="application.type" color="blue" size="small">{{ application.type.name }}</a-tag>
                   <span v-else>未知</span>
                 </div>
                 <div class="info-item">
-                  <icon-layers class="info-icon"/> <strong>状态:</strong> 
+                  <icon-layers class="info-icon"/> <strong>状态:</strong>
                   <a-tag :color="application.status === 'active' ? 'green' : 'red'" size="small">
                     {{ application.status === 'active' ? '激活' : '禁用' }}
                   </a-tag>
@@ -55,7 +55,7 @@
                   </div>
                 </div>
                 <div class="info-item" v-if="application.tags && application.tags.length > 0">
-                  <icon-bookmark class="info-icon"/> <strong>标签:</strong> 
+                  <icon-bookmark class="info-icon"/> <strong>标签:</strong>
                   <a-space wrap>
                     <a-tag v-for="tag in application.tags" :key="tag" color="cyan" size="small">{{ tag }}</a-tag>
                   </a-space>
@@ -72,17 +72,18 @@
 
           <!-- Middle Column: App Config -->
           <div class="app-config-column">
-            <a-card 
+            <a-card
               v-if="formSchema && formSchema.fields && formSchema.fields.length > 0"
-              class="config-card scrollable-card" 
+              class="config-card scrollable-card"
               title="应用配置"
               :bordered="false"
             >
-              <DynamicFormRenderer 
+              <DynamicFormRenderer
                 :fields="formSchema.fields"
                 v-model:form-model="dynamicFormModel"
                 ref="dynamicFormRendererRef"
                 :allowed-enum-option-ids="allowedEnumOptionIds"
+                :widget-list="widgetList"
                 class=""
               />
               <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成</a-button>
@@ -145,6 +146,7 @@ const errorMsg = ref('');
 const formSchema = ref(null);
 const dynamicFormModel = ref({});
 const dynamicFormRendererRef = ref(null);
+const widgetList = ref([]);
 
 const appId = computed(() => route.params.id);
 
@@ -207,7 +209,7 @@ const canLaunch = computed(() => {
   if (!application.value || application.value.status !== 'active') return false;
   // If there's a form, it must be valid (or not exist)
   // This validation check is tricky here. We might need to validate on launch attempt.
-  return true; 
+  return true;
 });
 
 const getImageUrl = (relativePath) => {
@@ -238,7 +240,7 @@ const fetchApplicationDetail = async () => {
   errorMsg.value = '';
   formSchema.value = null; // Reset schema on new fetch
   try {
-    const response = await apiClient.get(`/public/ai-applications/${appId.value}`);
+    const response = await apiClient.get(`/auth/client/ai-applications/${appId.value}`);
     application.value = response.data;
     if (application.value && application.value.formSchema) {
       formSchema.value = application.value.formSchema;
@@ -256,6 +258,16 @@ const fetchApplicationDetail = async () => {
     application.value = null;
   } finally {
     loading.value = false;
+  }
+};
+
+const fetchWidgetList = async () => {
+  try {
+    const response = await apiClient.getAIWidgets({ status: 'enabled' });
+    widgetList.value = response.data?.list || [];
+  } catch (err) {
+    console.error('Error fetching widget list:', err);
+    widgetList.value = [];
   }
 };
 
@@ -289,12 +301,12 @@ async function uploadBase64AsFile(base64Data, fieldSchema, uploadType, defaultSu
 
   let uploadUrl;
   let actionValue = fieldSchema?.props?.action || defaultSubpath;
-  
+
   // Handle legacy action values - convert old full paths to subpaths
   if (actionValue === '/api/files/upload') {
     actionValue = 'general_uploads'; // Convert legacy path to subpath
   }
-  
+
   // Check if action is still a complete URL path or just a subPath
   if (actionValue.startsWith('/api/')) {
     // Action is a complete URL path, but we need to remove /api since apiClient already has it as baseURL
@@ -309,7 +321,7 @@ async function uploadBase64AsFile(base64Data, fieldSchema, uploadType, defaultSu
     Message.error(`生成 ${uploadType} 文件内容失败，无法上传。`);
     throw new Error(`Failed to convert base64 to Blob for ${uploadType}`);
   }
-  
+
   const formData = new FormData();
   const fileExtension = blob.type.split('/')[1] || 'png';
   formData.append('file', blob, `${uploadType}-${Date.now()}.${fileExtension}`);
@@ -318,7 +330,7 @@ async function uploadBase64AsFile(base64Data, fieldSchema, uploadType, defaultSu
   try {
     // Debug: Check if user token exists
     const token = localStorage.getItem('clientAccessToken');
-    
+
     // Using apiClient.post assuming it handles FormData and auth correctly.
     // If apiClient is a simple wrapper around axios, this should work.
     // If it stringifies body by default, direct fetch or a custom apiClient method for FormData might be needed.
@@ -329,7 +341,7 @@ async function uploadBase64AsFile(base64Data, fieldSchema, uploadType, defaultSu
       }
     });
     // Assuming apiClient throws for non-2xx or response structure is { data: { filePath: '...'} }
-    const result = response.data; 
+    const result = response.data;
     if (result && result.filePath) {
       return result.filePath;
     }
@@ -337,7 +349,7 @@ async function uploadBase64AsFile(base64Data, fieldSchema, uploadType, defaultSu
   } catch (error) {
     Message.error(`上传 ${fieldSchema?.props?.label || uploadType} 图片失败: ${error.response?.data?.message || error.message}`);
     console.error(`Error uploading ${uploadType}:`, error);
-    throw error; 
+    throw error;
   }
 }
 
@@ -351,12 +363,12 @@ async function uploadFile(file, fieldSchema) {
 
   let uploadUrl;
   let actionValue = fieldSchema?.props?.action || 'general_uploads';
-  
+
   // Handle legacy action values - convert old full paths to subpaths
   if (actionValue === '/api/files/upload') {
     actionValue = 'general_uploads';
   }
-  
+
   // Check if action is still a complete URL path or just a subPath
   if (actionValue.startsWith('/api/')) {
     // Action is a complete URL path, but we need to remove /api since apiClient already has it as baseURL
@@ -375,7 +387,7 @@ async function uploadFile(file, fieldSchema) {
         // Content-Type will be set automatically for FormData
       }
     });
-    
+
     const result = response.data;
     if (result && result.filePath) {
       return result.filePath;
@@ -415,7 +427,7 @@ const launchApp = async () => {
     if (formSchema.value && formSchema.value.fields) {
       for (const field of formSchema.value.fields) {
         const fieldKey = field.props?.field;
-        
+
         if (fieldKey && processedFormConfigData.hasOwnProperty(fieldKey)) {
           let fieldValue = processedFormConfigData[fieldKey];
 
@@ -431,27 +443,27 @@ const launchApp = async () => {
                 Message.info(`正在上传 ${field.props.label || '蒙版数据'}...`);
                 // Use proper subpath, don't pass old URL values as defaultSubpath
                 const defaultSubpathForMask = 'app_mask_files';
-                
+
                 const originalPath = await uploadBase64AsFile(parsedValue.original, field, 'mask_original', defaultSubpathForMask);
                 const maskPath = await uploadBase64AsFile(parsedValue.mask, field, 'mask_drawing', defaultSubpathForMask);
-                
+
                 processedFormConfigData[fieldKey] = JSON.stringify({ original: originalPath, mask: maskPath });
               }
             } catch (e) {
               // Not a JSON string from our mask_data, or not our specific type, leave as is
             }
           } else if (Array.isArray(fieldValue)) {
-            
+
             if (field.type === 'upload' || field.componentName === 'upload') {
               // Handle upload component files
               const uploadedFiles = [];
               for (const fileItem of fieldValue) {
                 // Get the actual File object - try different approaches for ArcoDesign
                 let actualFile = fileItem?.originFileObj || fileItem?.file;
-                
+
                 // Check if actualFile is a valid File object, not just truthy
                 const isValidFile = actualFile && actualFile instanceof File;
-                
+
                 // If we don't have a valid File object but have a blob URL, try to fetch it
                 if (!isValidFile && fileItem?.url && fileItem.url.startsWith('blob:')) {
                   try {
@@ -467,7 +479,7 @@ const launchApp = async () => {
                     console.error(`LaunchApp debug - Failed to fetch blob:`, error);
                   }
                 }
-                
+
                 if (actualFile && actualFile instanceof File && fileItem?.status !== 'done') {
                   // This is a file object that needs to be uploaded
                   Message.info(`正在上传文件 ${fileItem.name}...`);
@@ -531,16 +543,16 @@ const launchApp = async () => {
       try {
         // 打印最终提交的表单数据
         console.log('最终提交的表单数据:', JSON.stringify(processedFormConfigData, null, 2));
-        
+
         const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`, {
           formConfig: processedFormConfigData // Use the processed data with filePaths
         });
-        
+
         const actualCreditsConsumed = response.data.creditsConsumed;
         Message.success(response.data.message || `应用 "${appName}" 执行成功！${actualCreditsConsumed > 0 ? `已消耗 ${actualCreditsConsumed} 积分。` : ''}`);
-        
+
         if (refreshUserData) refreshUserData();
-        
+
       } catch (error) {
         Message.error(error.response?.data?.message || error.message || '执行应用失败');
         console.error('Error launching application:', error);
@@ -559,6 +571,7 @@ const launchAppWithConfig = () => {
 onMounted(() => {
   if (appId.value) {
     fetchApplicationDetail();
+    fetchWidgetList();
   }
 });
 
@@ -585,7 +598,7 @@ onMounted(() => {
 
 .app-info-column, .app-config-column, .app-result-column {
   display: flex;
-  flex-direction: column; 
+  flex-direction: column;
   height: 100%;
 }
 
@@ -624,7 +637,7 @@ onMounted(() => {
 
 .cover-image-container {
   width: 100%;
-  padding-top: 56.25%; 
+  padding-top: 56.25%;
   position: relative;
   background-color: var(--color-fill-2);
   border-radius: 6px;
@@ -735,4 +748,4 @@ onMounted(() => {
 .results-tabs .arco-tabs-content {
   padding-top: 16px;
 }
-</style> 
+</style>
