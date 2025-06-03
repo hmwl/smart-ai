@@ -108,6 +108,12 @@ const routes = [
     component: () => import('../views/AllWorksPage.vue'), // To be created
     meta: { title: '所有作品', requiresAuth: true } // Assuming requiresAuth
   },
+  {
+    path: '/ai-widgets',
+    name: 'AIWidgetManagement',
+    component: () => import('../views/AiWidgetManagement.vue'),
+    meta: { title: 'AI挂件管理', requiresAuth: true }
+  },
   // Add a catch-all or 404 route if needed
   // { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundComponent }
 ];

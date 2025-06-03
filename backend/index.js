@@ -76,6 +76,9 @@ const platformRoutes = require('./routes/platforms');
 // Import new form uploads route
 const formUploadsRoutes = require('./routes/formUploads');
 
+// Import AIWidget routes
+const aiWidgetRoutes = require('./routes/aiWidget'); // 新增 AIWidget 路由
+
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
@@ -103,6 +106,9 @@ app.use('/api/platforms', authenticateToken, isAdmin, platformRoutes);
 
 // Mount new form uploads route (needs authentication)
 app.use('/api/files/form-upload', authenticateToken, formUploadsRoutes);
+
+// Mount AIWidget routes (admin only)
+app.use('/api/ai-widgets', authenticateToken, isAdmin, aiWidgetRoutes);
 
 // Mount public routes
 app.use('/api/public', publicRoutes); // Restore public routes

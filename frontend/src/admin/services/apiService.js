@@ -294,4 +294,18 @@ apiService.getAppFormConfig = (applicationId) => {
 // or decide if a dedicated one under /enum-types or /enum-configs is needed.
 // For now, components needing platform types can use the existing getApiPlatformTypes.
 
+// --- AIWidget Service Methods ---
+apiService.getAIWidgets = (params) => {
+  return apiService.get('/ai-widgets', { params });
+};
+apiService.createAIWidget = (data) => {
+  return apiService.post('/ai-widgets', data);
+};
+apiService.updateAIWidget = (id, data) => {
+  return apiService.put(`/ai-widgets/${id}`, data);
+};
+apiService.deleteAIWidget = (id) => {
+  return apiService.delete(`/ai-widgets/${id}`);
+};
+
 export default apiService; 

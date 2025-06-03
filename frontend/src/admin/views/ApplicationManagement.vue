@@ -282,7 +282,12 @@ const handleCancel = () => {
 const handleSubmit = async () => {
     const validationResult = await appFormRef.value?.validate();
     if (validationResult) {
-        return false; // Keep modal open on validation failure
+        const firstErrorField = Object.keys(validationResult)[0];
+        if (firstErrorField && appFormRef.value?.scrollToField) {
+            appFormRef.value.scrollToField(firstErrorField);
+        }
+        Message.error('请完善必填项信息');
+        return false;
     }
 
     isSubmitting.value = true;

@@ -36,6 +36,10 @@
                 <template #icon><icon-settings /></template>
                 枚举管理
             </a-menu-item>
+            <a-menu-item key="ai-widget-management">
+                <template #icon><icon-codepen /></template>
+                AI挂件管理
+            </a-menu-item>
             <a-menu-item key="ai-app-management">
                 <template #icon><icon-code-square /></template>
                 AI 应用管理
@@ -142,7 +146,8 @@ import {
   IconList,
   IconBook,
   IconBulb,
-  IconSelectAll
+  IconSelectAll,
+  IconCodepen
 } from '@arco-design/web-vue/es/icon';
 
 const router = useRouter();
@@ -172,6 +177,7 @@ const targetSelectedKey = computed(() => {
       'InspirationMarket': 'inspiration-market',
       'AllWorks': 'all-works',
       'EnumConfigManagement': 'enum-config-management',
+      'AIWidgetManagement': 'ai-widget-management',
   };
   let selected = keyMap[route.name] || 'user-management';
   
@@ -188,7 +194,7 @@ watch(targetSelectedKey, (newKey) => {
   if (['page-management', 'menu-management', 'template-management'].includes(newKey)) {
     keysToOpen.push('website-management');
   }
-  if (['api-management', 'ai-type-management', 'enum-config-management', 'ai-app-management'].includes(newKey)) {
+  if (['api-management', 'ai-type-management', 'enum-config-management', 'ai-app-management', 'ai-widget-management'].includes(newKey)) {
       keysToOpen.push('ai-management-group');
   }
   if (['credit-transactions', 'credit-settings', 'activity-management'].includes(newKey)) {
@@ -225,6 +231,7 @@ const onClickMenuItem = (key) => {
     'inspiration-market': { name: 'InspirationMarket' },
     'all-works': { name: 'AllWorks' },
     'enum-config-management': { name: 'EnumConfigManagement' },
+    'ai-widget-management': { name: 'AIWidgetManagement' },
   };
   if (routeMap[key]) {
     router.push(routeMap[key]);
