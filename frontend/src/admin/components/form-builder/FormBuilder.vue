@@ -631,7 +631,7 @@
               </a-form-item>
               <a-form-item v-if="selectedField.props.isMask" label="蒙版透明度">
                 <a-slider v-model="selectedField.props.maskOpacity" :min="0" :max="1" :step="0.01" />
-                <span style="margin-left: 8px;">{{ Math.round((selectedField.props.maskOpacity ?? 0.1) * 100) }}%</span>
+                <span style="margin-left: 8px;">{{ Math.round((selectedField.props.maskOpacity ?? 0.2) * 100) }}%</span>
               </a-form-item>
             </template>
 
@@ -727,7 +727,7 @@ const availableComponents = ref([
       defaultValue: '',
       action: 'canvas_uploads', // Changed from '/api/files/upload' to subPath
       isMask: false,
-      maskOpacity: 0.1,
+      maskOpacity: 0.2,
     }
   },
 ]);
@@ -831,6 +831,9 @@ const onUpdateCanvas = (event) => {
 
 const selectField = async (field) => {
   selectedField.value = field;
+  if (field.type === 'canvas-board' && field.props.isMask && typeof field.props.maskOpacity !== 'number') {
+    field.props.maskOpacity = 0.2;
+  }
   if (field.config.dataSourceType === 'enum' && (field.type === 'select' || field.type === 'radio' || field.type === 'checkbox')) {
     await fetchEnumTypes();
     if (field.config.enumTypeId) {
@@ -1058,6 +1061,7 @@ const saveForm = async () => {
             width: field.props.width,
             height: field.props.height,
             isMask: field.props.isMask,
+            maskOpacity: field.props.maskOpacity, // 新增，确保保存
           } : {}),
         },
         config: {

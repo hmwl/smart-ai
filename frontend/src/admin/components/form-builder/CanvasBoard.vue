@@ -6,10 +6,14 @@
         <div class="placeholder-text">{{ placeholder }}</div>
       </div>
       <div v-if="imageUrl" class="canvas-thumb">
-        <img :src="imageUrl" alt="画板图片" />
+        <img :src="displayImageUrl" alt="画板图片" @click="onThumbImageClick" />
         <span class="canvas-thumb-close" @click.stop="removeImage">
           <icon-close />
         </span>
+        <!-- 蒙版类型时显示蒙版按钮 -->
+        <div v-if="isMask" class="canvas-mask-button" @click.stop="openModal">
+          蒙版
+        </div>
       </div>
       <!-- 隐藏的文件选择input -->
       <input ref="fileInputRef" type="file" accept="image/*" style="display:none" @change="onFileChange" />
@@ -29,8 +33,11 @@
             <a-input-number v-model="editHeight" :min="10" :max="maxHeight" @change="onEditHeight" style="width:90px;" />
           </template>
           <template v-else>
-            <span>宽度：{{ displayWidth }} px</span>
-            <span style="margin-left:16px;">高度：{{ displayHeight }} px</span>
+            <!-- <span>宽度：{{ displayWidth }} px</span>
+            <span style="margin-left:16px;">高度：{{ displayHeight }} px</span> -->
+            <span style="margin-left:24px;">蒙版透明度：</span>
+            <a-slider v-model="currentMaskOpacity" :min="0" :max="1" :step="0.01" style="width:120px;display:inline-block;margin:0 8px;" @change="onMaskOpacityChange" />
+            <span style="width: 50px;">{{ Math.round(currentMaskOpacity * 100) }}%</span>
           </template>
           <div class="canvas-zoom-bar">
             <span>缩放：</span>
@@ -41,12 +48,17 @@
         </div>
         <div class="canvas-toolbar">
           <a-radio-group v-model="tool">
-            <a-radio value="pen">画笔</a-radio>
-            <a-radio value="eraser">橡皮</a-radio>
+            <a-radio value="pen">{{ isMask ? '擦除' : '画笔' }}</a-radio>
+            <a-radio value="eraser">{{ isMask ? '恢复' : '橡皮' }}</a-radio>
           </a-radio-group>
-          <template v-if="tool==='pen'">
+          <template v-if="tool==='pen' && !isMask">
             <span style="margin-left:12px;">颜色：</span>
-            <input type="color" v-model="penColor" :disabled="isMask" style="vertical-align:middle;" />
+            <input type="color" v-model="penColor" style="vertical-align:middle;" />
+          </template>
+          <template v-if="isMask">
+            <span style="margin-left:12px;color:#666;font-size:12px;">
+              {{ tool === 'pen' ? '擦除黑色蒙版区域' : '恢复黑色蒙版区域' }}
+            </span>
           </template>
           <span style="margin-left:12px;">粗细：</span>
           <a-slider v-model="lineWidth" :min="2" :max="32" :step="1" style="width:100px;display:inline-block;" />
@@ -82,7 +94,7 @@
 
 <script setup>
 import { ref, watch, onMounted, nextTick, computed, inject } from 'vue';
-import { Message } from '@arco-design/web-vue';
+import { Message, Modal } from '@arco-design/web-vue';
 import { IconClose, IconLock, IconUnlock } from '@arco-design/web-vue/es/icon';
 
 const props = defineProps({
@@ -103,14 +115,14 @@ const modalVisible = ref(false);
 const canvasRef = ref(null);
 const tool = ref('pen'); // pen/eraser
 const penColor = ref('#1677ff');
-const lineWidth = ref(6);
+const lineWidth = ref(15);
 const drawing = ref(false);
 const lastPoint = ref(null);
 const canUndo = ref(false);
 const canRedo = ref(false);
 const undoStack = ref([]);
 const redoStack = ref([]);
-const imageUrl = ref(props.modelValue || props.defaultValue || '');
+const imageUrl = ref(initImageUrl());
 const maskImageData = ref(null); // 蒙版类型时，保存蒙版图
 const initialImageData = ref(null); // 打开弹窗时的画布快照
 const scale = ref(100);
@@ -128,6 +140,11 @@ const cursorPreview = ref({
   x: 0,
   y: 0,
 });
+const originalMaskData = ref(null); // 保存初始蒙版状态
+const currentMaskOpacity = ref(props.maskOpacity);
+const savedMaskState = ref(null); // 保存用户编辑后的蒙版状态
+const maskPreviewUrl = ref(''); // 蒙版预览图URL
+const trulyOriginalMaskData = ref(null); // 保存真正的初始蒙版状态（完整黑色蒙版）
 
 const cursorPreviewStyle = computed(() => {
   const size = lineWidth.value;
@@ -167,7 +184,32 @@ function removeImage() {
 }
 
 watch(() => props.modelValue, (val) => {
-  imageUrl.value = val || '';
+  if (val) {
+    // 检查是否是蒙版数据JSON
+    if (typeof val === 'string' && val.startsWith('{')) {
+      try {
+        const maskData = JSON.parse(val);
+        if (maskData.type === 'mask_data' && maskData.original) {
+          imageUrl.value = maskData.original;
+          return;
+        }
+      } catch (e) {
+        // 如果解析失败，当作普通图片URL处理
+      }
+    }
+    imageUrl.value = val;
+  } else {
+    imageUrl.value = '';
+  }
+});
+
+// 监听imageUrl变化，重新生成蒙版预览图
+watch(() => imageUrl.value, (newUrl, oldUrl) => {
+  if (props.isMask && newUrl && newUrl !== oldUrl) {
+    // 如果是新的图片URL，清除预览图并重新生成
+    maskPreviewUrl.value = '';
+    setTimeout(() => generateMaskPreview(), 100);
+  }
 });
 
 watch([editWidth, editHeight], ([w, h], [ow, oh]) => {
@@ -221,6 +263,8 @@ function onImageLoad(e) {
     displayWidth.value = Math.round(w * ratio);
     displayHeight.value = Math.round(h * ratio);
     setupCanvas();
+    // 生成初始预览图
+    setTimeout(() => generateMaskPreview(), 100);
   }
 }
 
@@ -240,11 +284,22 @@ function onCancel() {
 async function onOk() {
   try {
     if (props.isMask) {
+      // 保存当前蒙版编辑状态
+      const ctx = canvasRef.value.getContext('2d');
+      savedMaskState.value = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+      
       const maskBase64 = getMaskImage();
+      // 蒙版模式下直接emit数据，不更新imageUrl
       emit('update:modelValue', JSON.stringify({ original: imageUrl.value, mask: maskBase64, type: 'mask_data' }));
+      
+      // 生成预览图
+      generateMaskPreview();
+      
       Message.success('蒙版数据已准备好');
     } else {
       const imageBase64 = canvasRef.value.toDataURL('image/png');
+      // 普通模式下更新imageUrl为画布内容
+      imageUrl.value = imageBase64;
       emit('update:modelValue', imageBase64);
       Message.success('画板数据已准备好');
     }
@@ -267,11 +322,25 @@ function setupCanvas() {
     img.crossOrigin = 'anonymous';
     img.onload = () => {
       ctx.drawImage(img, 0, 0, displayWidth.value, displayHeight.value);
+      
+      // 先生成并保存真正的初始蒙版状态（完整黑色蒙版）
       ctx.save();
-      ctx.globalAlpha = props.maskOpacity;
+      ctx.globalAlpha = currentMaskOpacity.value;
       ctx.fillStyle = '#000';
       ctx.fillRect(0, 0, displayWidth.value, displayHeight.value);
       ctx.restore();
+      
+      // 保存真正的初始状态（用于恢复工具恢复到完整蒙版）
+      trulyOriginalMaskData.value = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+      
+      // 如果有保存的蒙版编辑状态，恢复它
+      if (savedMaskState.value) {
+        ctx.putImageData(savedMaskState.value, 0, 0);
+      }
+      
+      // originalMaskData用于getMaskImage函数的对比
+      originalMaskData.value = trulyOriginalMaskData.value;
+      
       saveState();
     };
     img.src = imageUrl.value;
@@ -333,18 +402,34 @@ function restoreInitialState() {
 }
 
 function getMaskImage() {
-  // 蒙版类型：只导出黑色透明层（与原图同尺寸，透明部分为未绘制区域）
+  // 蒙版类型：只导出蒙版数据（黑色=蒙版区域，透明=非蒙版区域）
   const canvas = document.createElement('canvas');
   canvas.width = displayWidth.value;
   canvas.height = displayHeight.value;
   const ctx = canvas.getContext('2d');
-  // 先填充透明
-  ctx.clearRect(0, 0, displayWidth.value, displayHeight.value);
+  
+  // 先填充黑色作为默认蒙版
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, displayWidth.value, displayHeight.value);
+  
   // 取主画布内容
   const mainCtx = canvasRef.value.getContext('2d');
-  const imgData = mainCtx.getImageData(0, 0, displayWidth.value, displayHeight.value);
-  // 只保留黑色蒙版和用户绘制内容
-  ctx.putImageData(imgData, 0, 0);
+  const mainImageData = mainCtx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+  const maskImageData = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+  
+  // 对比初始蒙版状态，找出用户擦除的区域
+  if (originalMaskData.value) {
+    for (let i = 0; i < mainImageData.data.length; i += 4) {
+      // 如果当前像素的透明度小于初始状态，说明被用户擦除了
+      if (mainImageData.data[i + 3] < originalMaskData.value.data[i + 3]) {
+        // 在蒙版中设为透明（非蒙版区域）
+        maskImageData.data[i + 3] = 0; // 设置alpha为0，透明
+      }
+      // 其他情况保持黑色（蒙版区域）
+    }
+  }
+  
+  ctx.putImageData(maskImageData, 0, 0);
   return canvas.toDataURL('image/png');
 }
 
@@ -356,24 +441,87 @@ function onPointerDown(e) {
 function onPointerMove(e) {
   if (!drawing.value) return;
   const ctx = canvasRef.value.getContext('2d');
-  ctx.save();
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  ctx.lineWidth = lineWidth.value;
-  if (tool.value === 'pen') {
-    ctx.globalCompositeOperation = 'source-over';
-    ctx.strokeStyle = props.isMask ? 'rgba(0,0,0,1)' : penColor.value;
+  
+  if (props.isMask) {
+    // 蒙版模式下的逻辑
+    if (tool.value === 'pen') {
+      // 擦除黑色蒙版层
+      ctx.save();
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.lineWidth = lineWidth.value;
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+      ctx.beginPath();
+      ctx.moveTo(lastPoint.value.x, lastPoint.value.y);
+      const newPoint = getCanvasPos(e);
+      ctx.lineTo(newPoint.x, newPoint.y);
+      ctx.stroke();
+      ctx.restore();
+      lastPoint.value = newPoint;
+    } else {
+      // 恢复工具：从真正的初始蒙版数据中恢复
+      if (trulyOriginalMaskData.value) {
+        const newPoint = getCanvasPos(e);
+        
+        // 创建临时画布来绘制路径蒙版
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = displayWidth.value;
+        tempCanvas.height = displayHeight.value;
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // 在临时画布上绘制路径
+        tempCtx.lineCap = 'round';
+        tempCtx.lineJoin = 'round';
+        tempCtx.lineWidth = lineWidth.value;
+        tempCtx.strokeStyle = 'white';
+        tempCtx.beginPath();
+        tempCtx.moveTo(lastPoint.value.x, lastPoint.value.y);
+        tempCtx.lineTo(newPoint.x, newPoint.y);
+        tempCtx.stroke();
+        
+        // 获取临时画布的图像数据作为蒙版
+        const tempImageData = tempCtx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+        const currentImageData = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+        
+        // 按照蒙版从真正的初始状态恢复像素
+        for (let i = 0; i < tempImageData.data.length; i += 4) {
+          if (tempImageData.data[i] > 0) { // 如果蒙版位置有像素
+            // 从真正的初始数据恢复这个像素
+            currentImageData.data[i] = trulyOriginalMaskData.value.data[i];
+            currentImageData.data[i + 1] = trulyOriginalMaskData.value.data[i + 1];
+            currentImageData.data[i + 2] = trulyOriginalMaskData.value.data[i + 2];
+            currentImageData.data[i + 3] = trulyOriginalMaskData.value.data[i + 3];
+          }
+        }
+        
+        // 将修改后的数据放回画布
+        ctx.putImageData(currentImageData, 0, 0);
+        
+        lastPoint.value = newPoint;
+      }
+    }
   } else {
-    ctx.globalCompositeOperation = 'destination-out';
-    ctx.strokeStyle = 'rgba(0,0,0,1)';
+    // 普通绘画模式
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = lineWidth.value;
+    if (tool.value === 'pen') {
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.strokeStyle = penColor.value;
+    } else {
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.strokeStyle = 'rgba(0,0,0,1)';
+    }
+    ctx.beginPath();
+    ctx.moveTo(lastPoint.value.x, lastPoint.value.y);
+    const newPoint = getCanvasPos(e);
+    ctx.lineTo(newPoint.x, newPoint.y);
+    ctx.stroke();
+    ctx.restore();
+    lastPoint.value = newPoint;
   }
-  ctx.beginPath();
-  ctx.moveTo(lastPoint.value.x, lastPoint.value.y);
-  const newPoint = getCanvasPos(e);
-  ctx.lineTo(newPoint.x, newPoint.y);
-  ctx.stroke();
-  ctx.restore();
-  lastPoint.value = newPoint;
 }
 function onPointerUp() {
   if (drawing.value) {
@@ -400,10 +548,37 @@ function onResetZoom() {
   scale.value = 100;
 }
 
+// 确认替换图片（蒙版模式下有编辑状态时使用）
+function confirmReplaceImage() {
+  // 直接打开文件选择，在onFileChange中进行确认
+  fileInputRef.value && fileInputRef.value.click();
+}
+
 function onTriggerClick() {
-  if (props.isMask && !imageUrl.value) {
-    fileInputRef.value && fileInputRef.value.click();
+  if (props.isMask) {
+    if (!imageUrl.value) {
+      // 蒙版类型且没有图片，上传图片
+      fileInputRef.value && fileInputRef.value.click();
+    } else {
+      // 蒙版类型有图片，处理蒙版相关逻辑
+      if (savedMaskState.value || trulyOriginalMaskData.value) {
+        confirmReplaceImage();
+      }
+      // 没有编辑状态时，通过蒙版按钮来打开画板
+    }
   } else {
+    // 非mask类型，直接打开画板
+    openModal();
+  }
+}
+
+function onThumbImageClick(e) {
+  e.stopPropagation();
+  if (props.isMask) {
+    // 蒙版类型，允许替换图片
+    confirmReplaceImage();
+  } else {
+    // 非mask类型，直接打开画板
     openModal();
   }
 }
@@ -417,26 +592,55 @@ async function onFileChange(e) {
     return;
   }
 
+  // 如果是蒙版模式且有编辑状态，先确认
+  if (props.isMask && (savedMaskState.value || trulyOriginalMaskData.value)) {
+    Modal.confirm({
+      title: '确认替换图片',
+      content: `您已选择文件"${file.name}"，替换图片将移除当前绘制的蒙版，是否确认替换？`,
+      okText: '确认替换',
+      cancelText: '取消',
+      onOk: async () => {
+        await processFileUpload(file);
+      },
+      onCancel: () => {
+        // 用户取消，清空文件输入
+        if(e.target) e.target.value = '';
+      }
+    });
+  } else {
+    // 直接处理文件上传
+    await processFileUpload(file);
+  }
+}
+
+async function processFileUpload(file) {
   try {
     const base64String = await fileToBase64(file);
     imageUrl.value = base64String;
     
+    // 重新上传图片时，清除之前的蒙版编辑状态
+    if (props.isMask) {
+      savedMaskState.value = null;
+      trulyOriginalMaskData.value = null;
+      originalMaskData.value = null;
+      maskPreviewUrl.value = '';
+    }
+    
     Message.success('图片已加载，可以开始绘制。');
-    if (props.isMask) { 
-        nextTick(() => {
-          openModal();
-        });
-    } else {
-        nextTick(() => {
-          openModal();
-        });
+    
+    // 如果是蒙版模式，生成预览图
+    if (props.isMask) {
+      // 等待图片加载完成后生成预览图
+      setTimeout(() => generateMaskPreview(), 200);
     }
 
   } catch (err) {
     Message.error('加载图片失败: ' + (err.message || err));
-    console.error('Error in onFileChange converting to base64:', err);
+    console.error('Error in processFileUpload converting to base64:', err);
   } finally {
-    if (e.target) e.target.value = '';
+    // 清空文件输入，允许重复选择同一文件
+    const fileInput = document.querySelector('input[type="file"]');
+    if (fileInput) fileInput.value = '';
   }
 }
 
@@ -482,6 +686,124 @@ function onCanvasMove(e) {
 function onCanvasLeave() {
   cursorPreview.value.visible = false;
 }
+
+function onMaskOpacityChange(value) {
+  currentMaskOpacity.value = value;
+  // 重新绘制蒙版以应用新的透明度
+  if (props.isMask && imageUrl.value && canvasRef.value) {
+    const canvas = canvasRef.value;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    
+    // 获取当前画布状态（保存用户已绘制的内容）
+    const currentData = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+    
+    // 重新绘制背景图片
+    const img = new window.Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      // 清空画布
+      ctx.clearRect(0, 0, displayWidth.value, displayHeight.value);
+      // 绘制原图
+      ctx.drawImage(img, 0, 0, displayWidth.value, displayHeight.value);
+      // 应用新透明度的蒙版层
+      ctx.save();
+      ctx.globalAlpha = currentMaskOpacity.value;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, displayWidth.value, displayHeight.value);
+      ctx.restore();
+      
+      // 更新真正的初始蒙版状态
+      trulyOriginalMaskData.value = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+      // 更新初始蒙版状态
+      originalMaskData.value = trulyOriginalMaskData.value;
+      
+      // 恢复用户已绘制的内容（只恢复透明部分，保持用户的擦除效果）
+      const newData = ctx.getImageData(0, 0, displayWidth.value, displayHeight.value);
+      for (let i = 0; i < currentData.data.length; i += 4) {
+        // 如果原来的位置是透明的（用户擦除过的），保持透明
+        if (currentData.data[i + 3] < trulyOriginalMaskData.value.data[i + 3]) {
+          newData.data[i + 3] = currentData.data[i + 3];
+        }
+      }
+      ctx.putImageData(newData, 0, 0);
+    };
+    img.src = imageUrl.value;
+  }
+}
+
+// 初始化imageUrl，正确处理蒙版数据
+function initImageUrl() {
+  const val = props.modelValue || props.defaultValue || '';
+  if (val) {
+    // 检查是否是蒙版数据JSON
+    if (typeof val === 'string' && val.startsWith('{')) {
+      try {
+        const maskData = JSON.parse(val);
+        if (maskData.type === 'mask_data' && maskData.original) {
+          return maskData.original;
+        }
+      } catch (e) {
+        // 如果解析失败，当作普通图片URL处理
+      }
+    }
+    return val;
+  }
+  return '';
+}
+
+// 生成蒙版预览图（原图+蒙版效果）
+function generateMaskPreview() {
+  if (!props.isMask || !imageUrl.value) return '';
+  
+  const img = new window.Image();
+  img.crossOrigin = 'anonymous';
+  img.onload = () => {
+    // 计算显示尺寸
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const ratio = Math.min(1000 / w, 650 / h, 1);
+    const canvasWidth = Math.round(w * ratio);
+    const canvasHeight = Math.round(h * ratio);
+    
+    const canvas = document.createElement('canvas');
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext('2d');
+    
+    // 绘制原图
+    ctx.drawImage(img, 0, 0, canvasWidth, canvasHeight);
+    
+    // 如果有保存的蒙版状态，应用它
+    if (savedMaskState.value && displayWidth.value && displayHeight.value) {
+      // 创建临时画布来处理保存的状态
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = displayWidth.value;
+      tempCanvas.height = displayHeight.value;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.putImageData(savedMaskState.value, 0, 0);
+      
+      // 将保存的状态缩放绘制到预览画布上
+      ctx.drawImage(tempCanvas, 0, 0, canvasWidth, canvasHeight);
+    } else {
+      // 否则应用默认蒙版
+      ctx.save();
+      ctx.globalAlpha = currentMaskOpacity.value;
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+      ctx.restore();
+    }
+    
+    maskPreviewUrl.value = canvas.toDataURL('image/png');
+  };
+  img.src = imageUrl.value;
+}
+
+// 计算显示的缩略图URL
+const displayImageUrl = computed(() => {
+  if (props.isMask && maskPreviewUrl.value) {
+    return maskPreviewUrl.value;
+  }
+  return imageUrl.value;
+});
 </script>
 
 <style scoped>
@@ -564,6 +886,24 @@ function onCanvasLeave() {
 .canvas-thumb-close:hover {
   background: #f5222d;
   color: #fff;
+}
+.canvas-mask-button {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(22, 119, 255, 0.9);
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  z-index: 3;
+  transition: background 0.2s;
+  user-select: none;
+}
+.canvas-mask-button:hover {
+  background: rgba(22, 119, 255, 1);
 }
 .canvas-modal-content {
   padding: 8px 0 0 0;
