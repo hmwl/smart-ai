@@ -75,6 +75,7 @@
       :title="isEditMode ? '编辑平台' : '添加平台'"
       @ok="handleSubmitForm"
       @cancel="closeFormModal"
+      :ok-text="isEditMode ? '更新平台' : '创建平台'"
       :confirm-loading="formLoading"
       unmount-on-close
       width="900px"

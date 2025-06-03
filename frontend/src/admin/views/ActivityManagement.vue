@@ -15,7 +15,7 @@
           <a-option value="usage_discount">使用折扣</a-option>
         </a-select>
         <a-button type="primary" @click="openCreateModal">
-          <template #icon><icon-plus /></template> 创建活动
+          <template #icon><icon-plus /></template> 添加活动
         </a-button>
         <a-button @click="fetchActivities" :loading="isLoading">
           <template #icon><icon-refresh /></template> 刷新
@@ -35,28 +35,28 @@
         <template #columns>
           <a-table-column title="ID" data-index="_id" :width="120" fixed="left"></a-table-column>
           <a-table-column title="活动名称" data-index="name" :width="200" ellipsis tooltip></a-table-column>
-          <a-table-column title="活动时间" :width="350">
+          <a-table-column title="活动时间" :width="350" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               {{ formatDateCN(record.startTime) }} - {{ formatDateCN(record.endTime) }}
             </template>
           </a-table-column>
-          <a-table-column title="状态" data-index="effectiveStatus" :width="100">
+          <a-table-column title="状态" data-index="effectiveStatus" :width="100" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <a-tag :color="getStatusColor(record.effectiveStatus)">{{ translateStatus(record.effectiveStatus) }}</a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="类型" data-index="activityType" :width="220">
+          <a-table-column title="类型" data-index="activityType" :width="220" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">{{ translateActivitySubType(record) }}</template>
           </a-table-column>
-          <a-table-column title="创建人" :width="120">
+          <a-table-column title="创建人" :width="120" :sortable="{ sortDirections: ['ascend', 'descend'] }">
              <template #cell="{ record }">
                 {{ record.createdBy ? record.createdBy.username : 'N/A' }}
             </template>
           </a-table-column>
-          <a-table-column title="创建时间" data-index="createdAt" :width="200">
+          <a-table-column title="创建时间" data-index="createdAt" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
           </a-table-column>
-          <a-table-column title="更新时间" data-index="updatedAt" :width="200">
+          <a-table-column title="更新时间" data-index="updatedAt" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">{{ formatDateCN(record.updatedAt) }}</template>
           </a-table-column>
           <a-table-column title="备注" data-index="remarks" :width="180" ellipsis tooltip></a-table-column>
@@ -75,10 +75,11 @@
     <!-- Create/Edit Modal -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditMode ? '编辑优惠活动' : '创建优惠活动'"
+      :title="isEditMode ? '编辑活动：' + activityForm.name : '创建活动'"
       width="700px"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新活动' : '创建活动'"
       :confirm-loading="isSubmitting"
       unmount-on-close
     >

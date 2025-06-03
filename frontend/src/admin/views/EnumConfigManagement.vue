@@ -178,15 +178,15 @@ const pagination = reactive({
 
 const columns = [
   { title: 'ID', dataIndex: '_id', key: '_id', width: 100, ellipsis: true, tooltip: true },
-  { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true, tooltip: true, width: 200 },
-  { title: '类型', key: 'enumType', slotName: 'enumType', width: 150 },
+  { title: '名称', dataIndex: 'name', key: 'name', ellipsis: true, tooltip: true, width: 200, sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: '类型', key: 'enumType', slotName: 'enumType', width: 150, sortable: { sortDirections: ['ascend', 'descend'] } },
   { title: '翻译', dataIndex: 'translation', key: 'translation', ellipsis: true, tooltip: true, width: 180 },
   { title: '说明', dataIndex: 'description', key: 'description', ellipsis: true, tooltip: true, width: 180 },
-  { title: '平台', key: 'platform', slotName: 'platform', width: 120 },
-  { title: '使用数', dataIndex: 'usageCount', key: 'usageCount', slotName: 'usageCount', width: 90, align: 'center' },
-  { title: '状态', key: 'status', slotName: 'status', width: 100 },
-  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 200, slotName: 'createdAt' },
-  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 200, slotName: 'updatedAt' },
+  { title: '平台', key: 'platform', slotName: 'platform', width: 120, sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: '使用数', dataIndex: 'usageCount', key: 'usageCount', slotName: 'usageCount', width: 120, align: 'center', sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: '状态', key: 'status', slotName: 'status', width: 100, sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', width: 200, slotName: 'createdAt', sortable: { sortDirections: ['ascend', 'descend'] } },
+  { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 200, slotName: 'updatedAt', sortable: { sortDirections: ['ascend', 'descend'] } },
   { title: '操作', key: 'actions', slotName: 'actions', width: 150, fixed: 'right', align: 'center' },
 ];
 

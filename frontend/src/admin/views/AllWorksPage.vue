@@ -108,7 +108,14 @@
     />
 
     <!-- Create/Edit Work Modal (Simplified for now) -->
-    <a-modal :visible="showCreateWorkModal" :title="editWorkId ? '编辑作品' : '添加新作品'" @ok="handleSaveWork" @cancel="closeCreateWorkModal" :width="600">
+    <a-modal 
+      :visible="showCreateWorkModal" 
+      :title="editWorkId ? '编辑作品：' + workForm.title : '添加新作品'" 
+      @ok="handleSaveWork" 
+      @cancel="closeCreateWorkModal" 
+      :width="600"
+      :ok-text="editWorkId ? '更新作品' : '创建作品'"
+      >
       <a-form :model="workForm" ref="workFormRef" layout="vertical">
         <a-form-item field="title" label="标题" :rules="[{required: true, message: '请输入作品标题'}]">
           <a-input v-model="workForm.title" placeholder="请输入作品标题" />

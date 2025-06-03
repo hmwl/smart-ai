@@ -69,13 +69,13 @@
               {{ record._id }}
             </template>
           </a-table-column>
-          <a-table-column title="用户" data-index="user.username" :width="180">
+          <a-table-column title="用户" data-index="user.username" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <span v-if="record.user">{{ record.user.username }} ({{ record.user._id }})</span>
               <span v-else class="text-gray-400">未知用户</span>
             </template>
           </a-table-column>
-          <a-table-column title="操作人" data-index="operator.username" :width="180">
+          <a-table-column title="操作人" data-index="operator.username" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <span v-if="record.operator && record.operator.username">
                 {{ record.operator.username }}
@@ -88,20 +88,20 @@
               <span v-else class="text-gray-400">未知操作人</span>
             </template>
           </a-table-column>
-          <a-table-column title="类型" data-index="type" :width="120">
+          <a-table-column title="类型" data-index="type" :width="120" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <a-tag :color="getTransactionTypeColor(record.type)">
                 {{ translateTransactionType(record.type) }}
               </a-tag>
             </template>
           </a-table-column>
-          <a-table-column title="AI应用" data-index="aiApplication.name" :width="200">
+          <a-table-column title="AI应用" data-index="aiApplication.name" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <span v-if="record.aiApplication">{{ record.aiApplication.name }} ({{ record.aiApplication._id }})</span>
               <span v-else>-</span>
             </template>
           </a-table-column>
-          <a-table-column title="活动" :width="180">
+          <a-table-column title="活动" :width="180" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
               <span v-if="record.promotionActivity && record.promotionActivity.name">
                 {{ record.promotionActivity.name }}

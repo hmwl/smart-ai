@@ -126,9 +126,10 @@
     <!-- Create/Edit Modal -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditMode ? `编辑 API: ${currentApiEntry?.platformName}` : '添加新 API'"
+      :title="isEditMode ? '编辑 API：' + currentApiEntry?.platformName : '添加新 API'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新 API' : '创建 API'"
       :confirm-loading="isSubmitting"
       unmount-on-close
       width="650px"

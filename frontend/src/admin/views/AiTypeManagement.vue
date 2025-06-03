@@ -89,9 +89,10 @@
     <!-- Create/Edit Modal Updated -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditing ? `编辑 AI 类型: ${currentAiType?.name}` : '添加新 AI 类型'"
+      :title="isEditing ? '编辑 AI 类型：' + formState.name : '添加新 AI 类型'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditing ? '更新 AI 类型' : '创建 AI 类型'"
       :confirm-loading="modalLoading"
       unmount-on-close
       width="600px"

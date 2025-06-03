@@ -18,7 +18,7 @@
           <a-option value="disabled">禁用</a-option>
         </a-select>
         <a-button type="primary" @click="openCreateModal">
-             <template #icon><icon-plus /></template> 创建页面
+             <template #icon><icon-plus /></template> 添加页面
         </a-button>
         <a-button @click="refreshPages" :loading="isLoading">
           <template #icon><icon-refresh /></template> 刷新
@@ -112,9 +112,10 @@
     <!-- Create/Edit Page Modal -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditMode ? `编辑页面: ${currentPage?.name}` : '创建新页面'"
+      :title="isEditMode ? '编辑页面：' + currentPage?.name : '创建新页面'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新页面' : '创建页面'"
       :confirm-loading="isSubmitting"
       unmount-on-close
       width="800px"

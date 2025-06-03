@@ -15,7 +15,7 @@
           <a-option value="item">内容模板</a-option>
         </a-select>
         <a-button type="primary" @click="openCreateModal">
-             <template #icon><icon-plus /></template> 创建模板
+             <template #icon><icon-plus /></template> 添加模板
         </a-button>
         <a-button @click="refreshTemplates" :loading="isLoading">
           <template #icon><icon-refresh /></template> 刷新
@@ -79,9 +79,10 @@
     <!-- Create/Edit Template Modal -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditMode ? `编辑模板: ${currentTemplate?.name}` : '创建新模板'"
+      :title="isEditMode ? '编辑模板：' + currentTemplate?.name : '创建新模板'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新模板' : '创建模板'"
       :confirm-loading="isSubmitting"
       unmount-on-close
       width="900px" 

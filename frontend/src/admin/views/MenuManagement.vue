@@ -35,7 +35,7 @@
           </h3>
           <a-space>
             <a-button type="primary" @click="addItem(currentMenuItems)" :disabled="!selectedMenuId">
-              <template #icon><icon-plus /></template> 添加顶级项
+              <template #icon><icon-plus /></template> 添加菜单项
             </a-button>
             <a-button @click="saveMenu" :loading="isSaving" :disabled="!selectedMenuId || !isDirty">
               <template #icon><icon-save /></template> 保存当前菜单

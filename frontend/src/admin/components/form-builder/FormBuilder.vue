@@ -16,12 +16,12 @@
           <template #icon><icon-upload /></template> 上传 ComfyUI JSON
         </a-button>
       </a-upload>
-      <span v-if="comfyUIJsonFileName" class="uploaded-file-info" style="margin-left: 16px; display: inline-block; color: #52c41a; font-size: 13px;">
+      <span v-if="comfyUIJsonFileName" class="uploaded-file-info" style="margin-left: 16px; display: inline-block; color: #52c41a; font-size: 13px; width: 100%;">
         <icon-check-circle style="margin-right: 4px;" />已上传：{{ comfyUIJsonFileName }}
       </span>
       <div class="comfyui-outputs">
-        <a-input v-model="comfyUIOutputNodeId" placeholder="输出节点ID" style="width: 150px;" />
-        <a-select v-model="comfyUIOutputType" placeholder="输出类型" style="width: 150px;">
+        <a-input v-model="comfyUIOutputNodeId" placeholder="输出节点ID" style="width: 150px;" required/>
+        <a-select v-model="comfyUIOutputType" placeholder="输出类型" style="width: 150px;" required>
           <a-option value="image">图片</a-option>
           <a-option value="audio">音频</a-option>
           <a-option value="video">视频</a-option>
@@ -29,7 +29,7 @@
           <a-option value="3d">3D</a-option>
           <a-option value="custom">自定义</a-option>
         </a-select>
-        <a-input v-if="comfyUIOutputType === 'custom'" v-model="comfyUICustomOutputKey" placeholder="自定义输出Key" style="width: 150px;" />
+        <a-input v-if="comfyUIOutputType === 'custom'" v-model="comfyUICustomOutputKey" placeholder="自定义输出Key" style="width: 150px;" required/>
       </div>
     </div>
 
@@ -1000,6 +1000,41 @@ const saveForm = async () => {
   if (!props.applicationId) {
     Message.error('应用ID缺失，无法保存表单。');
     throw new Error('应用ID缺失，无法保存表单。')
+  }
+  // ComfyUI 必填校验
+  if (isComfyUI.value) {
+    if (!comfyUIOutputNodeId.value) {
+      Message.error('请填写输出节点ID');
+      return;
+    }
+    if (!comfyUIOutputType.value) {
+      Message.error('请选择输出类型');
+      return;
+    }
+    if (comfyUIOutputType.value === 'custom' && !comfyUICustomOutputKey.value) {
+      Message.error('请填写自定义输出Key');
+      return;
+    }
+    if (!comfyUIJsonFileName.value) {
+      Message.error('请上传 ComfyUI JSON 文件');
+      return;
+    }
+    // 校验每个表单组件的节点ID和key
+    const keyReg = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+    for (const field of formFields.value) {
+      if (!field.props || !field.props.nodeId || String(field.props.nodeId).trim() === '') {
+        Message.error(`组件「${field.props?.label || field.type}」的节点ID不能为空`);
+        return;
+      }
+      if (!field.props || !field.props.key || String(field.props.key).trim() === '') {
+        Message.error(`组件「${field.props?.label || field.type}」的Key不能为空`);
+        return;
+      }
+      if (!keyReg.test(field.props.key)) {
+        Message.error(`组件「${field.props?.label || field.type}」的Key必须以字母或下划线开头，只能包含字母、数字、下划线`);
+        return;
+      }
+    }
   }
   try {
     const schemaToSave = {

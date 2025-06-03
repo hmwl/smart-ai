@@ -23,7 +23,7 @@
          </a-select>
          <!-- Action Buttons -->
         <a-button type="primary" @click="openCreateModal" :disabled="!pageId">
-             <template #icon><icon-plus /></template> 创建文章
+             <template #icon><icon-plus /></template> 添加文章
         </a-button>
         <a-button @click="refreshArticles" :loading="isLoading" :disabled="!pageId">
           <template #icon><icon-refresh /></template> 刷新
@@ -87,9 +87,10 @@
     <!-- Create/Edit Article Modal -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditMode ? `编辑文章: ${currentArticle?.title}` : '创建新文章'"
+      :title="isEditMode ? '编辑文章：' + currentArticle?.title : '创建新文章'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新文章' : '创建文章'"
       :confirm-loading="isSubmitting"
       unmount-on-close
       width="900px" 

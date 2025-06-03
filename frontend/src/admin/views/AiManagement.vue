@@ -57,7 +57,7 @@
         </a-select>
         <!-- Action Buttons -->
         <a-button type="primary" @click="showCreateModal">
-          <template #icon><icon-plus /></template> 创建 AI 应用
+          <template #icon><icon-plus /></template> 添加 AI 应用
         </a-button>
         <a-button @click="refreshData" :loading="loading">
           <template #icon><icon-refresh /></template> 刷新
@@ -167,13 +167,13 @@
 
     <!-- Modal remains the same -->
     <a-modal
-      :title="isEditing ? '编辑 AI 应用' : '创建 AI 应用'"
+      :title="isEditing ? '编辑 AI 应用：' + formState.name : '创建 AI 应用'"
       :visible="modalVisible"
       :confirm-loading="modalLoading"
       width="800px"
       @ok="handleSubmit"
       @cancel="handleCancel"
-      ok-text="保存"
+      :ok-text="isEditing ? '更新 AI 应用' : '创建 AI 应用'"
       cancel-text="取消"
       unmount-on-close  
     >
@@ -182,7 +182,7 @@
         <a-row :gutter="16">
 
           <a-col :span="6">
-            <a-form-item label="封面图片 (小于 500KB)" field="coverImage" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+            <a-form-item label="封面图片 (小于 500KB)" field="coverImage" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;" required>
               <div>
               <!-- Revision: Show preview image OR upload component -->
               <div style="width: 104px; height: 104px; margin-bottom: 8px; border: 1px dashed #d9d9d9; display: flex; align-items: center; justify-content: center;">
@@ -685,7 +685,7 @@ const resetForm = () => {
     coverImageFile: null,
     removeCoverImage: false,
     status: 'inactive',
-    creditsConsumed: 0, // Reset creditsConsumed
+    creditsConsumed: null, // Reset creditsConsumed
     platformType: null, // Reset platformType
   };
   fileList.value = [];

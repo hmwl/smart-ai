@@ -18,7 +18,7 @@
           <a-option value="disabled">禁用</a-option>
         </a-select>
         <a-button type="primary" @click="openCreateModal">
-          <template #icon><icon-plus /></template> 创建应用
+          <template #icon><icon-plus /></template> 添加应用
         </a-button>
         <a-button @click="refreshApplications" :loading="isLoading">
           <template #icon><icon-refresh /></template> 刷新
@@ -88,9 +88,10 @@
     <!-- Create/Edit Application Modal -->
     <a-modal
       :visible="modalVisible"
-      :title="isEditMode ? `编辑应用: ${currentApp?.name}` : '创建新应用'"
+      :title="isEditMode ? '编辑应用：' + currentApp?.name : '创建新应用'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新应用' : '创建应用'"
       :confirm-loading="isSubmitting"
       unmount-on-close
       width="600px"

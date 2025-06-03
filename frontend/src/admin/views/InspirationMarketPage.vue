@@ -176,7 +176,15 @@
     </a-layout>
 
     <!-- Add/Edit Category Modal -->
-    <a-modal :visible="showAddCategoryModal" :title="renameCategoryForm.id ? '重命名分类' : '添加新分类'" @ok="handleAddOrUpdateCategory" @cancel="closeCategoryModal" :width="400" unmount-on-close>
+    <a-modal 
+      :visible="showAddCategoryModal" 
+      :title="renameCategoryForm.id ? '编辑分类：' + categoryForm.name : '添加新分类'" 
+      @ok="handleAddOrUpdateCategory" 
+      @cancel="closeCategoryModal"
+      :ok-text="renameCategoryForm.id ? '更新分类' : '创建分类'"
+      :width="400" 
+      unmount-on-close
+    >
       <a-form :model="categoryForm" ref="categoryFormRef" layout="vertical">
         <a-form-item field="name" label="分类名称" required :rules="[{required: true, message:'分类名称不能为空'}]">
           <a-input v-model="categoryForm.name" placeholder="请输入分类名称" />

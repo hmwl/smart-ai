@@ -18,7 +18,7 @@
           <a-option :value="false">否</a-option>
         </a-select>
         <a-button type="primary" @click="openCreateModal">
-             <template #icon><icon-plus /></template> 创建用户
+             <template #icon><icon-plus /></template> 添加用户
         </a-button>
         <a-button @click="refreshUsers" :loading="isLoading">
           <template #icon><icon-refresh /></template> 刷新
@@ -108,9 +108,10 @@
     <!-- User Create/Edit Modal -->
     <a-modal
       :visible="userModalVisible"
-      :title="isEditMode ? `编辑用户: ${currentUser?.username}` : '创建新用户'"
+      :title="isEditMode ? '编辑用户：' + currentUser?.username : '创建新用户'"
       @ok="handleSubmit"
       @cancel="handleCancel"
+      :ok-text="isEditMode ? '更新资料' : '创建用户'"
       :confirm-loading="isSubmitting"
     >
       <a-form ref="userFormRef" :model="userForm" :rules="formRules" layout="vertical">
