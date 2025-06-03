@@ -390,7 +390,7 @@ router.patch('/me', authenticateToken, async (req, res) => {
     // Allow null to clear nickname, but if provided and not null, it must be a non-empty string.
     // The model already has maxlength, so we primarily check for empty string if not null.
     // If a truly empty string is desired, the model should allow it. For now, non-empty if not null.
-     return res.status(400).json({ message: '昵称不能为空字符串' });
+     return res.status(400).json({ message: '昵称不能为空' });
   }
   
   if (nickname !== null && nickname.length > 50) {

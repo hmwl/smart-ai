@@ -74,7 +74,7 @@
 
     <!-- Create/Edit Modal -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditMode ? '编辑优惠活动' : '创建优惠活动'"
       width="700px"
       @ok="handleSubmit"
@@ -638,8 +638,12 @@ const handleSubmit = async () => {
 
   // Arco Design validate() returns undefined if successful, or an object of errors if failed.
   if (validationResult) { // 如果 validationResult 不是 undefined，说明有错误
-    Message.error('表单校验失败，请检查输入！');
-    return;
+    // Optional: Scroll to the first error field
+    const firstErrorField = Object.keys(validationResult)[0];
+    if (firstErrorField && activityFormRef.value?.scrollToField) {
+      activityFormRef.value.scrollToField(firstErrorField);
+    }
+    return false; // Prevent modal from closing
   }
 
   isSubmitting.value = true;
@@ -699,6 +703,7 @@ const handleSubmit = async () => {
     fetchActivities();
   } catch (error) {
     Message.error('操作失败: ' + (error.response?.data?.message || error.message));
+    return false; // Keep modal open if API call fails
   } finally {
     isSubmitting.value = false;
   }

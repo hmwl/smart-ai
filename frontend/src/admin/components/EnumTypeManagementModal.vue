@@ -222,7 +222,13 @@ const closeTypeForm = () => {
 
 const handleSubmitTypeForm = async () => {
   const valid = await typeFormRef.value?.validate();
-  if (valid) return;
+  if (valid) {
+    const firstErrorField = Object.keys(valid)[0];
+    if (firstErrorField && typeFormRef.value?.scrollToField) {
+      typeFormRef.value.scrollToField(firstErrorField);
+    }
+    return false;
+  }
 
   formLoading.value = true;
   try {
@@ -238,6 +244,7 @@ const handleSubmitTypeForm = async () => {
     emit('success'); // Notify parent component
   } catch (error) {
     Message.error((isEditMode.value ? '更新' : '添加') + '类型失败: ' + (error.response?.data?.message || error.message));
+    return false;
   } finally {
     formLoading.value = false;
   }

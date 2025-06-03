@@ -87,7 +87,7 @@
 
     <!-- Create/Edit Application Modal -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditMode ? `编辑应用: ${currentApp?.name}` : '创建新应用'"
       @ok="handleSubmit"
       @cancel="handleCancel"

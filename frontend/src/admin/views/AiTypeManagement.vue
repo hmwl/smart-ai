@@ -88,7 +88,7 @@
 
     <!-- Create/Edit Modal Updated -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditing ? `编辑 AI 类型: ${currentAiType?.name}` : '添加新 AI 类型'"
       @ok="handleSubmit"
       @cancel="handleCancel"

@@ -35,7 +35,7 @@
           <div class="form-section nickname-edit-section">
             <a-form :model="editData" layout="vertical" ref="nicknameFormRef">
               <a-form-item field="nickname" label="新昵称" :rules="[{ maxLength: 50, message: '昵称长度不能超过50个字符'}]">
-                <a-input v-model="editData.nickname" placeholder="输入新昵称 (留空则清除)" allow-clear />
+                <a-input v-model="editData.nickname" placeholder="输入新昵称" allow-clear />
               </a-form-item>
             </a-form>
           </div>

@@ -279,7 +279,7 @@ const launchApp = async () => {
     if (dynamicFormRendererRef.value) {
       const isValid = await dynamicFormRendererRef.value.validateForm();
       if (!isValid) {
-        Message.error('表单配置校验失败，请检查输入。');
+        Message.error('存在必填项未填写，请检查。');
         // Form validation errors are typically handled within DynamicFormRenderer or by its validateForm method.
         return; // Stop execution if form is invalid
       }

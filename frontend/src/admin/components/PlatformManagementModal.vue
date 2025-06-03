@@ -71,7 +71,7 @@
 
     <!-- Add/Edit Platform Modal -->
     <a-modal
-      v-model:visible="formModalVisible"
+      :visible="formModalVisible"
       :title="isEditMode ? '编辑平台' : '添加平台'"
       @ok="handleSubmitForm"
       @cancel="closeFormModal"
@@ -390,7 +390,13 @@ const closeFormModal = () => {
 
 const handleSubmitForm = async () => {
   const isValid = await platformFormRef.value?.validate();
-  if (isValid) return;
+  if (isValid) {
+    const firstErrorField = Object.keys(isValid)[0];
+    if (firstErrorField && platformFormRef.value?.scrollToField) {
+        platformFormRef.value.scrollToField(firstErrorField);
+    }
+    return false;
+  }
 
   formLoading.value = true;
   try {

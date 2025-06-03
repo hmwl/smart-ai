@@ -108,7 +108,7 @@
     />
 
     <!-- Create/Edit Work Modal (Simplified for now) -->
-    <a-modal v-model:visible="showCreateWorkModal" :title="editWorkId ? '编辑作品' : '添加新作品'" @ok="handleSaveWork" @cancel="closeCreateWorkModal" :width="600">
+    <a-modal :visible="showCreateWorkModal" :title="editWorkId ? '编辑作品' : '添加新作品'" @ok="handleSaveWork" @cancel="closeCreateWorkModal" :width="600">
       <a-form :model="workForm" ref="workFormRef" layout="vertical">
         <a-form-item field="title" label="标题" :rules="[{required: true, message: '请输入作品标题'}]">
           <a-input v-model="workForm.title" placeholder="请输入作品标题" />
@@ -452,9 +452,10 @@ const handleSaveWork = async () => {
   const formValidationResult = await workFormRef.value?.validate();
   if (formValidationResult) { 
     const firstErrorKey = Object.keys(formValidationResult)[0];
-    const firstErrorMessage = formValidationResult[firstErrorKey]?.[0]?.message;
-    Message.error(firstErrorMessage || '请修正表单错误');
-    return;
+    if (workFormRef.value?.scrollToField) {
+      workFormRef.value.scrollToField(firstErrorKey);
+    }
+    return false; // Prevent modal from closing
   }
 
   // Normalize and ensure all tags in workForm.tags are registered in the backend
@@ -499,50 +500,51 @@ const handleSaveWork = async () => {
         }
       }
     } catch (tagError) {
-      Message.error('处理标签时出错: ' + tagError.message);
-      // Decide if you want to stop work submission
-      // return; 
+      Message.error('处理标签时发生错误: ' + (tagError.message || '未知标签错误'));
+      // Depending on severity, you might want to return false here as well
+      // For now, we proceed to attempt saving the work itself
     }
   }
 
+
   const formData = new FormData();
-  formData.append('title', workForm.title || '');
+  formData.append('title', workForm.title);
   formData.append('type', workForm.type);
   formData.append('prompt', workForm.prompt || '');
-  formData.append('tags', JSON.stringify(workForm.tags)); 
+  formData.append('tags', JSON.stringify(workForm.tags)); // Send as JSON string array
   formData.append('status', workForm.status);
+
+  if (editWorkId.value) { // Editing
+    formData.append('sourceUrl', workForm.sourceUrl || ''); // Keep existing sourceUrl if not replacing
+    if (workForm.replaceFile && workForm.workFile) {
+        formData.append('workFile', workForm.workFile);
+    }
+  } else { // Creating
+    formData.append('creatorId', workForm.creatorId || currentUser.value?._id);
+    if (workForm.workFile) {
+      formData.append('workFile', workForm.workFile);
+    } else {
+        Message.error('请上传作品文件。');
+        return false; // Prevent modal from closing if file is mandatory for new work
+    }
+  }
   
-  if (!editWorkId.value && workForm.creatorId) { // Only for new works
-    formData.append('creator', workForm.creatorId);
-  }
-
-  // Only append file if it's a new work or if replaceFile is checked for an existing work
-  if (workForm.workFile && (!editWorkId.value || workForm.replaceFile)) {
-    formData.append('workFile', workForm.workFile);
-  }
-
   try {
-    worksLoading.value = true;
     if (editWorkId.value) {
-      await apiService.updateWork(editWorkId.value, formData);
+      await apiService.putWork(editWorkId.value, formData);
       Message.success('作品更新成功');
     } else {
-      if (!workForm.workFile) {
-          Message.error('请上传作品文件');
-          worksLoading.value = false;
-          return;
-      }
-      await apiService.createWork(formData);
+      await apiService.postWork(formData);
       Message.success('作品添加成功');
     }
     closeCreateWorkModal();
-    fetchWorks();
-    fetchTags();
+    fetchWorks(); // Refresh the list
+    fetchTags(); // Refresh tags as new ones might have been added
+    // return true; // On success, modal will close by itself based on default @ok behavior or if closeCreateWorkModal handles visibility
   } catch (error) {
-    Message.error('保存作品失败: ' + (error.response?.data?.message || error.message));
-    console.error('Error saving work:', error);
-  } finally {
-    worksLoading.value = false;
+    const errorMsg = error.response?.data?.message || error.message || '保存作品失败';
+    Message.error(errorMsg);
+    return false; // Prevent modal from closing on API error
   }
 };
 

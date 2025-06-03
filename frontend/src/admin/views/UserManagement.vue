@@ -107,12 +107,11 @@
 
     <!-- User Create/Edit Modal -->
     <a-modal
-      v-model:visible="userModalVisible"
+      :visible="userModalVisible"
       :title="isEditMode ? `编辑用户: ${currentUser?.username}` : '创建新用户'"
       @ok="handleSubmit"
       @cancel="handleCancel"
       :confirm-loading="isSubmitting"
-      unmount-on-close 
     >
       <a-form ref="userFormRef" :model="userForm" :rules="formRules" layout="vertical">
         <!-- Username (Required for Create, Readonly for Edit) -->

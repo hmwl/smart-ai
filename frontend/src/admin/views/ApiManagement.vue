@@ -125,7 +125,7 @@
 
     <!-- Create/Edit Modal -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditMode ? `编辑 API: ${currentApiEntry?.platformName}` : '添加新 API'"
       @ok="handleSubmit"
       @cancel="handleCancel"
@@ -489,8 +489,16 @@ const handleCancel = () => {
 };
 
 const handleSubmit = async () => {
-  const isValid = await apiFormRef.value?.validate();
-  if (isValid) return;
+  const validationResult = await apiFormRef.value?.validate();
+  // If validationResult is an object (truthy), it means validation failed.
+  if (validationResult) {
+    // Optional: Scroll to the first error field
+    const firstErrorField = Object.keys(validationResult)[0];
+    if (firstErrorField && apiFormRef.value?.scrollToField) {
+      apiFormRef.value.scrollToField(firstErrorField);
+    }
+    return false; // Prevent modal from closing
+  }
 
   isSubmitting.value = true;
   try {
@@ -498,14 +506,15 @@ const handleSubmit = async () => {
     
     // 确保platform字段正确设置
     if (payload.platformType && !payload.platform) {
-      const platform = platforms.value.find(p => p.name === payload.platformType);
-      if (platform) {
-        payload.platform = platform._id;
+      const foundPlatform = platforms.value.find(p => p.name === payload.platformType);
+      if (foundPlatform) {
+        payload.platform = foundPlatform._id; // Ensure platform ID is sent
       }
     }
-    
+    // console.log('Submitting API Entry Payload:', payload);
+
     if (isEditMode.value) {
-      await apiService.updateApiEntry(payload._id, payload);
+      await apiService.updateApiEntry(currentApiEntry.value._id, payload);
       Message.success('API 更新成功');
     } else {
       await apiService.createApiEntry(payload);
@@ -513,8 +522,10 @@ const handleSubmit = async () => {
     }
     modalVisible.value = false;
     fetchApiEntries();
+    // return true; // Optional: return true on success
   } catch (error) {
     Message.error('操作失败: ' + (error.response?.data?.message || error.message));
+    return false; // Keep modal open if API call fails
   } finally {
     isSubmitting.value = false;
   }

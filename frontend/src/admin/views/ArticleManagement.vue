@@ -86,7 +86,7 @@
 
     <!-- Create/Edit Article Modal -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditMode ? `编辑文章: ${currentArticle?.title}` : '创建新文章'"
       @ok="handleSubmit"
       @cancel="handleCancel"
@@ -443,7 +443,10 @@ const handleSubmit = async () => {
             Message.error(`表单验证失败: ${errorMessages}`);
         } else if (!error.response) {
             Message.error('操作失败，请检查网络连接。');
+        } else {
+            Message.error(error.response?.data?.message || error.message || '提交文章时发生未知错误');
         }
+        return false; // Keep modal open if API call fails
     } finally {
         isSubmitting.value = false;
     }

@@ -176,7 +176,7 @@
     </a-layout>
 
     <!-- Add/Edit Category Modal -->
-    <a-modal v-model:visible="showAddCategoryModal" :title="renameCategoryForm.id ? '重命名分类' : '添加新分类'" @ok="handleAddOrUpdateCategory" @cancel="closeCategoryModal" :width="400" unmount-on-close>
+    <a-modal :visible="showAddCategoryModal" :title="renameCategoryForm.id ? '重命名分类' : '添加新分类'" @ok="handleAddOrUpdateCategory" @cancel="closeCategoryModal" :width="400" unmount-on-close>
       <a-form :model="categoryForm" ref="categoryFormRef" layout="vertical">
         <a-form-item field="name" label="分类名称" required :rules="[{required: true, message:'分类名称不能为空'}]">
           <a-input v-model="categoryForm.name" placeholder="请输入分类名称" />
@@ -671,9 +671,14 @@ const closeCategoryModal = () => {
 };
 
 const handleAddOrUpdateCategory = async () => {
-  if (renameCategoryForm.id === ALL_WORKS_KEY) return;
+  if (renameCategoryForm.id === ALL_WORKS_KEY) return false;
   const validationResult = await categoryFormRef.value?.validate();
-  if (validationResult && validationResult.name) return;
+  if (validationResult && validationResult.name) {
+    if (categoryFormRef.value?.scrollToField) {
+        categoryFormRef.value.scrollToField('name');
+    }
+    return false;
+  }
   try {
     const payload = { name: categoryForm.name, description: categoryForm.description };
     if (renameCategoryForm.id) { 
@@ -698,7 +703,11 @@ const handleAddOrUpdateCategory = async () => {
         handleCategorySelect([newCat._id], { node: { key: newCat._id, title: newCat.name, description: newCat.description } });
     }
     closeCategoryModal();
-  } catch (error) { /* Handled by interceptor */ }
+  } catch (error) { 
+    // Error message is likely handled by apiService interceptor
+    // console.error('Error adding/updating category:', error);
+    return false;
+  }
 };
 
 const handleRenameCategory = (nodeData) => {
@@ -804,7 +813,7 @@ const toggleWorkInSelection = (workId) => {
 };
 
 const handleAddWorksToCategoryModalOk = async () => {
-    if (!selectedCategory.value || !selectedCategory.value._id || selectedCategory.value.key === ALL_WORKS_KEY) return;
+    if (!selectedCategory.value || !selectedCategory.value._id || selectedCategory.value.key === ALL_WORKS_KEY) return false;
     try {
         await apiService.updateInspirationCategory(selectedCategory.value._id, {
             works: currentCategoryWorkIds.value 
@@ -813,7 +822,11 @@ const handleAddWorksToCategoryModalOk = async () => {
         showAddWorksToCategoryModal.value = false;
         await fetchWorksForCategory(selectedCategory.value._id, worksPagination.current, worksPagination.pageSize); 
         await fetchCategories(); 
-    } catch (error) { /* Handled by interceptor */ }
+    } catch (error) { 
+        // Error message is likely handled by apiService interceptor
+        // console.error('Error updating works in category:', error);
+        return false;
+    }
 };
 
 const handleWorkDragEnd = async (event) => {

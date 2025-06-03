@@ -182,7 +182,13 @@ watch(() => props.enumTypes, (newVal) => {
 
 const handleSubmit = async () => {
   const valid = await configFormRef.value?.validate();
-  if (valid) return;
+  if (valid) {
+    const firstErrorField = Object.keys(valid)[0];
+    if (firstErrorField && configFormRef.value?.scrollToField) {
+      configFormRef.value.scrollToField(firstErrorField);
+    }
+    return false;
+  }
 
   formLoading.value = true;
   try {

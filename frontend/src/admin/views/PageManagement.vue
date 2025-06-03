@@ -111,7 +111,7 @@
 
     <!-- Create/Edit Page Modal -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditMode ? `编辑页面: ${currentPage?.name}` : '创建新页面'"
       @ok="handleSubmit"
       @cancel="handleCancel"
@@ -433,47 +433,61 @@ const handleCancel = () => {
 };
 
 const handleSubmit = async () => {
-  const isValid = await pageFormRef.value?.validate();
-  if (!isValid) {
+  const validationResult = await pageFormRef.value?.validate();
+  // If validationResult is an object (truthy), it means validation failed.
+  if (validationResult) { 
+    // Optionally, scroll to the first error or show a general message
+    const firstErrorField = Object.keys(validationResult)[0];
+    if (firstErrorField && pageFormRef.value?.scrollToField) {
+      pageFormRef.value.scrollToField(firstErrorField);
+      // Message.error('请修正表单中的错误。'); // Or show specific field error
+    }
+    return false; // Prevent modal from closing if validation fails
+  }
+
+  // Validation passed, proceed with submission
   isSubmitting.value = true;
-    let payload = { ...pageForm.value };
+  let payload = { ...pageForm.value };
 
-    // Ensure content is handled correctly (Quill gives HTML string directly if contentType is html)
-    // If pageForm.content is a Delta object, convert it: payload.content = JSON.stringify(pageForm.value.content);
-    // For single page, content is already string (HTML)
-    // For collection, content is a description string
+  // Ensure content is handled correctly (Quill gives HTML string directly if contentType is html)
+  // If pageForm.content is a Delta object, convert it: payload.content = JSON.stringify(pageForm.value.content);
+  // For single page, content is already string (HTML)
+  // For collection, content is a description string
 
-    // Remove _id from payload if it's for creation, not needed by backend then
-    if (!isEditMode.value) {
-      delete payload._id;
-  } 
+  // Remove _id from payload if it's for creation, not needed by backend then
+  if (!isEditMode.value) {
+    delete payload._id;
+  }
 
   try {
-      let response;
-      if (isEditMode.value && currentPage.value?._id) {
-        response = await apiService.put(`/pages/${currentPage.value._id}`, payload);
-         } else {
-        response = await apiService.post('/pages', payload);
+    let response;
+    if (isEditMode.value && currentPage.value?._id) {
+      response = await apiService.put(`/pages/${currentPage.value._id}`, payload);
+    } else {
+      response = await apiService.post('/pages', payload);
     }
 
-      Message.success(`页面 ${isEditMode.value ? '更新' : '创建'}成功`);
-      modalVisible.value = false;
-    await fetchPages(); 
+    Message.success(`页面 ${isEditMode.value ? '更新' : '创建'}成功`);
+    modalVisible.value = false;
+    await fetchPages();
+    // return true; // Optional: return true on success
   } catch (error) {
-      console.error('Error submitting page:', error);
-      // apiService interceptor should handle most errors.
-      // Add specific handling if needed, e.g., for 409 conflict on route name
-        if (error.response && error.response.status === 409) {
-            Message.error(`操作失败: ${error.response.data.message || '页面路由可能已存在'}`);
-        } else if (error.response && error.response.status === 400 && error.response.data.errors) {
-            const errorMessages = error.response.data.errors.map(e => e.msg).join('; ');
-            Message.error(`表单验证失败: ${errorMessages}`);
-        } else if (!error.response) {
-            Message.error('操作失败，请检查网络连接。');
-        }
+    console.error('Error submitting page:', error);
+    // apiService interceptor should handle most errors.
+    // Add specific handling if needed, e.g., for 409 conflict on route name
+    if (error.response && error.response.status === 409) {
+      Message.error(`操作失败: ${error.response.data.message || '页面路由可能已存在'}`);
+    } else if (error.response && error.response.status === 400 && error.response.data.errors) {
+      const errorMessages = error.response.data.errors.map(e => e.msg).join('; ');
+      Message.error(`表单验证失败: ${errorMessages}`);
+    } else if (!error.response) {
+      Message.error('操作失败，请检查网络连接。');
+    } else {
+      Message.error(error.response?.data?.message || error.message || '提交页面时发生未知错误');
+    }
+    return false; // Keep modal open if API call fails
   } finally {
     isSubmitting.value = false;
-    }
   }
 };
 

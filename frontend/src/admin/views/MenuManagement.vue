@@ -91,7 +91,7 @@
     </a-layout>
      <!-- Modal remains the same -->
     <a-modal 
-      v-model:visible="itemModalVisible" 
+      :visible="itemModalVisible" 
       :title="isEditItemMode ? '编辑菜单项' : '添加菜单项'" 
       @ok="handleItemSubmit" 
       @cancel="handleItemCancel" 
@@ -492,7 +492,14 @@ const editItem = (itemData) => { // itemData is the node data from the tree
 
 const handleItemSubmit = async () => {
     const validationResult = await itemFormRef.value?.validate();
-    if (validationResult) return;
+    if (validationResult) { // If validationResult is an error object (truthy)
+      // Optional: Scroll to the first error or show a general message
+      const firstErrorField = Object.keys(validationResult)[0];
+      if (firstErrorField && itemFormRef.value?.scrollToField) {
+        itemFormRef.value.scrollToField(firstErrorField);
+      }
+      return false; // Prevent modal from closing
+    }
 
     const formData = { ...itemForm.value };
 
@@ -526,10 +533,10 @@ const handleItemSubmit = async () => {
         if (targetItemsArray.value && Array.isArray(targetItemsArray.value)) {
             targetItemsArray.value.push(newItem);
         } else {
-            console.error("添加错误：目标数组未设置或无效！");
-            Message.error("添加菜单项失败");
-            itemModalVisible.value = false;
-            return;
+            console.error("Error in handleItemSubmit: Invalid state for edit/add.", {isEditItemMode: isEditItemMode.value, currentEditItem: currentEditItem.value, targetItemsArray: targetItemsArray.value });
+            Message.error("无法保存菜单项，状态异常。");
+            // itemModalVisible.value = false; // Explicitly decide if modal should close on this internal error
+            return false; // Keep modal open on this internal error state
         } 
         Message.success('菜单项添加成功');
     }
@@ -537,6 +544,7 @@ const handleItemSubmit = async () => {
     currentMenuItems.value = [...currentMenuItems.value];
     isDirty.value = true; // Mark changes as dirty
     itemModalVisible.value = false;
+    return true; // Return true to indicate successful submission
 };
 
 const handleItemCancel = () => { itemModalVisible.value = false; };

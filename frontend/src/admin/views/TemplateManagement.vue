@@ -78,7 +78,7 @@
 
     <!-- Create/Edit Template Modal -->
     <a-modal
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :title="isEditMode ? `编辑模板: ${currentTemplate?.name}` : '创建新模板'"
       @ok="handleSubmit"
       @cancel="handleCancel"

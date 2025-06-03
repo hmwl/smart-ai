@@ -168,7 +168,7 @@
     <!-- Modal remains the same -->
     <a-modal
       :title="isEditing ? '编辑 AI 应用' : '创建 AI 应用'"
-      v-model:visible="modalVisible"
+      :visible="modalVisible"
       :confirm-loading="modalLoading"
       width="800px"
       @ok="handleSubmit"
@@ -182,7 +182,7 @@
         <a-row :gutter="16">
 
           <a-col :span="6">
-            <a-form-item label="封面图片 (小于 100KB)" name="coverImage" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
+            <a-form-item label="封面图片 (小于 500KB)" field="coverImage" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
               <div>
               <!-- Revision: Show preview image OR upload component -->
               <div style="width: 104px; height: 104px; margin-bottom: 8px; border: 1px dashed #d9d9d9; display: flex; align-items: center; justify-content: center;">
@@ -222,10 +222,10 @@
             </a-form-item>
           </a-col>
           <a-col :span="18">
-            <a-form-item label="应用名称" name="name">
+            <a-form-item label="应用名称" field="name" required>
               <a-input v-model="formState.name" placeholder="请输入 AI 应用名称" />
             </a-form-item>
-            <a-form-item label="应用简介" name="description">
+            <a-form-item label="应用简介" field="description">
               <a-textarea v-model="formState.description" placeholder="请输入简介" :rows="3" />
             </a-form-item>
           </a-col>
@@ -234,7 +234,7 @@
         <a-row :gutter="16">
           <a-col :span="12">
             <!-- Remaining fields below the top row -->
-            <a-form-item label="应用类型" name="type">
+            <a-form-item label="应用类型" field="type" required>
               <a-select
             v-model="formState.type"
             placeholder="请选择 AI 类型"
@@ -250,7 +250,7 @@
           </a-col>
           <a-col :span="12">
             <!-- New Form Item for Credits Consumed -->
-            <a-form-item label="所需积分" name="creditsConsumed">
+            <a-form-item label="所需积分" field="creditsConsumed" required>
               <a-input-number 
             v-model="formState.creditsConsumed" 
                 placeholder="输入所需积分，0表示免费" 
@@ -261,7 +261,7 @@
             </a-form-item>
           </a-col>
         </a-row>
-          <a-form-item label="平台类型" name="platformType">
+          <a-form-item label="平台类型" field="platformType" required>
           <a-select
             v-model="formState.platformType"
             placeholder="请选择平台类型"
@@ -274,7 +274,7 @@
             </a-option>
           </a-select>
         </a-form-item>
-        <a-form-item label="关联 API" name="apis">
+        <a-form-item label="关联 API" field="apis" required>
           <a-select
             :key="apiSelectKey" 
             v-model="formState.apis"
@@ -288,7 +288,7 @@
           >
            </a-select>
         </a-form-item>
-        <a-form-item label="标签" name="tags">
+        <a-form-item label="标签" field="tags">
           <a-input-tag
             v-model="formState.tags" 
             :style="{ width: '100%' }"
@@ -298,7 +298,7 @@
             unique-value
           />
         </a-form-item>
-        <a-form-item label="状态" name="status">
+        <a-form-item label="状态" field="status" required>
           <a-select v-model="formState.status" placeholder="请选择状态">
             <a-option value="active">Active (激活)</a-option>
             <a-option value="inactive">Inactive (禁用)</a-option>
@@ -396,6 +396,7 @@ const rules = {
   name: [{ required: true, message: '请输入 AI 应用名称' }],
   description: [{ required: false }],
   type: [{ required: true, message: '请选择 AI 类型', trigger: 'change' }],
+  platformType: [{ required: true, message: '请选择平台类型', trigger: 'change' }],
   apis: [{ required: true, type: 'array', min: 1, message: '请至少选择一个关联 API', trigger: 'change' }],
   tags: [{ required: false }],
   coverImage: [{ required: false }],
@@ -683,7 +684,7 @@ const resetForm = () => {
     coverImageUrl: '',
     coverImageFile: null,
     removeCoverImage: false,
-    status: 'active',
+    status: 'inactive',
     creditsConsumed: 0, // Reset creditsConsumed
     platformType: null, // Reset platformType
   };
@@ -763,9 +764,9 @@ const beforeUpload = (file) => {
   if (!isImage) {
     Message.error('只能上传图片文件!');
   }
-  const isLt100k = file.size / 1024 < 100;
+  const isLt100k = file.size / 1024 < 500;
   if (!isLt100k) {
-    Message.error('图片大小必须小于 100KB!');
+    Message.error('图片大小必须小于 500KB!');
   }
   return isImage && isLt100k;
 };
@@ -825,141 +826,131 @@ const removeImage = () => {
 
 // --- Form Submission Logic ---
 const handleSubmit = async () => {
+
+  let validationErrors;
   try {
-    await formRef.value.validate();
-    modalLoading.value = true;
+    validationErrors = await formRef.value.validate();
+  } catch (e) {
+    Message.error('表单校验函数执行出错，请联系管理员。');
+    return false; // Prevent submission if validate() itself fails
+  }
 
-    const formData = new FormData();
-    // Append standard fields
-    formData.append('name', formState.value.name);
-    formData.append('description', formState.value.description || '');
-    formData.append('type', formState.value.type);
-    formData.append('status', formState.value.status);
-    formData.append('creditsConsumed', formState.value.creditsConsumed === undefined ? 0 : Number(formState.value.creditsConsumed));
-
-    // Append array fields: tags and apis
-    if (formState.value.tags && Array.isArray(formState.value.tags)) {
-      formState.value.tags.forEach(tag => {
-        if (tag) {
-          formData.append('tags', tag);
-        }
-      });
-    }
-
-    // 使用平台名称而不是ID
-    if (formState.value.platformType) {
-      const selectedPlatform = platformTypes.value.find(p => p._id === formState.value.platformType);
-      const platformName = selectedPlatform ? selectedPlatform.name : formState.value.platformType;
-      formData.append('platformType', platformName);
-    }
-
-    // 处理关联的 APIs
-    let apiIdsToAppend = [];
-    const currentApis = formState.value.apis;
-    if (Array.isArray(currentApis)) {
-        apiIdsToAppend = currentApis;
-    } else if (currentApis) {
-        apiIdsToAppend = [currentApis];
-    }
-    
-    if (apiIdsToAppend.length > 0) { 
-      apiIdsToAppend.forEach(apiId => {
-        if (apiId) {
-           formData.append('apis', apiId);
-        }
-      });
-    }
-
-    // Append the cover image file if a new one is selected
-    if (formState.value.coverImageFile instanceof File) {
-      formData.append('coverImage', formState.value.coverImageFile, formState.value.coverImageFile.name);
-    } else if (isEditing.value && formState.value.removeCoverImage) {
-      // If editing and the remove flag is set (and no new file), signal removal
-      formData.append('removeCoverImage', 'true');
-    }
-
-    // Get access token
-    const accessToken = localStorage.getItem('accessToken');
-    if (!accessToken) {
-      Message.error('认证令牌丢失，请重新登录。');
-      modalLoading.value = false; // Stop loading
-      // Consider redirecting to login
-      localStorage.clear();
-      window.location.reload();
-      return;
-    }
-
-    // Determine URL and Method
-    let url = '/ai-applications'; // URL relative to apiService baseURL
-    let method = 'POST';
-    if (isEditing.value && formState.value._id) {
-      url = `/ai-applications/${formState.value._id}`; // URL relative to apiService baseURL
-      method = 'PUT';
-    }
-
-    // --- Use apiService for consistency (Optional but recommended) ---
-    // Instead of fetch directly, leverage the existing apiService instance
-    // which might have interceptors for token handling, base URL, etc.
-    // Create config for apiService
-    const config = {
-      headers: {
-        // apiService likely handles Authorization header via interceptors
-        // If not, add it here: 'Authorization': `Bearer ${accessToken}`
-        // Content-Type will be set automatically by axios/browser for FormData
-      }
-    };
-
-    let response;
+  if (validationErrors && Object.keys(validationErrors).length > 0) {
     try {
-        if (method === 'POST') {
-            response = await apiService.post(url, formData, config);
-        } else { // PUT
-            response = await apiService.put(url, formData, config);
-        }
-    } catch(apiError) {
-       // Handle errors from apiService (e.g., network errors, 4xx/5xx responses intercepted)
-       console.error('API Service Error:', apiError);
-       modalLoading.value = false;
-       let errorMsg = `API 请求失败: ${apiError.message}`;
-       if (apiError.response) {
-           errorMsg = `API 请求失败 (${apiError.response.status}): ${apiError.response.data?.message || apiError.message}`;
-           // Handle specific statuses like 401/403
-           if (apiError.response.status === 401 || apiError.response.status === 403) {
-              Message.warning('登录状态失效或无权限，请重新登录。');
-              localStorage.clear(); window.location.reload();
-           }
-       }
-       Message.error(errorMsg);
-       return; // Keep modal open
+      const firstErrorField = Object.keys(validationErrors)[0];
+      if (firstErrorField && formRef.value?.scrollToField) {
+        formRef.value.scrollToField(firstErrorField);
+      }
+    } catch (focusError) {
+      console.error("Error focusing field:", focusError);
+    }
+    return false; // Crucial: Prevent modal from closing and API call
+  }
+
+  // If validation passes, proceed with submission logic
+  modalLoading.value = true;
+
+  // Get access token
+  const accessToken = localStorage.getItem('accessToken');
+  if (!accessToken) {
+    Message.error('认证令牌丢失，请重新登录。');
+    modalLoading.value = false;
+    localStorage.clear();
+    window.location.reload();
+    // If reload happens, this return might not fully execute, but it's good for logical flow.
+    return false;
+  }
+
+  const formData = new FormData();
+  // Append standard fields
+  formData.append('name', formState.value.name);
+  formData.append('description', formState.value.description || '');
+  formData.append('type', formState.value.type);
+  formData.append('status', formState.value.status);
+  formData.append('creditsConsumed', formState.value.creditsConsumed === undefined ? 0 : Number(formState.value.creditsConsumed));
+
+  // Append array fields: tags and apis
+  if (formState.value.tags && Array.isArray(formState.value.tags)) {
+    formState.value.tags.forEach(tag => {
+      if (tag) {
+        formData.append('tags', tag);
+      }
+    });
+  }
+
+  // 使用平台名称而不是ID
+  if (formState.value.platformType) {
+    const selectedPlatform = platformTypes.value.find(p => p._id === formState.value.platformType);
+    const platformName = selectedPlatform ? selectedPlatform.name : formState.value.platformType;
+    formData.append('platformType', platformName);
+  }
+
+  // 处理关联的 APIs
+  let apiIdsToAppend = [];
+  const currentApis = formState.value.apis;
+  if (Array.isArray(currentApis)) {
+    apiIdsToAppend = currentApis;
+  } else if (currentApis) {
+    apiIdsToAppend = [currentApis];
+  }
+
+  if (apiIdsToAppend.length > 0) {
+    apiIdsToAppend.forEach(apiId => {
+      if (apiId) {
+        formData.append('apis', apiId);
+      }
+    });
+  }
+
+  // Append the cover image file if a new one is selected
+  if (formState.value.coverImageFile instanceof File) {
+    formData.append('coverImage', formState.value.coverImageFile, formState.value.coverImageFile.name);
+  } else if (isEditing.value && formState.value.removeCoverImage) {
+    formData.append('removeCoverImage', 'true');
+  }
+
+  // Determine URL and Method
+  let url = '/ai-applications';
+  let method = 'POST';
+  if (isEditing.value && formState.value._id) {
+    url = `/ai-applications/${formState.value._id}`;
+    method = 'PUT';
+  }
+
+  const config = {
+    headers: {} // apiService likely handles Authorization and Content-Type for FormData
+  };
+
+  try { // Try-catch for the API call itself
+    let response;
+    if (method === 'POST') {
+      response = await apiService.post(url, formData, config);
+    } else { // PUT
+      response = await apiService.put(url, formData, config);
     }
 
     // Success
-    modalLoading.value = false; // Stop loading indicator
+    modalLoading.value = false;
     Message.success(`AI 应用 ${isEditing.value ? '更新' : '创建'}成功`);
-    modalVisible.value = false; // Close modal
+    modalVisible.value = false; // Close modal on success
     await fetchData(); // Refresh the data grid
+    return true; // Indicate success to @ok handler (optional, as modalVisible is set)
 
-  } catch (error) {
-    modalLoading.value = false; // Ensure loading stops on error
-    // Handle form validation errors specifically from Arco Form
-    // Check if it's the validation error object without a 'message' property
-    if (error && typeof error === 'object' && !error.message && Object.keys(error).length > 0) {
-        console.warn('Form Validation Failed:', error);
-        Message.error('表单校验失败，请检查红色标记的输入项。');
-        // Optionally focus the first invalid field
-         try {
-            const firstErrorField = Object.keys(error)[0];
-            if (firstErrorField && formRef.value?.scrollToField) {
-                formRef.value.scrollToField(firstErrorField);
-            }
-         } catch(focusError) {
-             console.error("Error focusing field:", focusError);
-         }
-    } else if (error.name !== 'NavigationDuplicated') { // Ignore NavigationDuplicated if using router
-        // Handle other errors (network, unexpected issues) only if not validation or navigation
-        console.error('Form Submission Error:', error);
-        Message.error(`表单处理失败: ${error.message || '发生未知错误'}`);
+  } catch (apiError) { // Catch errors from the API call or fetchData
+    modalLoading.value = false;
+    let errorMsg = `API 请求失败: ${apiError.message}`;
+    if (apiError.response) {
+      errorMsg = `API 请求失败 (${apiError.response.status}): ${apiError.response.data?.message || apiError.message}`;
+      if (apiError.response.status === 401 || apiError.response.status === 403) {
+        Message.warning('登录状态失效或无权限，请重新登录。');
+        localStorage.clear();
+        window.location.reload();
+        // If reload happens, this return might not fully execute, but it's good for logical flow.
+        return false;
+      }
     }
+    Message.error(errorMsg);
+    return false; // Keep modal open on API failure
   }
 };
 // --- End Form Submission Logic ---
