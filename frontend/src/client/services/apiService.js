@@ -117,4 +117,22 @@ apiClient.getAIWidgets = (params) => {
   return apiClient.get('/auth/client/ai-widgets', { params });
 };
 
+// 公告/消息相关 API 服务
+// 获取消息列表
+apiClient.fetchNotifications = (params) => {
+  return apiClient.get('/notifications', { params });
+};
+// 获取未读数量（全部/平台/账户）
+apiClient.fetchUnreadCount = () => {
+  return apiClient.get('/notifications/unread-count');
+};
+// 批量标记已读
+apiClient.markNotificationsRead = (ids) => {
+  return apiClient.post('/notifications/mark-read', { ids });
+};
+// 批量标记未读
+apiClient.markNotificationsUnread = (ids) => {
+  return apiClient.post('/notifications/mark-unread', { ids });
+};
+
 export default apiClient;

@@ -66,6 +66,12 @@ const routes = [
         name: 'UserCreditTransactions',
         component: () => import('../views/CreditTransactionsPage.vue'),
         meta: { requiresAuth: true, title: '消费记录' }
+      },
+      {
+        path: 'notifications',
+        name: 'Notifications',
+        component: () => import('../views/NotificationsPage.vue'),
+        meta: { requiresAuth: true, title: '消息中心' }
       }
     ]
   },

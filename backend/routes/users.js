@@ -29,6 +29,14 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
     if (req.query.status && ['active', 'disabled'].includes(req.query.status)) {
         query.status = req.query.status;
     }
+    // 支持 isAdmin 布尔类型查询
+    if (req.query.isAdmin !== undefined) {
+      if (req.query.isAdmin === 'true' || req.query.isAdmin === true) {
+        query.isAdmin = true;
+      } else if (req.query.isAdmin === 'false' || req.query.isAdmin === false) {
+        query.isAdmin = false;
+      }
+    }
     // TODO: Add filtering by isAdmin if needed
 
     const totalRecords = await User.countDocuments(query);

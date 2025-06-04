@@ -26,6 +26,12 @@
         <span v-else-if="!isLoggedIn"></span>
         <span v-else>积分：加载中...</span>
 
+        <a-badge :count="unreadCount" :offset="[0, 2]">
+          <a-button type="text" shape="circle" @click="goToNotifications">
+            <icon-notification />
+          </a-button>
+        </a-badge>
+
         <a-dropdown @select="handleDropdownSelect" trigger="click" v-if="isLoggedIn && userData">
           <div class="user-profile-trigger">
             <a-avatar :size="32" shape="circle" style="margin-right: 8px; background-color: #165dff;">
@@ -99,7 +105,8 @@ import {
   Tag as ATag,
   Divider as ADivider,
   Message,
-  Modal
+  Modal,
+  Badge
 } from '@arco-design/web-vue';
 import {
   IconDown,
@@ -108,7 +115,8 @@ import {
   IconInfoCircle,
   IconSettings,
   IconExport,
-  IconUnorderedList
+  IconUnorderedList,
+  IconNotification
 } from '@arco-design/web-vue/es/icon';
 import { router as globalRouter } from '../router'; // Renamed to avoid conflict with useRouter instance
 import AccountInfoModal from '../components/AccountInfoModal.vue'; // 使用专门的账户信息弹窗组件
@@ -123,6 +131,7 @@ const topUpModalVisible = ref(false);
 const loginModalVisible = ref(false);
 const registerModalVisible = ref(false);
 const loadingUserData = ref(false);
+const unreadCount = ref(0);
 
 // Reactive state for the access token to ensure isLoggedIn updates reactively
 const clientAccessToken = ref(localStorage.getItem('clientAccessToken'));
@@ -247,11 +256,21 @@ const handleTopUpSuccess = (data) => {
   fetchCurrentUserData();
 };
 
+const loadUnread = async () => {
+  const res = await apiClient.fetchUnreadCount();
+  unreadCount.value = res.data?.all || 0;
+};
+
+const goToNotifications = () => {
+  appRouter.push('/notifications');
+};
+
 onMounted(() => {
   // Initialize clientAccessToken from localStorage on mount
   clientAccessToken.value = localStorage.getItem('clientAccessToken');
   if (isLoggedIn.value) {
     fetchCurrentUserData();
+    loadUnread();
   }
 });
 
@@ -365,7 +384,7 @@ provide('refreshUserData', fetchCurrentUserData);
   display: flex;
   align-items: center;
   color: #fff;
-  gap: 16px;
+  gap: 8px;
 }
 
 .user-profile-trigger {

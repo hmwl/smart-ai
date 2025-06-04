@@ -308,4 +308,21 @@ apiService.deleteAIWidget = (id) => {
   return apiService.delete(`/ai-widgets/${id}`);
 };
 
+// --- Announcement Service Methods ---
+apiService.getAnnouncements = (params) => {
+  return apiService.get('/announcements', { params });
+};
+apiService.getAnnouncementById = (id) => {
+  return apiService.get(`/announcements/${id}`);
+};
+apiService.createAnnouncement = (data) => {
+  return apiService.post('/announcements', data);
+};
+apiService.updateAnnouncement = (id, data) => {
+  return apiService.put(`/announcements/${id}`, data);
+};
+apiService.deleteAnnouncement = (id) => {
+  return apiService.delete(`/announcements/${id}`);
+};
+
 export default apiService; 

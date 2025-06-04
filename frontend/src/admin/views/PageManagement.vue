@@ -138,22 +138,22 @@
             </a-col>
         </a-row>
         
-        <a-form-item field="route" label="页面路由" :rules="pageRouteRules" validate-trigger="blur" tooltip="必须以 / 开头">
-             <a-input v-model="pageForm.route" placeholder="例如: /about-us" />
-        </a-form-item>
+        
         
          <a-row :gutter="16">
-            <a-col :span="12">
+              <a-col :span="12">
+                    <a-form-item field="route" label="页面路由" :rules="pageRouteRules" validate-trigger="blur" tooltip="必须以 / 开头">
+                        <a-input v-model="pageForm.route" placeholder="例如: /about-us" />
+                    </a-form-item>
+              </a-col>
+              <a-col :span="12">
                 <a-form-item field="status" label="状态" :rules="[{ required: true, message: '请选择状态' }]" validate-trigger="change">
                     <a-select v-model="pageForm.status" placeholder="选择状态">
                         <a-option value="active">Active (发布/启用)</a-option>
                         <a-option value="disabled">Disabled (草稿/禁用)</a-option>
                     </a-select>
                 </a-form-item>
-            </a-col>
-             <a-col :span="12">
-                <!-- Placeholder for potential second column item -->
-             </a-col>
+              </a-col>
         </a-row>
 
         <a-row :gutter="16">

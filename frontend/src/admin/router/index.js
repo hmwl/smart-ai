@@ -114,6 +114,24 @@ const routes = [
     component: () => import('../views/AiWidgetManagement.vue'),
     meta: { title: 'AI挂件管理', requiresAuth: true }
   },
+  {
+    path: '/announcements',
+    name: 'AnnounceManagement',
+    component: () => import('../views/AnnounceManagement.vue'),
+    meta: { title: '公告管理', requiresAuth: true }
+  },
+  {
+    path: '/permissions',
+    name: 'PermissionManagement',
+    component: () => import('../views/PermissionManagement.vue'),
+    meta: { title: '权限设置', requiresAuth: true }
+  },
+  {
+    path: '/other-settings',
+    name: 'OtherSettings',
+    component: () => import('../views/OtherSettings.vue'),
+    meta: { title: '其他设置', requiresAuth: true }
+  },
   // Add a catch-all or 404 route if needed
   // { path: '/:pathMatch(.*)*', name: 'NotFound', component: NotFoundComponent }
 ];

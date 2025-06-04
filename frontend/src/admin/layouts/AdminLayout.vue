@@ -102,10 +102,23 @@
             </a-menu-item>
         </a-sub-menu>
         
-        <!-- <a-menu-item key="settings">
+        <!-- System Settings Sub-menu -->
+        <a-sub-menu key="system-settings-group">
           <template #icon><icon-settings /></template>
-          系统设置
-        </a-menu-item> -->
+          <template #title>系统设置</template>
+          <a-menu-item key="announce-management">
+            <template #icon><icon-file /></template>
+            公告管理
+          </a-menu-item>
+          <a-menu-item key="permission-management">
+            <template #icon><icon-tool /></template>
+            权限管理
+          </a-menu-item>
+          <a-menu-item key="other-settings">
+            <template #icon><icon-settings /></template>
+            其他设置
+          </a-menu-item>
+        </a-sub-menu>
       </a-menu>
        <!-- Sidebar footer for logout -->
       <div class="sidebar-footer">
@@ -178,6 +191,9 @@ const targetSelectedKey = computed(() => {
       'AllWorks': 'all-works',
       'EnumConfigManagement': 'enum-config-management',
       'AIWidgetManagement': 'ai-widget-management',
+      'AnnounceManagement': 'announce-management',
+      'PermissionManagement': 'permission-management',
+      'OtherSettings': 'other-settings',
   };
   let selected = keyMap[route.name] || 'user-management';
   
@@ -202,6 +218,9 @@ watch(targetSelectedKey, (newKey) => {
   }
   if (['inspiration-market', 'all-works'].includes(newKey)) {
     keysToOpen.push('works-management-group');
+  }
+  if (['announce-management', 'permission-management', 'other-settings'].includes(newKey)) {
+    keysToOpen.push('system-settings-group');
   }
 
   if (JSON.stringify(keysToOpen.sort()) !== JSON.stringify(currentOpenKeys.value.sort())) {
@@ -232,6 +251,9 @@ const onClickMenuItem = (key) => {
     'all-works': { name: 'AllWorks' },
     'enum-config-management': { name: 'EnumConfigManagement' },
     'ai-widget-management': { name: 'AIWidgetManagement' },
+    'announce-management': { name: 'AnnounceManagement' },
+    'permission-management': { name: 'PermissionManagement' },
+    'other-settings': { name: 'OtherSettings' },
   };
   if (routeMap[key]) {
     router.push(routeMap[key]);

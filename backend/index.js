@@ -82,6 +82,9 @@ const aiWidgetRoutes = require('./routes/aiWidget'); // 新增 AIWidget 路由
 // Import authenticated client routes
 const authClientRoutes = require('./routes/authClient'); // 新增认证客户端路由
 
+// Import announcement routes
+const announcementRoutes = require('./routes/announcements'); // 新增公告路由
+
 // Mount admin/authenticated routes
 app.use('/api/users', userRoutes);
 app.use('/api/auth', authRoutes);
@@ -116,6 +119,9 @@ app.use('/api/ai-widgets', authenticateToken, isAdmin, aiWidgetRoutes);
 // Mount authenticated client routes (需要身份验证但不需要管理员权限)
 app.use('/api/auth/client', authenticateToken, authClientRoutes);
 
+// Mount announcement routes (admin only)
+app.use('/api/announcements', authenticateToken, isAdmin, announcementRoutes);
+
 // Mount public routes
 app.use('/api/public', publicRoutes); // Restore public routes
 app.use('/api/public/platforms', platformRoutes); // Mount the new public platform API
@@ -127,6 +133,10 @@ app.use('/api/tags', tagsRouter);
 
 // 注册 comfyui 路由
 app.use('/api/comfyui', require('./routes/comfyui'));
+
+// 注册 notifications 路由
+const notificationsRouter = require('./routes/notifications');
+app.use('/api/notifications', notificationsRouter);
 
 // --- Special Backend Routes (like /app) ---
 // Handle /app?id=... specifically
