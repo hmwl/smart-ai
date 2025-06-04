@@ -14,7 +14,12 @@ router.get('/', async (req, res) => {
     const list = await Announcement.find(filter)
       .sort({ createdAt: -1 })
       .skip((page - 1) * pageSize)
-      .limit(Number(pageSize));
+      .limit(Number(pageSize))
+      .lean();
+    // 新增：统计每条公告的已读用户数
+    list.forEach(item => {
+      item.readCount = Array.isArray(item.readUsers) ? item.readUsers.length : 0;
+    });
     res.json({ total, list });
   } catch (err) {
     res.status(500).json({ message: '获取公告列表失败', error: err.message });

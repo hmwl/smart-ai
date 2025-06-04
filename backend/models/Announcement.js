@@ -20,6 +20,7 @@ const announcementSchema = new Schema({
   publisher: { type: String }, // 可关联管理员ID，先用字符串
   effectiveAt: { type: Date },
   popupTime: { type: String }, // 展示弹窗时间段
+  readUsers: [{ type: String, ref: 'User' }], // 新增：已读用户ID数组
 }, { versionKey: false, timestamps: true });
 
 module.exports = mongoose.model('Announcement', announcementSchema); 

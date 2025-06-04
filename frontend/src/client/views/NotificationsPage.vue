@@ -11,9 +11,18 @@
       <a-tab-pane key="account" :title="`账户${tabUnread.account ? ' (' + tabUnread.account + ')' : ''}`" />
     </a-tabs>
     <div class="gap-2 flex items-center">
-        <a-checkbox v-model="selectAll" @change="toggleSelectAll">全选</a-checkbox>
-        <a-button size="small" @click="markRead" class="ml-2">标记已读</a-button>
-        <a-button size="small" @click="markUnread" class="ml-2">标记未读</a-button>
+      <a-checkbox v-model="selectAll" @change="toggleSelectAll">
+        全选<span v-if="selectedRowKeys.length">（{{ selectedRowKeys.length }}）</span>
+      </a-checkbox>
+      <a-select v-model="actionSelect" class="ml-2" style="width: 120px;" placeholder="操作">
+        <a-option value="read">标记为已读</a-option>
+        <a-option value="unread">标记为未读</a-option>
+      </a-select>
+      <a-select v-model="readFilter" class="ml-4" style="width: 100px;">
+        <a-option value="all">全部</a-option>
+        <a-option value="unread">未读</a-option>
+        <a-option value="read">已读</a-option>
+      </a-select>
     </div>
     <div v-if="!loading && messages.length === 0" class="empty-state mt-6">
       <a-empty description="暂无消息" />
@@ -26,13 +35,13 @@
     >
       <template #item="{ item, index }">
         <a-list-item class="list-demo-item" action-layout="vertical">
-          <a-card class="notification-card" :hoverable="true" :bordered="false">
+          <a-card class="notification-card" :hoverable="true" :bordered="false" :class="{ 'is-read': item.isRead }">
             <div class="font-bold text-base mb-3 flex items-center gap-2">
               <a-checkbox v-model="selectedRowKeys" :value="item._id" />
               <a-tag :color="getTypeColor(item.type)" size="small">{{ getTypeLabel(item.type) }}</a-tag>
               <div class="flex items-center justify-between w-full">
                 <h6 class="text-xl">{{ item.title }}</h6>
-                <a-tag size="small" >未读</a-tag>
+                <a-tag size="small" :color="item.isRead ? 'gray' : 'orange'">{{ item.isRead ? '已读' : '未读' }}</a-tag>
               </div>
             </div>
             <div class="text-sm text-gray-500 mb-2 summary-ellipsis">{{ item.summary || '-' }}</div>
@@ -41,11 +50,11 @@
                 <span class="text-xs">[{{ getCategoryLabel(item) }}] {{ item.publisher }}</span>
                 <span class="text-xs text-gray-400">{{ formatDateShort(item.createdAt) }}</span>
               </div>
-              <a-button type="text" size="mini" @click="viewDetail(item)">查看详情</a-button>
+              <a-button type="text" size="mini" @click="() => handleViewDetail(item)">查看详情</a-button>
             </div>
           </a-card>
         </a-list-item>
-        </template>
+      </template>
     </a-list>
     <a-modal v-model:visible="detailVisible" title="公告详情" width="750px" :footer="null" :body-style="{height: '600px', overflow: 'auto', padding: '24px'}">
       <div v-if="currentDetail">
@@ -66,7 +75,8 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue';
 import apiService from '../services/apiService';
-import { Tag as ATag, Empty as AEmpty, Spin as ASpin, PageHeader as APageHeader, Tabs as ATabs, TabPane as ATabPane, Button as AButton, Checkbox as ACheckbox, Table as ATable, List as AList, Card as ACard } from '@arco-design/web-vue';
+import { Tag as ATag, Empty as AEmpty, Spin as ASpin, PageHeader as APageHeader, Tabs as ATabs, TabPane as ATabPane, Button as AButton, Checkbox as ACheckbox, Table as ATable, List as AList, Card as ACard, Modal } from '@arco-design/web-vue';
+import { IconDown } from '@arco-design/web-vue/es/icon';
 
 const activeTab = ref('all');
 const tabUnread = ref({ all: 0, platform: 0, account: 0 });
@@ -77,6 +87,8 @@ const detailVisible = ref(false);
 const currentDetail = ref(null);
 const pagination = ref({ current: 1, pageSize: 10, total: 0 });
 const loading = ref(false);
+const readFilter = ref('all');
+const actionSelect = ref();
 
 const loadUnread = async () => {
   const res = await apiService.fetchUnreadCount();
@@ -94,9 +106,15 @@ const loadMessages = async () => {
     };
     const res = await apiService.fetchNotifications(params);
     const now = new Date();
-    messages.value = (res.data.list || []).filter(item => {
+    let list = (res.data.list || []).filter(item => {
       return (!item.effectiveAt || new Date(item.effectiveAt) <= now);
     });
+    if (readFilter.value === 'unread') {
+      list = list.filter(item => !item.isRead);
+    } else if (readFilter.value === 'read') {
+      list = list.filter(item => item.isRead);
+    }
+    messages.value = list;
     pagination.value.total = res.data.total || 0;
     selectedRowKeys.value = [];
     selectAll.value = false;
@@ -128,19 +146,42 @@ const onSelectChange = (keys) => {
   selectedRowKeys.value = keys;
   selectAll.value = keys.length === messages.value.length;
 };
+const handleViewDetail = async (record) => {
+  currentDetail.value = record;
+  detailVisible.value = true;
+  if (!record.isRead) {
+    await apiService.markNotificationsRead([record._id]);
+    record.isRead = true;
+    loadUnread();
+  }
+};
+const confirmMarkRead = () => {
+  if (!selectedRowKeys.value.length) return;
+  Modal.confirm({
+    title: '确认操作',
+    content: `确定将选中消息标记为已读？`,
+    onOk: markRead
+  });
+};
+const confirmMarkUnread = () => {
+  if (!selectedRowKeys.value.length) return;
+  Modal.confirm({
+    title: '确认操作',
+    content: `确定将选中消息标记为未读？`,
+    onOk: markUnread
+  });
+};
 const markRead = async () => {
   if (!selectedRowKeys.value.length) return;
   await apiService.markNotificationsRead(selectedRowKeys.value);
-  loadMessages();
+  await loadMessages();
+  await loadUnread();
 };
 const markUnread = async () => {
   if (!selectedRowKeys.value.length) return;
   await apiService.markNotificationsUnread(selectedRowKeys.value);
-  loadMessages();
-};
-const viewDetail = (record) => {
-  currentDetail.value = record;
-  detailVisible.value = true;
+  await loadMessages();
+  await loadUnread();
 };
 
 const formatDateShort = (dateString) => {
@@ -181,6 +222,16 @@ const typeColors = {
 const getTypeLabel = (type) => typeMap[type] || type;
 const getTypeColor = (type) => typeColors[type] || 'gray';
 
+watch(readFilter, loadMessages);
+watch(actionSelect, (val) => {
+  if (val === 'read') {
+    confirmMarkRead();
+  } else if (val === 'unread') {
+    confirmMarkUnread();
+  }
+  actionSelect.value = undefined;
+});
+
 onMounted(() => {
   loadMessages();
   loadUnread();
@@ -218,4 +269,8 @@ onMounted(() => {
 :deep(.ql-align-center) { text-align: center; }
 :deep(.ql-align-right) { text-align: right; }
 :deep(.ql-align-justify) { text-align: justify; }
+.notification-card.is-read {
+  opacity: 0.7;
+  filter: grayscale(0.2);
+}
 </style> 

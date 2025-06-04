@@ -71,8 +71,7 @@
           </a-table-column>
           <a-table-column title="已读" data-index="readStats" :width="100" align="center" :sortable="{ sortDirections: ['ascend', 'descend'] }">
             <template #cell="{ record }">
-              <span v-if="record.readStats.length > 0">{{ record.readStats[record.readStats.length - 1].count }}</span>
-              <span v-else>0</span>
+              <span>{{ record.readCount || 0 }}</span>
             </template>
           </a-table-column>
           <a-table-column title="发布人" data-index="publisher" :width="120" :sortable="{ sortDirections: ['ascend', 'descend'] }" />
