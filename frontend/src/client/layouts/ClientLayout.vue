@@ -26,8 +26,8 @@
         <span v-else-if="!isLoggedIn"></span>
         <span v-else>积分：加载中...</span>
 
-        <a-badge :count="unreadCount" :offset="[0, 2]" :max-count="9">
-          <a-button type="text" shape="circle" @click="goToNotifications">
+        <a-badge v-if="userData" :count="unreadCount" :offset="[0, 2]" :max-count="9">
+          <a-button type="text" class="!text-white/70" shape="circle" @click="goToNotifications">
             <icon-notification class="text-xl"/>
           </a-button>
         </a-badge>
@@ -415,5 +415,8 @@ provide('refreshUserData', fetchCurrentUserData);
 
 :deep(.arco-dropdown-option-icon) {
   margin-right: 8px;
+}
+:deep(.arco-badge-number) {
+  transform: scale(0.7) translate(15%, -15%);
 }
 </style>

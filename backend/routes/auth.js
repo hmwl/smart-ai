@@ -11,6 +11,7 @@ const CreditTransaction = require('../models/CreditTransaction'); // Added Credi
 const PromotionActivity = require('../models/PromotionActivity'); // Added PromotionActivity model
 const fs = require('fs');
 const path = require('path');
+const settingService = require('../services/settingService'); // Import settingService
 
 // Dynamically load platform services
 const platformsDir = path.join(__dirname, '../services/platforms');
@@ -64,10 +65,13 @@ router.post('/login', async (req, res) => {
       // 可以根据需要添加其他信息，但避免敏感信息
     };
 
+    // Fetch admin cookie expiration setting
+    const adminTokenLifetime = await settingService.getCookieExpirationString('adminCookieExpire');
+
     const accessToken = jwt.sign(
         payload,
         jwtSecret,
-        { expiresIn: '0.5h' } // 过期时间，可以是 '1d', '7d' 等
+        { expiresIn: adminTokenLifetime } // Use dynamic admin expiration
     );
 
     // 5. 生成并存储 Refresh Token
@@ -219,14 +223,15 @@ router.post('/client/login', async (req, res) => {
     const payload = {
       userId: user._id,
       username: user.username,
-      // isAdmin: user.isAdmin, // Client users are known to be not admin
-      // 可以添加特定于客户端用户需要的其他信息
     };
+
+    // Fetch user cookie expiration setting
+    const clientTokenLifetime = await settingService.getCookieExpirationString('userCookieExpire');
 
     const accessToken = jwt.sign(
       payload,
       jwtSecret,
-      { expiresIn: process.env.CLIENT_ACCESS_TOKEN_LIFETIME || '2h' } // Client token can have different lifetime
+      { expiresIn: clientTokenLifetime } // Use dynamic client expiration
     );
 
     // 6. 生成并存储 Refresh Token (与管理员登录逻辑类似)

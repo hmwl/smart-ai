@@ -103,4 +103,33 @@ exports.updateCookieSettings = async (settingsData) => {
     console.error('[Service] Error in updateCookieSettings:', error.message, error.stack);
     throw error; // Re-throw to be caught by controller/route handler
   }
+};
+
+/**
+ * Retrieves a single cookie expiration setting and formats it as a string (e.g., "7d", "1h").
+ * @param {string} key - The setting key ('userCookieExpire' or 'adminCookieExpire').
+ * @returns {string} The expiration string or a default if not found/invalid.
+ */
+exports.getCookieExpirationString = async (key) => {
+  try {
+    const setting = await Setting.findOne({ key });
+    if (setting && setting.value && typeof setting.value.value === 'number' && typeof setting.value.unit === 'string') {
+      return `${setting.value.value}${setting.value.unit}`;
+    }
+    // Return default if not found or invalid format
+    if (key === 'userCookieExpire') {
+      return `${DEFAULT_USER_COOKIE_EXPIRE.value}${DEFAULT_USER_COOKIE_EXPIRE.unit}`;
+    }
+    if (key === 'adminCookieExpire') {
+      return `${DEFAULT_ADMIN_COOKIE_EXPIRE.value}${DEFAULT_ADMIN_COOKIE_EXPIRE.unit}`;
+    }
+    // Fallback for any other unexpected key, though primarily for user/admin
+    return '1h'; // Generic default
+  } catch (error) {
+    console.error(`[Service] Error in getCookieExpirationString for key ${key}:`, error.message);
+    // Fallback to default on error
+    if (key === 'userCookieExpire') return `${DEFAULT_USER_COOKIE_EXPIRE.value}${DEFAULT_USER_COOKIE_EXPIRE.unit}`;
+    if (key === 'adminCookieExpire') return `${DEFAULT_ADMIN_COOKIE_EXPIRE.value}${DEFAULT_ADMIN_COOKIE_EXPIRE.unit}`;
+    return '1h';
+  }
 }; 
