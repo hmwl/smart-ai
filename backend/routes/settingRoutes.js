@@ -10,10 +10,8 @@ const isAdmin = require('../middleware/isAdmin');
  * @access  Private (Admin)
  */
 router.get('/cookie', authenticateToken, isAdmin, async (req, res) => {
-  console.log('[Route] GET /api/settings/cookie hit');
   try {
     const settings = await settingService.getCookieSettings();
-    console.log('[Route] Successfully fetched settings from service:', settings);
     res.status(200).json(settings);
   } catch (error) {
     console.error('[Route] Error in GET /api/settings/cookie: ', error.message);
@@ -31,7 +29,6 @@ router.get('/cookie', authenticateToken, isAdmin, async (req, res) => {
  * @access  Private (Admin)
  */
 router.post('/cookie', authenticateToken, isAdmin, async (req, res) => {
-  console.log('[Route] POST /api/settings/cookie hit with body:', req.body);
   try {
     const { userCookieExpire, adminCookieExpire } = req.body;
     if (!userCookieExpire && !adminCookieExpire) {
@@ -40,7 +37,6 @@ router.post('/cookie', authenticateToken, isAdmin, async (req, res) => {
     }
 
     const updatedSettings = await settingService.updateCookieSettings({ userCookieExpire, adminCookieExpire });
-    console.log('[Route] Successfully updated settings via service. Result:', updatedSettings);
     res.status(200).json({ message: 'Cookie settings updated successfully', settings: updatedSettings });
   } catch (error) {
     console.error('[Route] Error in POST /api/settings/cookie: ', error.message);

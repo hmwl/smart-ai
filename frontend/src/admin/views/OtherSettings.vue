@@ -1,14 +1,15 @@
 <template>
-  <div class="page-container">
-    <div class="page-header">
+  <div>
+    <div class="flex justify-between items-center mb-4">
       <h2 class="text-xl font-semibold">其他设置</h2>
       <a-space>
         <a-button type="primary" @click="saveSettings" :loading="isLoading">
-          <template #icon><icon-save /></template> 保存
+          <template #icon><icon-save /></template> 保存配置
         </a-button>
       </a-space>
     </div>
 
+    <a-card class="settings-content-card">
     <a-form :model="formState" layout="vertical">
       <a-row :gutter="24">
         <a-col :xs="24" :sm="24" :md="12" :lg="8">
@@ -50,8 +51,13 @@
           </a-card>
         </a-col>
       </a-row>
+      <a-form-item>
+        <a-button type="primary" @click="saveSettings" :loading="isLoading">
+          <template #icon><icon-save /></template> 保存配置
+        </a-button>
+      </a-form-item>
     </a-form>
-
+  </a-card>
   </div>
 </template>
 <script setup>

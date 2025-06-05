@@ -86,7 +86,7 @@
                 :widget-list="widgetList"
                 class=""
               />
-              <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成</a-button>
+              <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成（{{ discountedCredits > 0 ? discountedCredits : '限时免费' }}）</a-button>
             </a-card>
             <a-empty v-else description="此应用无需配置" class="empty-config-placeholder"/>
           </div>

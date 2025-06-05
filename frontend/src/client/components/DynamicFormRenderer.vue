@@ -277,6 +277,8 @@
             @click="onWidgetButtonClick(usage, field)"
           >
             {{ usage.alias || getWidgetNameById(usage.widgetId) }}
+            <span v-if="getWidgetCreditsById(usage.widgetId) > 0" style="font-size: 10px;">({{ getWidgetCreditsById(usage.widgetId) }}分)</span>
+            <span v-else-if="getWidgetCreditsById(usage.widgetId) === 0" style="font-size: 10px;">(免费)</span>
           </div>
         </template>
       </a-form-item>
@@ -289,7 +291,8 @@ import { ref, watchEffect, defineProps, defineEmits, computed, watch, nextTick }
 import {
   Form as AForm, FormItem as AFormItem, Input as AInput, Textarea as ATextarea,
   Select as ASelect, RadioGroup as ARadioGroup, CheckboxGroup as ACheckboxGroup,
-  Switch as ASwitch, Upload as AUpload, Button as AButton, Message, Slider as ASlider
+  Switch as ASwitch, Upload as AUpload, Button as AButton, Message, Slider as ASlider,
+  Modal
 } from '@arco-design/web-vue';
 import { IconUpload, IconSync } from '@arco-design/web-vue/es/icon';
 import clientApiService from '@/client/services/apiService'; // Ensure this path is correct
@@ -702,9 +705,68 @@ function generateRandomInt(field) {
 }
 
 function onWidgetButtonClick(usage, field) {
-  // 获取显示名称：优先使用别名，没有别名则动态获取挂件名称
-  const displayName = usage.alias || getWidgetNameById(usage.widgetId);
-  Message.info(`点击了挂件：${displayName}`);
+  const widgetId = usage.widgetId;
+  const widgetInfo = props.widgetList.find(w => w._id === widgetId);
+
+  if (!widgetInfo) {
+    Message.error('找不到挂件信息！');
+    return;
+  }
+
+  const displayName = usage.alias || widgetInfo.name;
+  const credits = widgetInfo.creditsConsumed === undefined ? null : widgetInfo.creditsConsumed; // Handle if creditsConsumed is not present
+
+  let confirmContent = `确定要执行挂件 "${displayName}" 吗？`;
+  if (credits !== null && credits > 0) {
+    confirmContent += ` 这将消耗 ${credits} 积分。`;
+  } else if (credits === 0) {
+    confirmContent += ` 此操作免费。`;
+  } else {
+    // If credits is null or undefined, don't mention cost, or state it's not determined yet.
+    // For now, let's assume if not 0 or >0, it's effectively free or cost is not applicable from client view for this action.
+  }
+
+  Modal.confirm({
+    title: '执行挂件',
+    content: confirmContent,
+    okText: '确定执行',
+    cancelText: '取消',
+    onOk: async () => {
+      const loadingMsg = Message.loading({ content: `正在执行挂件 "${displayName}"...`, duration: 0 });
+      try {
+        const payload = {
+          currentFieldValue: props.formModel[field.props.field],
+          formFieldKey: field.props.field,
+          // You can add the full form model if the widget needs more context
+          // fullFormModel: { ...props.formModel }
+        };
+
+        const response = await clientApiService.post(`/auth/client/widgets/${widgetId}/execute`, payload);
+        
+        // Assuming response.data directly contains the backend's JSON response
+        if (response.data && response.data.success) {
+          Message.success(response.data.message || `挂件 "${displayName}" 执行成功！`);
+          if (response.data.updatedFieldValue !== undefined) {
+            const newFormModel = { ...props.formModel };
+            newFormModel[field.props.field] = response.data.updatedFieldValue;
+            emit('update:formModel', newFormModel);
+          }
+          // TODO: Consider injecting and calling a global user credit refresh function here
+          // e.g., const refreshUserData = inject('refreshUserData', null); if (refreshUserData) refreshUserData();
+        } else {
+          Message.error(response.data?.message || `挂件 "${displayName}" 执行失败。`);
+        }
+      } catch (error) {
+        Message.error(error.response?.data?.message || error.message || `执行挂件 "${displayName}" 时发生错误。`);
+        console.error(`Error executing widget ${widgetId}:`, error);
+      } finally {
+        loadingMsg.close();
+      }
+    },
+    onCancel: () => {
+      Message.info('已取消执行挂件。');
+    }
+  });
 }
 
 function getWidgetNameById(widgetId) {
@@ -722,6 +784,12 @@ function getWidgetNameById(widgetId) {
 
   // 默认返回中文文本
   return '功能按钮';
+}
+
+function getWidgetCreditsById(widgetId) {
+  if (!widgetId || !props.widgetList) return null;
+  const widget = props.widgetList.find(w => w._id === widgetId);
+  return widget ? widget.creditsConsumed : null;
 }
 
 // 检查字段是否包含下方挂件

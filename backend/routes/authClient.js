@@ -4,24 +4,54 @@ const AIWidget = require('../models/AIWidget');
 const EnumConfig = require('../models/EnumConfig');
 const AiApplication = require('../models/AiApplication');
 const PromotionActivity = require('../models/PromotionActivity');
+const User = require('../models/User');
+const CreditTransaction = require('../models/CreditTransaction');
 
 // Helper function to attach active promotions to applications
 const attachActivePromotions = async (application) => {
   if (!application) return application;
 
   const now = new Date();
-  const activePromotion = await PromotionActivity.findOne({
-    targetType: 'ai_application',
-    targetId: application._id,
-    status: 'active',
-    startDate: { $lte: now },
-    endDate: { $gte: now }
-  }).select('name discountType discountValue description _id startDate endDate').lean();
+  // Find the relevant promotion for this single application
+  const promotion = await PromotionActivity.findOne({
+    isEnabled: true, // Check isEnabled flag
+    startTime: { $lte: now }, // Use startTime
+    endTime: { $gte: now },   // Use endTime
+    activityType: 'usage_discount',
+    'activityDetails.usageDiscountSubType': 'app_specific_discount',
+    'activityDetails.appSpecific.targetAppIds': application._id // Check if app ID is in the target list
+  })
+  // If multiple promotions could apply and you need to pick a specific one (e.g., latest), add .sort()
+  // .sort({ createdAt: -1 }) // Example: get the most recently created one
+  .lean();
 
-  if (activePromotion) {
-    application.activePromotion = activePromotion;
+  if (promotion && promotion.activityDetails && promotion.activityDetails.appSpecific) {
+    const promoDetails = promotion.activityDetails.appSpecific;
+    let promoDescription = promotion.name; // Default description
+
+    if (promoDetails.discountType === 'percentage' && promoDetails.discountValue != null) {
+        promoDescription = `${promoDetails.discountValue}% off`;
+    } else if (promoDetails.discountType === 'fixed_reduction' && promoDetails.discountValue != null) {
+        promoDescription = `立减 ${promoDetails.discountValue} 积分`;
+    }
+    // Fallback if discountValue is null for some reason but type is set
+    else if (promoDetails.discountType === 'percentage') {
+        promoDescription = `百分比折扣`;
+    } else if (promoDetails.discountType === 'fixed_reduction') {
+        promoDescription = `固定额度减免`;
+    }
+
+
+    application.activePromotion = {
+      name: promotion.name,
+      discountType: promoDetails.discountType,
+      discountValue: promoDetails.discountValue,
+      description: promoDescription,
+      _id: promotion._id,
+      startDate: promotion.startTime, // Map from startTime
+      endDate: promotion.endTime     // Map from endTime
+    };
   }
-
   return application;
 };
 
@@ -32,7 +62,7 @@ router.get('/ai-widgets', async (req, res) => {
     const query = { status };
 
     const widgets = await AIWidget.find(query)
-      .select('_id name description status')
+      .select('_id name description status creditsConsumed')
       .sort({ name: 1 });
 
     res.json({ list: widgets });
@@ -136,6 +166,110 @@ router.get('/ai-applications/:id', async (req, res) => {
     }
     console.error(`Error fetching AI application ${req.params.id}:`, err);
     res.status(500).json({ message: '获取应用详情失败' });
+  }
+});
+
+// POST /api/auth/client/widgets/:widgetId/execute - Execute a specific widget
+router.post('/widgets/:widgetId/execute', async (req, res) => {
+  try {
+    const { widgetId } = req.params;
+    const userId = req.user?.userId; // Correctly access userId
+
+    if (!userId) {
+      return res.status(401).json({ success: false, message: '用户未授权' });
+    }
+
+    const widget = await AIWidget.findById(widgetId);
+    if (!widget) {
+      return res.status(404).json({ success: false, message: '挂件未找到' });
+    }
+    if (widget.status !== 'enabled') {
+      return res.status(400).json({ success: false, message: '该挂件当前不可用' });
+    }
+
+    const creditsToConsume = widget.creditsConsumed;
+    const user = await User.findById(userId);
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: '用户账户未找到' });
+    }
+
+    const balanceBeforeDeduction = user.creditsBalance; // Get balance before any potential deduction
+
+    if (creditsToConsume > 0) {
+      if (user.creditsBalance < creditsToConsume) {
+        return res.status(400).json({ success: false, message: '积分不足，无法执行此挂件' });
+      }
+      user.creditsBalance -= creditsToConsume;
+      await user.save(); // Save user only if credits were deducted
+    }
+
+    // Always record a transaction
+    const balanceAfterDeduction = user.creditsBalance; // This is the current balance (either unchanged or deducted)
+
+    const newTransaction = new CreditTransaction({
+      user: userId,
+      type: 'consumption',
+      creditsChanged: -creditsToConsume, // This will be 0 for free widgets
+      balanceBefore: balanceBeforeDeduction,
+      balanceAfter: balanceAfterDeduction,
+      description: `使用了AI挂件: ${widget.name}${creditsToConsume === 0 ? ' (免费)' : ''}`,
+      transactionDetails: {
+        widgetId: widget._id,
+        widgetName: widget.name,
+        executedBy: 'client'
+      }
+    });
+    await newTransaction.save();
+
+    // ****** Placeholder for Widget Execution Logic ******
+    // Based on widget.type or widget.platform or specific widgetId, 
+    // you would call a specific service here.
+    // This service would handle the actual API call to OpenAI, ComfyUI, etc.
+    // It would use req.body (e.g., req.body.currentFieldValue) as input.
+    // Example: const executionResult = await WidgetExecutionService.execute(widget, req.body);
+    // For now, we'll simulate a successful execution that might return an updated value.
+    const simulatedUpdatedValue = req.body.currentFieldValue ? `Processed: ${req.body.currentFieldValue}` : "挂件执行完毕";
+    // ****** End of Placeholder ******
+
+    let message = `挂件 "${widget.name}" 执行成功。`;
+    if (creditsToConsume > 0) {
+      message += ` 已消耗 ${creditsToConsume} 积分。`;
+    } else {
+      message += ` (免费使用)`;
+    }
+
+    res.json({
+      success: true,
+      message: message,
+      updatedFieldValue: simulatedUpdatedValue, // Send back the new value for the form field
+      // rawOutput: executionResult.rawOutput // Or any other data from the widget execution
+    });
+
+  } catch (error) {
+    console.error(`Error executing widget ${req.params.widgetId}:`, error);
+    // TODO: Consider rolling back credit deduction if execution failed after deduction
+    // (This is complex and needs careful thought, especially if widget execution itself has side effects)
+    res.status(500).json({ success: false, message: error.message || '执行挂件时发生服务器内部错误' });
+  }
+});
+
+// GET /api/auth/client/enum-configs/by-type/:typeId - Get enum configs by type ID
+router.get('/enum-configs/by-type/:typeId', async (req, res) => {
+  try {
+    const { typeId } = req.params;
+
+    const enumConfigs = await EnumConfig.find({
+      enumType: typeId,
+      status: 'active'
+    })
+    .select('_id translation description') // 返回 translation 字段，移除 name 和 platform 字段
+    .lean();
+
+    res.json(enumConfigs);
+  } catch (error) {
+    console.error('Error fetching enum configs by type:', error);
+    res.status(500).json({ message: '按类型获取枚举配置列表失败: ' + error.message });
   }
 });
 

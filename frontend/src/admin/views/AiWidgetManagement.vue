@@ -28,6 +28,14 @@
           style="width: 120px;"
           @change="onSearch"
         />
+        <a-select
+          v-model="searchCredits"
+          :options="creditsOptions"
+          placeholder="按积分筛选"
+          allow-clear
+          style="width: 140px;"
+          @change="onSearch"
+        />
         <a-button type="primary" @click="openCreate">
           <template #icon><IconPlus /></template> 添加 AI 挂件
         </a-button>
@@ -57,6 +65,14 @@
         <template #apiCount="{ record }">
           {{ record.apis?.length || 0 }}
         </template>
+        <template #usageCount="{ record }">
+          <a-tag color="arcoblue" v-if="typeof record.usageCount === 'number'">{{ record.usageCount }}</a-tag>
+          <span v-else>-</span>
+        </template>
+        <template #creditsConsumed="{ record }">
+          <a-tag v-if="record.creditsConsumed === 0" color="green">免费</a-tag>
+          <span v-else>{{ record.creditsConsumed }}</span>
+        </template>
         <template #createdAt="{ record }">
           {{ formatDateCN(record.createdAt) }}
         </template>
@@ -66,7 +82,11 @@
         <template #actions="{ record }">
           <a-space>
             <a-button type="text" status="warning" size="mini" @click="openEdit(record)">编辑</a-button>
+            <a-tooltip v-if="record.usageCount && record.usageCount > 0" :content="`该挂件被 ${record.usageCount} 个表单字段使用，无法删除`">
+              <a-button type="text" status="danger" size="mini" disabled>删除</a-button>
+            </a-tooltip>
             <a-popconfirm
+              v-else
               content="确定删除该挂件？"
               ok-text="确定"
               cancel-text="取消"
@@ -101,10 +121,24 @@
         <a-form-item label="关联API" field="apis" required>
           <a-select v-model="form.apis" placeholder="请选择关联API" :options="filteredApiOptions" multiple allow-clear />
         </a-form-item>
+        <a-form-item label="所需积分" field="creditsConsumed" required>
+          <a-input-number
+            v-model="form.creditsConsumed"
+            placeholder="输入所需积分，0表示免费"
+            :min="0"
+            :precision="0"
+            style="width: 100%;"
+          />
+        </a-form-item>
         <a-form-item label="状态" field="status" required>
           <a-select v-model="form.status" placeholder="请选择状态">
             <a-option value="enabled">启用 (enabled)</a-option>
-            <a-option value="disabled">禁用 (disabled)</a-option>
+            <a-option value="disabled" :disabled="isEditing && form._id && form.usageCount > 0">
+              禁用 (disabled)
+              <span v-if="isEditing && form._id && form.usageCount > 0" class="text-xs text-gray-500 ml-1">
+                (被{{form.usageCount}}个表单字段使用)
+              </span>
+            </a-option>
           </a-select>
         </a-form-item>
       </a-form>
@@ -114,7 +148,7 @@
 
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue';
-import { Message } from '@arco-design/web-vue';
+import { Message, Tooltip as ATooltip } from '@arco-design/web-vue';
 import { IconPlus, IconRefresh } from '@arco-design/web-vue/es/icon';
 import apiService from '@/admin/services/apiService';
 import { formatDateCN } from '@/admin/utils/date';
@@ -135,10 +169,16 @@ const pagination = reactive({
 const searchName = ref('');
 const searchPlatform = ref('');
 const searchStatus = ref('');
+const searchCredits = ref(undefined);
 const platformOptions = ref([]);
 const statusOptions = [
   { label: '启用', value: 'enabled' },
   { label: '禁用', value: 'disabled' },
+];
+const creditsOptions = [
+  { label: '全部', value: undefined },
+  { label: '免费', value: 'free' },
+  { label: '付费', value: 'paid' },
 ];
 const allApiOptions = ref([]); // [{label, value, platformType}]
 
@@ -148,7 +188,8 @@ const columns = [
   { title: '挂件简介', dataIndex: 'description', width: 200 },
   { title: '所属平台', dataIndex: 'platform', slotName: 'platform', width: 120 },
   { title: 'API数', dataIndex: 'apiCount', slotName: 'apiCount', width: 120, align: 'center', sortable: { sortDirections: ['ascend', 'descend'] } },
-  { title: '使用数', dataIndex: 'usageCount', width: 120, align: 'center', sortable: { sortDirections: ['ascend', 'descend'] }  },
+  { title: '使用数', dataIndex: 'usageCount', slotName: 'usageCount', width: 120, align: 'center', sortable: { sortDirections: ['ascend', 'descend'] }  },
+  { title: '所需积分', dataIndex: 'creditsConsumed', slotName: 'creditsConsumed', width: 120, align: 'center', sortable: { sortDirections: ['ascend', 'descend'] }  },
   { title: '状态', dataIndex: 'status', slotName: 'status', width: 120, align: 'center', sortable: { sortDirections: ['ascend', 'descend'] }  },
   { title: '创建时间', dataIndex: 'createdAt', slotName: 'createdAt', width: 200, sortable: { sortDirections: ['ascend', 'descend'] }  },
   { title: '更新时间', dataIndex: 'updatedAt', slotName: 'updatedAt', width: 200, sortable: { sortDirections: ['ascend', 'descend'] }  },
@@ -164,12 +205,28 @@ const form = reactive({
   platformType: '', // 平台类型ID
   apis: [],
   status: 'enabled',
+  usageCount: 0,
+  creditsConsumed: 0,
 });
 
 const rules = {
   name: [{ required: true, message: '请输入挂件名称' }],
   platformType: [{ required: true, message: '请选择平台类型' }],
   apis: [{ required: true, type: 'array', min: 1, message: '请至少选择一个关联API' }],
+  creditsConsumed: [
+    { required: true, message: '请输入所需积分' },
+    { type: 'number', message: '所需积分必须是数字' },
+    { validator: (value, callback) => {
+        if (value < 0) {
+          callback('所需积分不能为负数');
+        } else if (!Number.isInteger(value)) {
+          callback('所需积分必须是整数');
+        } else {
+          callback();
+        }
+      }
+    }
+  ],
   status: [{ required: true, message: '请选择状态' }],
 };
 
@@ -190,6 +247,7 @@ async function fetchList() {
       name: searchName.value,
       platform: searchPlatform.value,
       status: searchStatus.value,
+      creditsFilter: searchCredits.value,
     };
     const res = await apiService.getAIWidgets(params);
     list.value = res.data.list;
@@ -218,7 +276,7 @@ async function fetchApis() {
 
 function openCreate() {
   isEditing.value = false;
-  Object.assign(form, { name: '', description: '', platformType: '', apis: [], status: 'enabled' });
+  Object.assign(form, { name: '', description: '', platformType: '', apis: [], status: 'enabled', usageCount: 0, _id: null, creditsConsumed: 0 });
   formVisible.value = true;
 }
 function openEdit(row) {
@@ -228,6 +286,9 @@ function openEdit(row) {
     platformType: row.platform?._id || row.platform,
     apis: (row.apis || []).map(a => a._id || a),
     status: row.status || 'enabled',
+    usageCount: row.usageCount || 0,
+    _id: row._id,
+    creditsConsumed: row.creditsConsumed === undefined ? 0 : Number(row.creditsConsumed),
   });
   formVisible.value = true;
 }

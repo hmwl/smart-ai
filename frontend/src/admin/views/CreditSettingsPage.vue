@@ -4,7 +4,9 @@
       <h2 class="text-xl font-semibold">积分设置</h2>
       <!-- Action buttons can go here if needed in the future -->
       <a-space>
-        <a-button type="primary" @click="saveCreditSettings" :loading="isSettingsSaving">保存配置</a-button>
+        <a-button type="primary" @click="saveCreditSettings" :loading="isSettingsSaving">
+          <template #icon><icon-save /></template> 保存配置
+        </a-button>
       </a-space>
     </div>
 
@@ -27,7 +29,9 @@
             </a-checkbox-group>
           </a-form-item>
           <a-form-item>
-            <a-button type="primary" html-type="submit" :loading="isSettingsSaving">保存配置</a-button>
+            <a-button type="primary" html-type="submit" :loading="isSettingsSaving">
+              <template #icon><icon-save /></template> 保存配置
+            </a-button>
           </a-form-item>
         </a-form>
       </a-spin>

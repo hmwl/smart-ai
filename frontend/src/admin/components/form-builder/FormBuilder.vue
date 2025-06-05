@@ -81,6 +81,9 @@
                   <span v-if="element.props.nodeId" class="canvas-field-node-id">
                     (ID: {{ element.props.nodeId }} {{ element.props.key ? `[${element.props.key}]` : '' }})
                   </span>
+                  <span v-if="element.props.widgetUsages && element.props.widgetUsages.length > 0" class="text-xs text-gray-500">
+                    【挂件: {{ getWidgetAliasOrNameList(element) }}】
+                  </span>
                   <span v-if="element.props.required && element.props.label" class="canvas-field-required-indicator">*</span>
                 </label>
                 <component 
@@ -645,7 +648,7 @@
                 </div>
                 <a-form-item label="挂件" :required="true" :validate-status="usage.widgetId ? '' : 'error'">
                   <a-select v-model="usage.widgetId" placeholder="选择挂件" allow-clear @change="onWidgetChange(idx)" :disabled="!widgetOptions.length">
-                    <a-option v-for="w in availableWidgetOptions(idx)" :key="w._id" :value="w._id">{{ w.name }} ({{ w._id }})</a-option>
+                    <a-option v-for="w in availableWidgetOptions(idx)" :key="w._id" :value="w._id">{{ w.name }} ({{ w._id }}) [{{ w.creditsConsumed > 0 ? w.creditsConsumed+' 积分' : '免费' }}]</a-option>
                   </a-select>
                 </a-form-item>
                 <a-form-item label="别名">
@@ -1357,8 +1360,6 @@ const handleComfyUIJsonUpload = (fileItem) => {
     };
     comfyUIJsonFileName.value = fileInfo.originalName;
     Message.success(`${fileInfo.originalName} 上传成功。`);
-    console.log('上传成功，fileInfo:', fileInfo);
-    console.log('comfyUIJsonFileInfo.value:', comfyUIJsonFileInfo.value);
   } else {
     comfyUIJsonFileInfo.value = null;
     comfyUIJsonFileName.value = '';
@@ -1635,6 +1636,21 @@ const beforeComfyUIJsonUpload = (file) => {
     return false;
   }
   return true;
+};
+
+// Helper function to get display names for widget usages
+const getWidgetAliasOrNameList = (fieldElement) => {
+  if (!fieldElement.props?.widgetUsages || fieldElement.props.widgetUsages.length === 0) {
+    return '';
+  }
+  return fieldElement.props.widgetUsages.map(usage => {
+    if (usage.alias) {
+      return usage.alias;
+    }
+    // widgetOptions should be populated from fetchWidgetOptions
+    const widget = widgetOptions.value.find(opt => opt._id === usage.widgetId);
+    return widget ? widget.name : (usage.widgetId || '未知挂件'); // Fallback to ID, then a generic string
+  }).filter(name => name).join(', ');
 };
 
 // 挂件列表

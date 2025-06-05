@@ -9,13 +9,11 @@ const DEFAULT_ADMIN_COOKIE_EXPIRE = { value: 1, unit: 'd', name: 'Admin Cookie E
  * If a setting is not found in the database, it returns a default value.
  */
 exports.getCookieSettings = async () => {
-  console.log('[Service] Attempting to get cookie settings...');
   try {
     let userCookieSetting = await Setting.findOne({ key: 'userCookieExpire' });
     let adminCookieSetting = await Setting.findOne({ key: 'adminCookieExpire' });
 
     if (!userCookieSetting) {
-      console.log('[Service] User cookie setting not found, creating default...');
       userCookieSetting = await Setting.create({
         key: 'userCookieExpire',
         value: { value: DEFAULT_USER_COOKIE_EXPIRE.value, unit: DEFAULT_USER_COOKIE_EXPIRE.unit },
@@ -30,7 +28,6 @@ exports.getCookieSettings = async () => {
     }
 
     if (!adminCookieSetting) {
-      console.log('[Service] Admin cookie setting not found, creating default...');
       adminCookieSetting = await Setting.create({
         key: 'adminCookieExpire',
         value: { value: DEFAULT_ADMIN_COOKIE_EXPIRE.value, unit: DEFAULT_ADMIN_COOKIE_EXPIRE.unit },
@@ -44,7 +41,6 @@ exports.getCookieSettings = async () => {
       }
     }
     
-    console.log('[Service] Successfully retrieved/created cookie settings.');
     return {
       userCookieExpire: userCookieSetting.value,
       adminCookieExpire: adminCookieSetting.value,
@@ -62,7 +58,6 @@ exports.getCookieSettings = async () => {
  * @param {Object} [settingsData.adminCookieExpire] - Admin cookie expiration { value, unit }.
  */
 exports.updateCookieSettings = async (settingsData) => {
-  console.log('[Service] Attempting to update cookie settings with data:', settingsData);
   const { userCookieExpire, adminCookieExpire } = settingsData;
   const updatedSettings = {};
   const errors = [];
@@ -103,7 +98,6 @@ exports.updateCookieSettings = async (settingsData) => {
       throw new Error(errors.join(' '));
     }
     
-    console.log('[Service] Successfully updated cookie settings. Result:', updatedSettings);
     return updatedSettings;
   } catch (error) {
     console.error('[Service] Error in updateCookieSettings:', error.message, error.stack);
