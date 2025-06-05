@@ -73,6 +73,9 @@ const publicEnumApiRoutes = require('./routes/publicEnumApi'); // Import new pub
 // Import new Platform routes
 const platformRoutes = require('./routes/platforms');
 
+// Import new Cookie Settings routes
+const settingRoutes = require('./routes/settingRoutes');
+
 // Import new form uploads route
 const formUploadsRoutes = require('./routes/formUploads');
 
@@ -109,6 +112,9 @@ app.use('/api/enum-configs', authenticateToken, isAdmin, enumConfigsRoutes);
 
 // Mount Platform routes (admin only)
 app.use('/api/platforms', authenticateToken, isAdmin, platformRoutes);
+
+// Mount Cookie Settings routes (admin only)
+app.use('/api/settings', authenticateToken, isAdmin, settingRoutes);
 
 // Mount new form uploads route (needs authentication)
 app.use('/api/files/form-upload', authenticateToken, formUploadsRoutes);

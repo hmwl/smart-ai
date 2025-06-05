@@ -15,10 +15,19 @@
         @menu-item-click="onClickMenuItem"
         :level-indent="34"
       >
-        <a-menu-item key="user-management">
+        <!-- User Management Sub-menu -->
+        <a-sub-menu key="user-management-group">
           <template #icon><icon-user /></template>
-          用户管理
-        </a-menu-item>
+          <template #title>用户管理</template>
+          <a-menu-item key="account-management">
+            <template #icon><icon-user /></template>
+            账户管理
+          </a-menu-item>
+          <a-menu-item key="permission-management">
+            <template #icon><icon-tool /></template>
+            权限管理
+          </a-menu-item>
+        </a-sub-menu>
         
         <!-- AI Management Sub-menu -->
         <a-sub-menu key="ai-management-group">
@@ -110,10 +119,6 @@
             <template #icon><icon-file /></template>
             公告管理
           </a-menu-item>
-          <a-menu-item key="permission-management">
-            <template #icon><icon-tool /></template>
-            权限管理
-          </a-menu-item>
           <a-menu-item key="other-settings">
             <template #icon><icon-settings /></template>
             其他设置
@@ -175,7 +180,7 @@ const currentOpenKeys = ref([]);
 // Compute the target selected key based on current route name
 const targetSelectedKey = computed(() => {
   const keyMap = {
-      'UserManagement': 'user-management',
+      'UserManagement': 'account-management',
       'ApplicationManagement': 'application-management',
       'AiTypeManagement': 'ai-type-management',
       'AiManagement': 'ai-app-management',
@@ -195,7 +200,7 @@ const targetSelectedKey = computed(() => {
       'PermissionManagement': 'permission-management',
       'OtherSettings': 'other-settings',
   };
-  let selected = keyMap[route.name] || 'user-management';
+  let selected = keyMap[route.name] || 'account-management';
   
   return selected;
 });
@@ -207,6 +212,9 @@ watch(targetSelectedKey, (newKey) => {
   }
 
   const keysToOpen = [];
+  if (['account-management', 'permission-management'].includes(newKey)) {
+    keysToOpen.push('user-management-group');
+  }
   if (['page-management', 'menu-management', 'template-management'].includes(newKey)) {
     keysToOpen.push('website-management');
   }
@@ -219,7 +227,7 @@ watch(targetSelectedKey, (newKey) => {
   if (['inspiration-market', 'all-works'].includes(newKey)) {
     keysToOpen.push('works-management-group');
   }
-  if (['announce-management', 'permission-management', 'other-settings'].includes(newKey)) {
+  if (['announce-management', 'other-settings'].includes(newKey)) {
     keysToOpen.push('system-settings-group');
   }
 
@@ -236,7 +244,7 @@ const onCollapse = (collapsed, type) => {
 const onClickMenuItem = (key) => {
   // Map menu keys back to route names or paths
   const routeMap = {
-    'user-management': { name: 'UserManagement' },
+    'account-management': { name: 'UserManagement' },
     'application-management': { name: 'ApplicationManagement' },
     'ai-type-management': { name: 'AiTypeManagement' },
     'ai-app-management': { name: 'AiManagement' },
