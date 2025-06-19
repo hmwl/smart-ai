@@ -618,9 +618,16 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
     consumptionTransactionId = consumptionTransaction._id;
 
     // 4. Dynamically get and execute platform-specific service
-    const ServiceClass = platformServiceMap[application.platformType];
+    // Case-insensitive key lookup
+    const platformTypeFromApp = application.platformType;
+    const mapKeys = Object.keys(platformServiceMap);
+    const matchingKey = mapKeys.find(key => key.toLowerCase() === platformTypeFromApp.toLowerCase());
+    
+    const ServiceClass = matchingKey ? platformServiceMap[matchingKey] : null;
+
     if (!ServiceClass) {
       // This error will trigger the refund logic below
+      console.error(`[LAUNCH] ERROR: Service class not found for platform type: ${application.platformType}`);
       throw new Error(`平台类型 "${application.platformType}" 的服务处理程序未实现。`);
     }
 
@@ -658,6 +665,7 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
       });
 
     } catch (serviceExecutionError) {
+      console.error(`[LAUNCH] ERROR inside service execution: ${serviceExecutionError.stack}`);
       clientResponseMessage = serviceExecutionError.message || `应用 "${application.name}" 服务执行失败。`;
 
       // Refund logic: only refund if credits were actually deducted
@@ -702,6 +710,7 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
       }
     }
   } catch (outerError) {
+    console.error(`[LAUNCH] FATAL ERROR in outer try-catch: ${outerError.stack}`);
     
     // Avoid refund logic here if consumptionTransactionId is null, as credits weren't confirmed deducted.
     // If consumptionTransactionId exists, a more complex state might exist (e.g. DB error after deduction but before service call).

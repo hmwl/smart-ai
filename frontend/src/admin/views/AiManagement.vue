@@ -182,7 +182,7 @@
         <a-row :gutter="16">
 
           <a-col :span="6">
-            <a-form-item label="封面图片 (小于 500KB)" field="coverImage" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;" required>
+            <a-form-item label="封面图片 (小于 1MB)" field="coverImage" style="height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
               <div>
               <!-- Revision: Show preview image OR upload component -->
               <div style="width: 104px; height: 104px; margin-bottom: 8px; border: 1px dashed #d9d9d9; display: flex; align-items: center; justify-content: center;">
@@ -764,9 +764,9 @@ const beforeUpload = (file) => {
   if (!isImage) {
     Message.error('只能上传图片文件!');
   }
-  const isLt100k = file.size / 1024 < 500;
+  const isLt100k = file.size / 1024 < 1024;
   if (!isLt100k) {
-    Message.error('图片大小必须小于 500KB!');
+    Message.error('图片大小必须小于 1MB!');
   }
   return isImage && isLt100k;
 };

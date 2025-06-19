@@ -86,16 +86,132 @@
                 :widget-list="widgetList"
                 class=""
               />
-              <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成（{{ discountedCredits > 0 ? discountedCredits : '限时免费' }}）</a-button>
+              <!-- 任务状态显示 -->
+              <div v-if="isTaskRunning" class="task-status-section">
+                <a-alert
+                  :type="taskStatus === 'failed' ? 'error' : 'info'"
+                  :title="`任务状态: ${getStatusText(taskStatus)}`"
+                  :description="getTaskDescription()"
+                  show-icon
+                  closable
+                  @close="isTaskRunning = false"
+                />
+
+                <!-- 进度条 -->
+                <div v-if="taskProgress && taskProgress.percentage" class="task-progress">
+                  <a-progress
+                    :percent="taskProgress.percentage"
+                    :status="taskStatus === 'failed' ? 'danger' : 'normal'"
+                  />
+                  <div class="progress-text">
+                    {{ taskProgress.text_message || `步骤 ${taskProgress.current_step}/${taskProgress.total_steps}` }}
+                  </div>
+                </div>
+
+                <!-- 取消按钮 -->
+                <a-button
+                  v-if="['pending', 'running'].includes(taskStatus)"
+                  type="outline"
+                  status="warning"
+                  @click="cancelCurrentTask"
+                  class="w-full mt-2"
+                >
+                  取消任务
+                </a-button>
+              </div>
+
+              <!-- 生成按钮 -->
+              <a-button
+                type="primary"
+                v-if="canLaunch && !isTaskRunning"
+                @click="launchAppWithConfig"
+                class="w-full"
+              >
+                立即生成（{{ discountedCredits > 0 ? discountedCredits : '限时免费' }}）
+              </a-button>
             </a-card>
             <a-empty v-else description="此应用无需配置" class="empty-config-placeholder"/>
           </div>
 
-          <!-- Right Column: Result Content (Placeholder) -->
+          <!-- Right Column: Result Content -->
           <div class="app-result-column">
             <a-card class="details-card scrollable-card" title="结果内容" :bordered="false">
-              <p>此处将显示应用的生成结果。（待实现）</p>
-              <!-- Placeholder for future result display components -->
+              <!-- 任务结果显示 -->
+              <div v-if="taskResults && hasValidResults" class="task-results">
+                <div class="result-header">
+                  <a-tag color="green">任务完成</a-tag>
+                  <span class="result-time">{{ new Date().toLocaleString() }}</span>
+                </div>
+
+                <!-- 根据结果类型显示不同内容 -->
+                <div class="result-content">
+                  <!-- 图片结果 -->
+                  <div v-if="taskResults.images && taskResults.images.length > 0" class="result-images">
+                    <div v-for="(image, index) in taskResults.images" :key="index" class="result-image">
+                      <img
+                        :src="getImageUrl(image.url || image.downloadUrl)"
+                        :alt="`结果图片 ${index + 1}`"
+                        @error="handleImageError"
+                      />
+                      <div class="image-info">
+                        <span class="filename">{{ image.filename }}</span>
+                        <a :href="image.downloadUrl || image.url" target="_blank" class="download-link">
+                          <icon-download /> 下载
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 视频结果 -->
+                  <div v-if="taskResults.videos && taskResults.videos.length > 0" class="result-videos">
+                    <div v-for="(video, index) in taskResults.videos" :key="index" class="result-video">
+                      <video
+                        :src="getImageUrl(video.url || video.downloadUrl)"
+                        controls
+                        :alt="`结果视频 ${index + 1}`"
+                      />
+                      <div class="video-info">
+                        <span class="filename">{{ video.filename }}</span>
+                        <a :href="video.downloadUrl || video.url" target="_blank" class="download-link">
+                          <icon-download /> 下载
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 文本结果 -->
+                  <div v-if="taskResults.texts && taskResults.texts.length > 0" class="result-texts">
+                    <div v-for="(text, index) in taskResults.texts" :key="index" class="result-text">
+                      <pre>{{ text.content }}</pre>
+                    </div>
+                  </div>
+
+                  <!-- 原始JSON结果（调试用） -->
+                  <div v-if="taskResults && typeof taskResults === 'object'" class="result-json">
+                    <a-collapse>
+                      <a-collapse-item header="查看原始数据" key="raw">
+                        <pre>{{ JSON.stringify(taskResults, null, 2) }}</pre>
+                      </a-collapse-item>
+                    </a-collapse>
+                  </div>
+                </div>
+              </div>
+
+              <!-- 无结果时的占位符 -->
+              <div v-else-if="!isTaskRunning" class="no-results">
+                <a-empty description="暂无生成结果">
+                  <template #image>
+                    <icon-apps style="font-size: 64px; color: var(--color-text-3);" />
+                  </template>
+                </a-empty>
+              </div>
+
+              <!-- 任务运行中的占位符 -->
+              <div v-else class="task-running">
+                <a-spin :size="32">
+                  <div class="running-text">任务执行中，请稍候...</div>
+                </a-spin>
+              </div>
             </a-card>
           </div>
         </div>
@@ -121,9 +237,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, inject } from 'vue';
+import { ref, onMounted, computed, inject, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import apiClient, { getStaticAssetBaseUrl } from '../services/apiService';
+import taskService from '../services/taskService';
 import { Message, PageHeader as APageHeader, Spin as ASpin, Alert as AAlert, Card as ACard, Empty as AEmpty, Tag as ATag, Divider as ADivider, Tabs as ATabs, TabPane as ATabPane, Space as ASpace, Button as AButton, Modal } from '@arco-design/web-vue';
 import {
   IconApps, IconTag, IconLayers, IconStar, IconBookmark, IconSchedule, IconHistory,
@@ -147,6 +264,13 @@ const formSchema = ref(null);
 const dynamicFormModel = ref({});
 const dynamicFormRendererRef = ref(null);
 const widgetList = ref([]);
+
+// 任务状态管理
+const currentTask = ref(null);
+const taskStatus = ref(null);
+const taskProgress = ref(null);
+const isTaskRunning = ref(false);
+const taskResults = ref(null);
 
 const appId = computed(() => route.params.id);
 
@@ -212,10 +336,29 @@ const canLaunch = computed(() => {
   return true;
 });
 
-const getImageUrl = (relativePath) => {
-  if (!relativePath) return '';
+// 判断是否有有效的结果数据
+const hasValidResults = computed(() => {
+  if (!taskResults.value) return false;
+
+  // 检查是否有图片、视频或文本结果
+  const hasImages = taskResults.value.images && taskResults.value.images.length > 0;
+  const hasVideos = taskResults.value.videos && taskResults.value.videos.length > 0;
+  const hasTexts = taskResults.value.texts && taskResults.value.texts.length > 0;
+
+  return hasImages || hasVideos || hasTexts;
+});
+
+const getImageUrl = (imagePath) => {
+  if (!imagePath) return '';
+
+  // 如果是完整URL（如ComfyUI的API地址），直接返回
+  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+    return imagePath;
+  }
+
+  // 如果是相对路径（如应用封面图），拼接静态资源基础URL
   const staticAssetBase = getStaticAssetBaseUrl();
-  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+  const path = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
   return `${staticAssetBase}${path}`;
 };
 
@@ -539,23 +682,36 @@ const launchApp = async () => {
     okText: '确认生成',
     cancelText: '取消',
     onOk: async () => {
-      const finalLoadingMsg = Message.loading('正在执行应用，请稍候...');
+      const finalLoadingMsg = Message.loading('正在提交任务，请稍候...');
       try {
         // 打印最终提交的表单数据
         console.log('最终提交的表单数据:', JSON.stringify(processedFormConfigData, null, 2));
 
-        const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`, {
-          formConfig: processedFormConfigData // Use the processed data with filePaths
-        });
+        // 使用新的任务服务提交任务
+        const result = await taskService.submitTask(appId.value, processedFormConfigData);
 
-        const actualCreditsConsumed = response.data.creditsConsumed;
-        Message.success(response.data.message || `应用 "${appName}" 执行成功！${actualCreditsConsumed > 0 ? `已消耗 ${actualCreditsConsumed} 积分。` : ''}`);
+        if (result.success) {
+          currentTask.value = {
+            promptId: result.promptId,
+            taskId: result.taskId,
+            status: result.status,
+            applicationName: appName
+          };
 
-        if (refreshUserData) refreshUserData();
+          isTaskRunning.value = true;
+          taskStatus.value = result.status;
+
+          Message.success(`任务已成功提交！${result.creditsConsumed > 0 ? `已消耗 ${result.creditsConsumed} 积分。` : ''}`);
+
+          if (refreshUserData) refreshUserData();
+
+          // 开始监听任务状态
+          startTaskMonitoring(result.promptId);
+        }
 
       } catch (error) {
-        Message.error(error.response?.data?.message || error.message || '执行应用失败');
-        console.error('Error launching application:', error);
+        Message.error(error.message || '提交任务失败');
+        console.error('Error submitting task:', error);
       } finally {
         if(typeof finalLoadingMsg.close === 'function') finalLoadingMsg.close();
       }
@@ -568,10 +724,246 @@ const launchAppWithConfig = () => {
   launchApp();
 }
 
+// 状态文本辅助函数
+const getStatusText = (status) => {
+  const statusMap = {
+    'pending': '等待中',
+    'running': '执行中',
+    'completed': '已完成',
+    'failed': '失败',
+    'cancelled': '已取消'
+  };
+  return statusMap[status] || status;
+};
+
+const getTaskDescription = () => {
+  if (!currentTask.value) return '';
+
+  let description = `应用: ${currentTask.value.applicationName}`;
+
+  if (taskProgress.value) {
+    if (taskProgress.value.current_node_type) {
+      description += ` | 当前节点: ${taskProgress.value.current_node_type}`;
+    }
+    if (taskProgress.value.current_step && taskProgress.value.total_steps) {
+      description += ` | 进度: ${taskProgress.value.current_step}/${taskProgress.value.total_steps}`;
+    }
+  }
+
+  return description;
+};
+
+// 图片加载错误处理
+const handleImageError = (event) => {
+  console.error('图片加载失败:', event.target.src);
+  Message.error('图片加载失败，请检查网络连接或图片地址');
+};
+
+// 任务监听相关函数
+const startTaskMonitoring = (promptId) => {
+  // 使用轮询监控任务状态
+  pollTaskStatus(promptId);
+};
+
+// 移除WebSocket相关的handleTaskUpdate函数，改为在轮询中处理状态更新
+
+const pollTaskStatus = async (promptId) => {
+  try {
+    const finalStatus = await taskService.pollTaskUntilComplete(promptId, {
+      maxAttempts: 120,
+      interval: 3000, // 使用较短的轮询间隔以提供更好的用户体验
+      onProgress: (status) => {
+        // 更新任务状态和进度
+        taskStatus.value = status.status;
+        taskProgress.value = status.progress;
+
+        // 显示队列信息
+        if (status.queueInfo && status.queueInfo.position) {
+          Message.info(`任务在队列中排第 ${status.queueInfo.position} 位`);
+        }
+
+        // 如果状态更新中包含输出数据，直接使用
+        if (status.output_data) {
+          taskResults.value = status.output_data;
+        }
+      }
+    });
+
+    // 轮询完成后处理最终结果
+    isTaskRunning.value = false;
+
+    if (finalStatus.status === 'completed') {
+      Message.success('任务执行完成！');
+
+      if (finalStatus.output_data) {
+        taskResults.value = finalStatus.output_data;
+      } else {
+        // 添加短暂延迟，确保后端状态已更新
+        setTimeout(async () => {
+          await loadTaskResults(promptId);
+        }, 2000);
+      }
+    } else if (finalStatus.status === 'failed') {
+      Message.error(finalStatus.errorMessage || '任务执行失败');
+    }
+
+    // 清除当前任务引用
+    currentTask.value = null;
+
+  } catch (error) {
+    console.error('轮询任务状态失败:', error);
+    Message.error('任务状态查询失败');
+    isTaskRunning.value = false;
+    currentTask.value = null;
+  }
+};
+
+const loadTaskResults = async (promptId, retryCount = 0) => {
+  try {
+    const result = await taskService.getTaskResult(promptId);
+    if (result.success) {
+      // 处理不同格式的结果数据
+      let processedData = result.data;
+
+      // 如果数据是标准格式（包含images数组），直接使用
+      if (processedData && processedData.images) {
+        taskResults.value = processedData;
+      }
+      // 如果数据是ComfyUI历史格式，需要转换
+      else if (processedData && typeof processedData === 'object') {
+        taskResults.value = processComfyUIHistoryData(processedData, promptId);
+      }
+      // 其他情况，保持原样
+      else {
+        taskResults.value = processedData;
+      }
+
+      Message.success('任务结果已加载');
+    }
+  } catch (error) {
+    console.error('加载任务结果失败:', error);
+
+    // 如果是任务尚未完成的错误，且重试次数少于3次，则重试
+    if (error.message && error.message.includes('任务尚未完成') && retryCount < 3) {
+      console.log(`任务可能刚完成，${3 - retryCount}秒后重试...`);
+      setTimeout(() => {
+        loadTaskResults(promptId, retryCount + 1);
+      }, 3000);
+    } else {
+      Message.error('加载任务结果失败');
+    }
+  }
+};
+
+// 处理ComfyUI历史数据格式
+const processComfyUIHistoryData = (historyData, promptId) => {
+  const result = {
+    images: [],
+    videos: [],
+    texts: [],
+    raw_outputs: historyData
+  };
+
+  // 查找对应的任务数据
+  const taskData = historyData[promptId];
+  if (!taskData || !taskData.outputs) {
+    return result;
+  }
+
+  // 遍历输出节点
+  Object.keys(taskData.outputs).forEach(nodeId => {
+    const nodeOutput = taskData.outputs[nodeId];
+
+    // 处理图片
+    if (nodeOutput.images && Array.isArray(nodeOutput.images)) {
+      nodeOutput.images.forEach(image => {
+        const proxyUrl = buildProxyUrl(promptId, nodeId, image);
+        const downloadUrl = buildDownloadUrl(promptId, nodeId, image);
+
+        result.images.push({
+          nodeId: nodeId,
+          filename: image.filename,
+          subfolder: image.subfolder || '',
+          type: image.type || 'temp',
+          url: proxyUrl,
+          downloadUrl: downloadUrl,
+          original: image
+        });
+      });
+    }
+
+    // 处理视频
+    if (nodeOutput.videos && Array.isArray(nodeOutput.videos)) {
+      nodeOutput.videos.forEach(video => {
+        const proxyUrl = buildProxyUrl(promptId, nodeId, video);
+        const downloadUrl = buildDownloadUrl(promptId, nodeId, video);
+
+        result.videos.push({
+          nodeId: nodeId,
+          filename: video.filename,
+          subfolder: video.subfolder || '',
+          type: video.type || 'temp',
+          url: proxyUrl,
+          downloadUrl: downloadUrl,
+          original: video
+        });
+      });
+    }
+  });
+
+  return result;
+};
+
+// 构建代理URL
+const buildProxyUrl = (promptId, nodeId, fileInfo) => {
+  const { filename, subfolder = '', type = 'temp' } = fileInfo;
+  const params = new URLSearchParams({
+    subfolder: subfolder,
+    type: type
+  });
+  return `/api/proxy/${promptId}/${nodeId}/${filename}?${params.toString()}`;
+};
+
+// 构建下载URL
+const buildDownloadUrl = (promptId, nodeId, fileInfo) => {
+  const { filename, subfolder = '', type = 'temp' } = fileInfo;
+  const params = new URLSearchParams({
+    subfolder: subfolder,
+    type: type
+  });
+  return `/api/proxy/download/${promptId}/${nodeId}/${filename}?${params.toString()}`;
+};
+
+const cancelCurrentTask = async () => {
+  if (!currentTask.value) return;
+
+  try {
+    const result = await taskService.cancelTask(currentTask.value.promptId);
+    if (result.success) {
+      isTaskRunning.value = false;
+      taskStatus.value = 'cancelled';
+      Message.success('任务已取消');
+
+      // 清除当前任务引用
+      currentTask.value = null;
+    }
+  } catch (error) {
+    console.error('取消任务失败:', error);
+    Message.error('取消任务失败');
+  }
+};
+
 onMounted(() => {
   if (appId.value) {
     fetchApplicationDetail();
     fetchWidgetList();
+  }
+});
+
+onUnmounted(() => {
+  // 清理任务相关状态
+  if (currentTask.value) {
+    currentTask.value = null;
   }
 });
 
@@ -747,5 +1139,150 @@ onMounted(() => {
 
 .results-tabs .arco-tabs-content {
   padding-top: 16px;
+}
+
+/* 任务状态相关样式 */
+.task-status-section {
+  margin-bottom: 16px;
+}
+
+.task-progress {
+  margin-top: 12px;
+}
+
+.progress-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--color-text-3);
+  text-align: center;
+}
+
+.task-results {
+  padding: 16px 0;
+}
+
+.result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--color-border-2);
+}
+
+.result-time {
+  font-size: 12px;
+  color: var(--color-text-3);
+}
+
+.result-content {
+  margin-top: 16px;
+}
+
+.result-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.result-image {
+  border: 1px solid var(--color-border-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-bg-1);
+}
+
+.result-image img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.image-info {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-bg-2);
+}
+
+.filename {
+  font-size: 12px;
+  color: var(--color-text-2);
+  flex: 1;
+  margin-right: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.download-link {
+  font-size: 12px;
+  color: var(--color-primary-6);
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.download-link:hover {
+  color: var(--color-primary-5);
+}
+
+.result-videos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+}
+
+.result-video {
+  border: 1px solid var(--color-border-2);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--color-bg-1);
+}
+
+.result-video video {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.video-info {
+  padding: 8px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--color-bg-2);
+}
+
+.result-texts {
+  margin-top: 16px;
+}
+
+.result-text pre,
+.result-json pre {
+  background: var(--color-bg-3);
+  padding: 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.no-results,
+.task-running {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  flex-direction: column;
+}
+
+.running-text {
+  margin-top: 16px;
+  color: var(--color-text-2);
 }
 </style>

@@ -146,6 +146,15 @@ app.use('/api/tags', tagsRouter);
 // 注册 comfyui 路由
 app.use('/api/comfyui', require('./routes/comfyui'));
 
+// 注册简化代理路由（需要在认证中间件之前注册，避免被拦截）
+app.use('/api/proxy', require('./routes/simpleProxy'));
+
+// 注册媒体代理路由
+// app.use('/api/media', require('./routes/mediaProxy'));
+
+// 注册统一化平台API路由
+app.use('/api', authenticateToken, require('./routes/platformApi'));
+
 // 注册 notifications 路由
 const notificationsRouter = require('./routes/notifications');
 app.use('/api/notifications', notificationsRouter);

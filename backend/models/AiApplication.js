@@ -45,6 +45,10 @@ const aiApplicationSchema = new Schema({
     type: Schema.Types.Mixed, // To store potentially complex/nested JSON for form structure
     default: null // Or {} if you prefer an empty object as default
   },
+  workflowJson: {
+    type: Schema.Types.Mixed, // For ComfyUI workflow specifically
+    default: null
+  },
   status: {
     type: String,
     enum: ['active', 'inactive', 'archived'],
