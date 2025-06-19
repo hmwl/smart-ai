@@ -77,8 +77,9 @@
              </template>
            </a-table-column>
            <!-- TODO: Add Actions column (Edit, Delete, Change Status) -->
-           <a-table-column title="操作" :width="150" fixed="right">
+           <a-table-column title="操作" :width="200" fixed="right">
              <template #cell="{ record }">
+                <a-button type="text" status="normal" size="mini" @click="openDetailsModal(record)">详情</a-button>
                 <a-button type="text" status="warning" size="mini" @click="editUser(record)">编辑</a-button>
                 <a-tooltip 
                   v-if="record.username === 'admin'" 
@@ -192,6 +193,64 @@
       </a-form>
     </a-modal>
 
+    <!-- User Details Modal -->
+    <a-modal
+      :visible="detailsModalVisible"
+      :title="`用户详情：${selectedUserDetails?.user?.username}`"
+      @cancel="handleDetailsCancel"
+      :footer="null"
+      :width="800"
+    >
+      <div v-if="selectedUserDetails">
+        <a-descriptions :column="2" bordered>
+          <a-descriptions-item label="用户名">{{ selectedUserDetails.user.username }}</a-descriptions-item>
+          <a-descriptions-item label="邮箱">{{ selectedUserDetails.user.email || '-' }}</a-descriptions-item>
+          <a-descriptions-item label="管理员">
+            <a-tag :color="selectedUserDetails.user.isAdmin ? 'blue' : 'gray'">
+              {{ selectedUserDetails.user.isAdmin ? '是' : '否' }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="状态">
+            <a-tag :color="selectedUserDetails.user.status === 'active' ? 'green' : 'red'">
+              {{ selectedUserDetails.user.status === 'active' ? '正常' : '禁用' }}
+            </a-tag>
+          </a-descriptions-item>
+          <a-descriptions-item label="积分余额">{{ selectedUserDetails.user.creditsBalance }}</a-descriptions-item>
+          <a-descriptions-item label="注册时间">{{ formatDateCN(selectedUserDetails.user.createdAt) }}</a-descriptions-item>
+        </a-descriptions>
+
+        <a-divider>登录历史</a-divider>
+        <a-table
+          :data="selectedUserDetails ? selectedUserDetails.loginHistory : []"
+          :pagination="historyPagination"
+          @page-change="handleHistoryPageChange"
+          @page-size-change="handleHistoryPageSizeChange"
+          row-key="createdAt"
+          size="small"
+          :scroll="{ y: '300px' }"
+        >
+          <template #columns>
+            <a-table-column title="登录时间" data-index="createdAt" :width="200">
+              <template #cell="{ record }">{{ formatDateCN(record.createdAt) }}</template>
+            </a-table-column>
+            <a-table-column title="IP 地址" data-index="ip" :width="150"></a-table-column>
+            <a-table-column title="操作系统" data-index="os.name">
+              <template #cell="{ record }">
+                <a-tag :color="getOsTagColor(record.os.name)">{{ record.os.name || '其他' }}</a-tag> {{ record.os.version }}
+              </template>
+            </a-table-column>
+            <a-table-column title="浏览器" data-index="browser.name">
+                <template #cell="{ record }">
+                    {{ record.browser.name }} {{ record.browser.version }}
+                    <span v-if="record.cpu && record.cpu.architecture">({{ record.cpu.architecture }})</span>
+                </template>
+            </a-table-column>
+          </template>
+        </a-table>
+      </div>
+       <a-spin v-else :loading="true" tip="正在加载详情..." class="w-full" />
+    </a-modal>
+
   </div>
 </template>
 
@@ -215,7 +274,9 @@ import {
     Switch as ASwitch,
     Space as ASpace,
     InputSearch as AInputSearch,
-    Divider as ADivider
+    Divider as ADivider,
+    Descriptions as ADescriptions,
+    DescriptionsItem as ADescriptionsItem
 } from '@arco-design/web-vue';
 import { IconRefresh, IconPlus, IconEdit, IconDelete } from '@arco-design/web-vue/es/icon';
 import { debounce } from 'lodash-es';
@@ -233,6 +294,17 @@ const isSubmitting = ref(false);
 const searchTerm = ref('');
 const selectedStatus = ref(undefined); // Filter state for status (undefined means all)
 const selectedIsAdmin = ref(undefined); // Filter state for isAdmin (undefined means all)
+const detailsModalVisible = ref(false); // For details modal
+const selectedUserDetails = ref(null); // For details modal
+
+const historyPagination = reactive({
+  current: 1,
+  pageSize: 10,
+  total: 0,
+  showTotal: true,
+  showPageSize: true,
+  pageSizeOptions: [5, 10, 20, 50],
+});
 
 const pagination = reactive({
   current: 1,
@@ -358,6 +430,21 @@ const handlePageSizeChange = (pageSize) => {
   pagination.pageSize = pageSize;
   pagination.current = 1; // Reset to first page
   fetchUsers();
+};
+
+const handleHistoryPageChange = (page) => {
+  historyPagination.current = page;
+  if(currentUser.value) {
+    fetchLoginHistory(currentUser.value._id);
+  }
+};
+
+const handleHistoryPageSizeChange = (pageSize) => {
+  historyPagination.pageSize = pageSize;
+  historyPagination.current = 1;
+  if(currentUser.value) {
+    fetchLoginHistory(currentUser.value._id);
+  }
 };
 
 // --- Modal Logic ---
@@ -543,6 +630,78 @@ const handleCreditModificationTypeChange = (value) => {
     userForm.value.creditModification.reason = '';
     // Trigger validation or clear errors for amount and reason if needed
     userFormRef.value?.clearValidate(['creditModification.amount', 'creditModification.reason']);
+  }
+};
+
+// --- Details Modal Logic ---
+const fetchLoginHistory = async (userId) => {
+    if (!selectedUserDetails.value) return; // Ensure user details object exists
+    isLoading.value = true;
+    try {
+        const params = {
+            page: historyPagination.current,
+            limit: historyPagination.pageSize,
+        };
+        const response = await apiService.get(`/users/${userId}/login-history`, { params });
+        if (response.data) {
+            selectedUserDetails.value.loginHistory = response.data.data;
+            historyPagination.total = response.data.totalRecords;
+        }
+    } catch (error) {
+        console.error('Error fetching user login history:', error);
+        Message.error('获取用户登录历史失败');
+        if (selectedUserDetails.value) {
+            selectedUserDetails.value.loginHistory = [];
+        }
+        historyPagination.total = 0;
+    } finally {
+        isLoading.value = false;
+    }
+};
+
+const openDetailsModal = async (user) => {
+  detailsModalVisible.value = true;
+  selectedUserDetails.value = null; // Reset previous data
+  currentUser.value = user; // Set current user for pagination handlers
+  historyPagination.current = 1; // Reset pagination for history table
+  isLoading.value = true;
+  try {
+    const response = await apiService.get(`/users/${user._id}/details`);
+    // Initialize with user data and an empty history array
+    selectedUserDetails.value = { ...response.data, loginHistory: [] };
+    // Fetch the first page of login history
+    await fetchLoginHistory(user._id);
+  } catch (error) {
+    console.error('Error fetching user details:', error);
+    Message.error('获取用户详情失败');
+    detailsModalVisible.value = false; // Close modal on error
+  } finally {
+    isLoading.value = false;
+  }
+};
+
+const handleDetailsCancel = () => {
+  detailsModalVisible.value = false;
+  selectedUserDetails.value = null;
+};
+
+const getOsTagColor = (osName) => {
+  if (!osName) return 'gray';
+  const name = osName.toLowerCase();
+  if (name.includes('windows')) {
+    return 'blue';
+  } else if (name.includes('mac') || name.includes('osx')) {
+    return 'arcoblue';
+  } else if (name.includes('iphone')) {
+    return 'purple';
+  } else if (name.includes('ipad')) {
+    return 'pinkpurple';
+  } else if (name.includes('linux') || name.includes('ubuntu')) {
+    return 'orange';
+  } else if (name.includes('android')) {
+    return 'green';
+  } else {
+    return 'gray';
   }
 };
 

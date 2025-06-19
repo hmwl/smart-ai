@@ -4,6 +4,7 @@ const cors = require('cors');
 const path = require('path'); // Keep path, might be needed for other things
 const mongoose = require('mongoose');
 const Application = require('./models/Application'); // Needed for /app route
+// const useragent = require('express-useragent'); // No longer needed
 
 // Import authentication middleware
 const authenticateToken = require('./middleware/authenticateToken');
@@ -16,6 +17,7 @@ const PORT = process.env.PORT || 3000;
 app.use(cors()); // Consider restricting CORS origin in production
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// app.use(useragent.express()); // No longer needed
 
 // --- Serve uploaded files statically ---
 // Make the /uploads directory accessible via HTTP

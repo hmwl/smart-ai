@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User'); // 引入 User 模型
+const LoginHistory = require('../models/LoginHistory'); // 引入 LoginHistory 模型
 const CreditSetting = require('../models/CreditSetting'); // 引入 CreditSetting 模型
 const bcrypt = require('bcrypt'); // 引入 bcrypt
 const mongoose = require('mongoose'); // 引入 mongoose
@@ -55,6 +56,58 @@ router.get('/', authenticateToken, isAdmin, async (req, res) => {
   } catch (err) {
     console.error('Error fetching users:', err);
     res.status(500).json({ message: '获取用户列表失败' });
+  }
+});
+
+// GET /api/users/:id/details - 获取单个用户的详细信息和登录历史 (管理员)
+router.get('/:id/details', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+
+    const user = await User.findById(userId).select('-passwordHash -refreshToken');
+    if (!user) {
+      return res.status(404).json({ message: '未找到指定用户' });
+    }
+
+    // const loginHistory = await LoginHistory.find({ user: userId })
+    //   .sort({ createdAt: -1 })
+    //   .limit(50); // Limit to the last 50 logins for performance
+
+    res.json({
+      user,
+      // loginHistory, // Login history is now fetched from a separate endpoint
+    });
+
+  } catch (err) {
+    console.error(`Error fetching user details for ${req.params.id}:`, err);
+    res.status(500).json({ message: '获取用户详情失败' });
+  }
+});
+
+// GET /api/users/:id/login-history - 分页获取单个用户的登录历史 (管理员)
+router.get('/:id/login-history', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const totalRecords = await LoginHistory.countDocuments({ user: userId });
+    const loginHistory = await LoginHistory.find({ user: userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      data: loginHistory,
+      totalRecords: totalRecords,
+      currentPage: page,
+      totalPages: Math.ceil(totalRecords / limit)
+    });
+
+  } catch (err) {
+    console.error(`Error fetching user login history for ${req.params.id}:`, err);
+    res.status(500).json({ message: '获取用户登录历史失败' });
   }
 });
 

@@ -3,6 +3,8 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const LoginHistory = require('../models/LoginHistory'); // 引入 LoginHistory 模型
+const uaparser = require('ua-parser-js'); // 引入 ua-parser-js
 const crypto = require('crypto'); // 用于生成随机字符串
 const ms = require('ms'); // 用于解析时间字符串，如 '7d'
 const authenticateToken = require('../middleware/authenticateToken'); // 引入认证中间件
@@ -96,6 +98,25 @@ router.post('/login', async (req, res) => {
         }
     );
     // --- End Revision ---
+
+    // --- Record Login History ---
+    try {
+      const ua = uaparser(req.headers['user-agent']);
+      const loginHistory = new LoginHistory({
+        user: user._id,
+        ip: req.ip || req.connection.remoteAddress,
+        userAgent: ua.ua,
+        browser: ua.browser, // { name, version }
+        os: ua.os, // { name, version }
+        device: ua.device, // { vendor, model, type }
+        cpu: ua.cpu, // { architecture }
+      });
+      await loginHistory.save();
+    } catch (historyError) {
+      console.error('Failed to save login history:', historyError);
+      // Do not block login process if history fails to save
+    }
+    // --- End Record Login History ---
 
     // 6. 返回 Access Token, Refresh Token 和用户信息
     res.json({
@@ -212,6 +233,25 @@ router.post('/client/login', async (req, res) => {
     if (!isMatch) {
       return res.status(401).json({ message: '用户名或密码错误' });
     }
+
+    // --- Record Login History ---
+    try {
+      const ua = uaparser(req.headers['user-agent']);
+      const loginHistory = new LoginHistory({
+        user: user._id,
+        ip: req.ip || req.connection.remoteAddress,
+        userAgent: ua.ua,
+        browser: ua.browser, // { name, version }
+        os: ua.os, // { name, version }
+        device: ua.device, // { vendor, model, type }
+        cpu: ua.cpu, // { architecture }
+      });
+      await loginHistory.save();
+    } catch (historyError) {
+      console.error('Failed to save login history:', historyError);
+      // Do not block login process if history fails to save
+    }
+    // --- End Record Login History ---
 
     // 5. 密码匹配，生成 Access Token (JWT)
     const jwtSecret = process.env.JWT_SECRET;
