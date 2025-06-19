@@ -48,4 +48,40 @@ router.post('/cookie', authenticateToken, isAdmin, async (req, res) => {
   }
 });
 
+/**
+ * @route   GET /api/settings/email
+ * @desc    Get email server settings
+ * @access  Private (Admin)
+ */
+router.get('/email', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const settings = await settingService.getEmailSettings();
+    res.status(200).json(settings);
+  } catch (error) {
+    console.error('[Route] Error in GET /api/settings/email: ', error.message);
+    res.status(500).json({ 
+      message: 'Failed to retrieve email settings.', 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * @route   POST /api/settings/email
+ * @desc    Update email server settings
+ * @access  Private (Admin)
+ */
+router.post('/email', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const updatedSettings = await settingService.updateEmailSettings(req.body);
+    res.status(200).json({ message: 'Email settings updated successfully', settings: updatedSettings });
+  } catch (error) {
+    console.error('[Route] Error in POST /api/settings/email: ', error.message);
+    res.status(500).json({ 
+      message: 'Failed to update email settings.', 
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router; 

@@ -123,7 +123,11 @@ app.use('/api/files/form-upload', authenticateToken, formUploadsRoutes);
 app.use('/api/ai-widgets', authenticateToken, isAdmin, aiWidgetRoutes);
 
 // Mount authenticated client routes (需要身份验证但不需要管理员权限)
-app.use('/api/auth/client', authenticateToken, authClientRoutes);
+// app.use('/api/auth/client', authenticateToken, authClientRoutes);
+// The line above is incorrect as it makes public routes like register/login require a token.
+// We will mount the client auth routes without a global token middleware,
+// as the token protection should be handled on a per-route basis within authClient.js itself.
+app.use('/api/auth/client', authClientRoutes);
 
 // Mount announcement routes (admin only)
 app.use('/api/announcements', authenticateToken, isAdmin, announcementRoutes);

@@ -42,6 +42,22 @@ const userSchema = new Schema({
     type: Boolean,
     default: false // 默认不是管理员
   },
+  verificationCode: { // For email verification code
+    type: String,
+    default: null
+  },
+  verificationCodeExpires: { // Expiration for the code
+    type: Date,
+    default: null
+  },
+  resetPasswordToken: { // For password reset
+    type: String,
+    default: null
+  },
+  resetPasswordTokenExpires: { // Expiration for the reset token
+    type: Date,
+    default: null
+  },
   lastLoginAt: {
     type: Date,
     default: null
@@ -74,11 +90,24 @@ userSchema.pre('save', async function (next) {
       this._id = generateCustomId('US');
     }
   }
+
+  // Hash password if it has been modified (or is new)
+  if (this.isModified('passwordHash') || this.isNew) {
+    try {
+      const salt = await bcrypt.genSalt(10);
+      this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+    } catch (error) {
+      return next(error);
+    }
+  }
+
   next();
 });
 
-// TODO: 添加密码哈希的 pre-save hook
-// userSchema.pre('save', async function(next) { ... });
+// Method to compare password
+userSchema.methods.comparePassword = async function(candidatePassword) {
+  return bcrypt.compare(candidatePassword, this.passwordHash);
+};
 
 const User = mongoose.model('User', userSchema);
 

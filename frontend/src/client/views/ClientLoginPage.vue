@@ -14,6 +14,10 @@
         <a-form-item>
           <a-button type="primary" html-type="submit" long :loading="loading">登 录</a-button>
         </a-form-item>
+        <div class="flex justify-between items-center">
+          <router-link to="/register">还没有账号？立即注册</router-link>
+          <router-link to="/forgot-password">忘记密码？</router-link>
+        </div>
       </a-form>
     </div>
   </div>

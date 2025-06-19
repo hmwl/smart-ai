@@ -2,13 +2,32 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import ClientLayout from '../layouts/ClientLayout.vue';
 // Assuming RouterViewLayout.vue will be created or AiApplicationsPage can act as layout
 import RouterViewLayout from '../layouts/RouterViewLayout.vue'; 
+import ClientLoginPage from '../views/ClientLoginPage.vue';
+import ClientRegisterPage from '../views/ClientRegisterPage.vue';
+import ForgotPasswordPage from '../views/ForgotPasswordPage.vue';
+import ResetPasswordPage from '../views/ResetPasswordPage.vue';
 
 const routes = [
   {
     path: '/login',
     name: 'ClientLogin',
-    component: () => import('../views/ClientLoginPage.vue'),
+    component: ClientLoginPage,
     meta: { requiresGuest: true } // For redirecting if already logged in
+  },
+  {
+    path: '/register',
+    name: 'ClientRegister',
+    component: ClientRegisterPage
+  },
+  {
+    path: '/forgot-password',
+    name: 'ForgotPassword',
+    component: ForgotPasswordPage
+  },
+  {
+    path: '/reset-password',
+    name: 'ResetPassword',
+    component: ResetPasswordPage
   },
   {
     path: '/',

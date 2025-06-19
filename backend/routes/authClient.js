@@ -6,6 +6,9 @@ const AiApplication = require('../models/AiApplication');
 const PromotionActivity = require('../models/PromotionActivity');
 const User = require('../models/User');
 const CreditTransaction = require('../models/CreditTransaction');
+const jwt = require('jsonwebtoken');
+const settingService = require('../services/settingService');
+const authClientService = require('../services/authClientService');
 
 // Helper function to attach active promotions to applications
 const attachActivePromotions = async (application) => {
@@ -54,6 +57,90 @@ const attachActivePromotions = async (application) => {
   }
   return application;
 };
+
+/**
+ * @route   POST /api/auth/client/send-registration-code
+ * @desc    Send a registration code to the user's email
+ * @access  Public
+ */
+router.post('/send-registration-code', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ message: '需要邮箱地址。' });
+    }
+    try {
+        await authClientService.sendRegistrationCode(email);
+        res.status(200).json({ message: '验证码已发送至您的邮箱。' });
+    } catch (error) {
+        console.error('[Route] Error in POST /api/auth/client/send-registration-code: ', error.message);
+        res.status(400).json({ message: error.message });
+    }
+});
+
+/**
+ * @route   POST /api/auth/client/register
+ * @desc    Register a new client user
+ * @access  Public
+ */
+router.post('/register', async (req, res) => {
+    const { username, email, password, code } = req.body;
+
+    if (!username || !email || !password || !code) {
+        return res.status(400).json({ message: '请填写所有必填项，包括验证码。' });
+    }
+
+    try {
+        const newUser = await authClientService.registerUser(username, email, password, code);
+        res.status(201).json({ 
+            message: '注册成功。',
+            user: { id: newUser._id, username: newUser.username }
+        });
+    } catch (error) {
+        console.error('[Route] Error in POST /api/auth/client/register: ', error.message);
+        res.status(400).json({ message: error.message });
+    }
+});
+
+/**
+ * @route   POST /api/auth/client/forgot-password
+ * @desc    Initiate password reset
+ * @access  Public
+ */
+router.post('/forgot-password', async (req, res) => {
+    const { email } = req.body;
+    if (!email) {
+        return res.status(400).json({ message: '需要邮箱地址。' });
+    }
+
+    try {
+        await authClientService.forgotPassword(email);
+        res.status(200).json({ message: '如果该邮箱存在于我们的系统中，一封密码重置邮件已经发送到您的邮箱。' });
+    } catch (error) {
+        console.error('[Route] Error in POST /api/auth/client/forgot-password: ', error.message);
+        // Do not reveal internal errors for this endpoint for security reasons
+        res.status(200).json({ message: '如果该邮箱存在于我们的系统中，一封密码重置邮件已经发送到您的邮箱。' });
+    }
+});
+
+/**
+ * @route   POST /api/auth/client/reset-password
+ * @desc    Reset password with a token
+ * @access  Public
+ */
+router.post('/reset-password', async (req, res) => {
+    const { token, password } = req.body;
+    if (!token || !password) {
+        return res.status(400).json({ message: '需要令牌和新密码。' });
+    }
+
+    try {
+        await authClientService.resetPassword(token, password);
+        res.status(200).json({ message: '密码重置成功，您现在可以使用新密码登录。' });
+    } catch (error) {
+        console.error('[Route] Error in POST /api/auth/client/reset-password: ', error.message);
+        res.status(400).json({ message: error.message });
+    }
+});
 
 // GET /api/auth/client/ai-widgets - Get enabled AI widgets for authenticated client use
 router.get('/ai-widgets', async (req, res) => {

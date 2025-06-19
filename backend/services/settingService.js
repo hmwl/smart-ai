@@ -3,6 +3,17 @@ const Setting = require('../models/Setting');
 // Default values if settings are not found in the DB
 const DEFAULT_USER_COOKIE_EXPIRE = { value: 7, unit: 'd', name: 'User Cookie Expiration', description: 'Frontend user account cookie expiration time.' };
 const DEFAULT_ADMIN_COOKIE_EXPIRE = { value: 1, unit: 'd', name: 'Admin Cookie Expiration', description: 'Admin panel account cookie expiration time.' };
+const DEFAULT_EMAIL_SETTINGS = {
+  host: '',
+  port: 465,
+  secure: true,
+  auth: {
+    user: '',
+    pass: '',
+  },
+  name: 'Email Server Settings',
+  description: 'Settings for the email server (SMTP) used for sending emails like registration verification.'
+};
 
 /**
  * Retrieves cookie expiration settings for both user and admin.
@@ -131,5 +142,79 @@ exports.getCookieExpirationString = async (key) => {
     if (key === 'userCookieExpire') return `${DEFAULT_USER_COOKIE_EXPIRE.value}${DEFAULT_USER_COOKIE_EXPIRE.unit}`;
     if (key === 'adminCookieExpire') return `${DEFAULT_ADMIN_COOKIE_EXPIRE.value}${DEFAULT_ADMIN_COOKIE_EXPIRE.unit}`;
     return '1h';
+  }
+};
+
+/**
+ * Retrieves email server settings.
+ * If the setting is not found in the database, it returns a default value.
+ */
+exports.getEmailSettings = async () => {
+  try {
+    let emailSetting = await Setting.findOne({ key: 'emailSettings' });
+
+    if (!emailSetting) {
+      emailSetting = await Setting.create({
+        key: 'emailSettings',
+        value: {
+          host: DEFAULT_EMAIL_SETTINGS.host,
+          port: DEFAULT_EMAIL_SETTINGS.port,
+          secure: DEFAULT_EMAIL_SETTINGS.secure,
+          auth: { ...DEFAULT_EMAIL_SETTINGS.auth }
+        },
+        name: DEFAULT_EMAIL_SETTINGS.name,
+        description: DEFAULT_EMAIL_SETTINGS.description
+      });
+      if (!emailSetting) {
+        console.error('[Service] CRITICAL: Failed to create default email settings!');
+        throw new Error('Failed to initialize email settings in database.');
+      }
+    }
+    
+    return emailSetting.value;
+  } catch (error) {
+    console.error('[Service] Error in getEmailSettings:', error.message, error.stack);
+    throw error;
+  }
+};
+
+/**
+ * Updates email server settings.
+ * @param {Object} settingsData - An object containing settings to update.
+ */
+exports.updateEmailSettings = async (settingsData) => {
+  const { host, port, secure, auth } = settingsData;
+  const errors = [];
+
+  try {
+    if (settingsData) {
+      // Basic validation
+      if (typeof host !== 'string' || host.trim() === '') errors.push('Host is required.');
+      if (typeof port !== 'number' || port <= 0) errors.push('Port must be a positive number.');
+      if (typeof auth !== 'object' || auth === null) errors.push('Auth object is required.');
+      if (typeof auth.user !== 'string' || auth.user.trim() === '') errors.push('Auth user is required.');
+      // password can be empty string if user wants to clear it
+      if (typeof auth.pass !== 'string') errors.push('Auth password must be a string.');
+
+      if (errors.length > 0) {
+        throw new Error(errors.join(' '));
+      }
+
+      const updated = await Setting.findOneAndUpdate(
+        { key: 'emailSettings' },
+        {
+          value: { host, port, secure, auth },
+          name: DEFAULT_EMAIL_SETTINGS.name,
+          description: DEFAULT_EMAIL_SETTINGS.description
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+      return updated.value;
+    } else {
+      throw new Error('No settings provided to update.');
+    }
+  } catch (error) {
+    console.error('[Service] Error in updateEmailSettings:', error.message, error.stack);
+    throw error;
   }
 }; 
