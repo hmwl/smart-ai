@@ -13,6 +13,7 @@
           <a-option value="single">单页模板</a-option>
           <a-option value="list">列表模板</a-option>
           <a-option value="item">内容模板</a-option>
+          <a-option value="email">邮件模板</a-option>
         </a-select>
         <a-button type="primary" @click="openCreateModal">
              <template #icon><icon-plus /></template> 添加模板
@@ -42,8 +43,8 @@
            <a-table-column title="名称" data-index="name" :width="200" :sortable="{ sortDirections: ['ascend', 'descend'] }"></a-table-column>
            <a-table-column title="类型" data-index="type" :width="150">
                 <template #cell="{ record }">
-                     <a-tag :color="record.type === 'single' ? 'blue' : (record.type === 'list' ? 'green' : 'purple')">
-                        {{ { single: '单页模板', list: '列表模板', item: '内容模板' }[record.type] || record.type }}
+                     <a-tag :color="getTemplateTypeTagColor(record.type)">
+                        {{ getTemplateTypeName(record) }}
                      </a-tag>
                  </template>
            </a-table-column>
@@ -97,23 +98,49 @@
             </a-col>
              <a-col :span="12">
                  <a-form-item field="type" label="模板类型" :rules="[{ required: true, message: '请选择模板类型' }]" validate-trigger="change">
-                    <a-select v-model="templateForm.type" placeholder="选择模板适用的页面类型">
+                    <a-select v-model="templateForm.type" placeholder="选择模板适用的页面类型" @change="onTemplateTypeChange">
                         <a-option value="single">单页模板 (Single Page)</a-option>
                         <a-option value="list">列表模板 (Collection List)</a-option>
                         <a-option value="item">内容模板 (Collection Item)</a-option>
+                        <a-option value="email">邮件模板 (Email)</a-option>
                     </a-select>
                 </a-form-item>
             </a-col>
         </a-row>
         
-        <a-form-item field="content" label="模板内容 (HTML/Vue 代码)" :rules="[{ required: true, message: '请输入模板内容' }]"
+        <a-row v-if="templateForm.type === 'email'" :gutter="16">
+          <a-col :span="12">
+            <a-form-item field="emailSubType" label="邮件类型" :rules="[{ required: true, message: '请选择邮件类型' }]">
+              <a-select v-model="templateForm.emailSubType" placeholder="选择具体邮件场景">
+                <a-option value="verification_code">注册验证码</a-option>
+                <a-option value="password_reset">找回密码</a-option>
+                <!-- Add other email types here in the future -->
+              </a-select>
+            </a-form-item>
+          </a-col>
+        </a-row>
+        
+        <a-row v-if="templateForm.type === 'email'" :gutter="16">
+          <a-col :span="12">
+            <a-form-item field="emailConfig.from" label="发件人名称 (From Name)" :rules="[{ required: true, message: '请输入发件人名称' }]">
+              <a-input v-model="templateForm.emailConfig.from" placeholder="例如: 您的应用名称" />
+            </a-form-item>
+          </a-col>
+          <a-col :span="12">
+            <a-form-item field="emailConfig.subject" label="邮件主题 (Subject)" :rules="[{ required: true, message: '请输入邮件主题' }]">
+              <a-input v-model="templateForm.emailConfig.subject" placeholder="例如: 这是您的验证码" />
+            </a-form-item>
+          </a-col>
+        </a-row>
+        
+        <a-form-item field="content" label="模板内容 (HTML)" :rules="[{ required: true, message: '请输入模板内容' }]"
           validate-trigger="blur" class="relative">
           <!-- Help Tooltip -->
           <div class="mt-1 text-sm text-gray-500 flex items-center absolute top-0 right-0">
             <a-popover position="right" :content-style="{ maxWidth: '1200px', whiteSpace: 'nowrap' }">
               <template #content>
                 <div>
-                  <h4 class="font-semibold mb-1">可用字段说明 (基于类型: {{ { single: '单页', list: '列表', item: '内容' }[templateForm.type] || '未知' }})</h4>
+                  <h4 class="font-semibold mb-1">可用字段说明 (基于类型: {{ getTemplateTypeName(templateForm) }})</h4>
                   <ul class="list-none p-0 m-0">
                     <li v-for="field in availableFields" :key="field.key" class="mb-1 hover:bg-gray-100">
                       <code
@@ -137,6 +164,15 @@
                 placeholder="输入 HTML 或 Vue 模板代码。使用 {{ expression }} 插入数据"
                 :auto-size="{ minRows: 15, maxRows: 25 }" 
              />
+        </a-form-item>
+
+        <a-form-item v-if="templateForm.type === 'email'" field="emailConfig.text" label="纯文本内容 (可选)">
+          <template #help>为不显示HTML邮件的客户端提供纯文本版本。</template>
+          <a-textarea
+            v-model="templateForm.emailConfig.text"
+            placeholder="您的验证码是 {{code}}"
+            :auto-size="{ minRows: 4, maxRows: 8 }"
+          />
         </a-form-item>
 
         <a-form-item field="customJs" label="自定义JS逻辑（可选）">
@@ -214,8 +250,36 @@ const getInitialTemplateForm = () => ({
     name: '',
     type: 'single',
     content: '',
-    customJs: ''
+    customJs: '',
+    emailSubType: undefined,
+    emailConfig: {
+      from: '',
+      subject: '',
+      text: ''
+    }
 });
+
+// --- Template Type Name & Color Helpers ---
+const emailSubTypeNames = {
+  verification_code: '注册验证码',
+  password_reset: '找回密码',
+};
+
+const getTemplateTypeName = (template) => {
+  if (template.type === 'email') {
+    return `邮件 - ${emailSubTypeNames[template.emailSubType] || template.emailSubType || '未指定'}`;
+  }
+  return { single: '单页模板', list: '列表模板', item: '内容模板' }[template.type] || template.type;
+};
+
+const getTemplateTypeTagColor = (type) => {
+  return {
+    single: 'blue',
+    list: 'green',
+    item: 'purple',
+    email: 'orangered'
+  }[type] || 'gray';
+};
 
 // Fetch templates function
 const fetchTemplates = async () => {
@@ -280,7 +344,9 @@ const editTemplate = (template) => {
         name: template.name,
         type: template.type,
         content: template.content || '',
-        customJs: template.customJs || ''
+        customJs: template.customJs || '',
+        emailSubType: template.emailSubType,
+        emailConfig: template.emailConfig || { from: '', subject: '', text: '' }
      }; 
     isEditMode.value = true;
     modalVisible.value = true;
@@ -300,7 +366,14 @@ const handleSubmit = async () => {
 
     let url = '/api/templates';
     let method = 'POST';
-    const payload = { ...templateForm.value }; 
+    const payload = { ...templateForm.value };
+
+    // Clean up payload based on type
+    if (payload.type !== 'email') {
+      delete payload.emailSubType;
+      delete payload.emailConfig;
+    }
+    
     // Removed field filtering
     // payload.fields = payload.fields?.filter(f => f.name && f.description);
 
@@ -374,9 +447,21 @@ const confirmDeleteTemplate = (template) => {
     });
 };
 
+const onTemplateTypeChange = () => {
+  // Reset sub-type and config when main type changes to avoid sending stray data
+  if (templateForm.value.type !== 'email') {
+    templateForm.value.emailSubType = undefined;
+    templateForm.value.emailConfig = { from: '', subject: '', text: '' };
+  } else {
+    // Optionally set a default sub-type when switching to email
+    templateForm.value.emailSubType = 'verification_code';
+  }
+};
+
 // --- Computed property for available fields based on type ---
 const availableFields = computed(() => {
   const type = templateForm.value.type;
+  const emailSubType = templateForm.value.emailSubType;
   const fields = [];
 
   if (type === 'single') {
@@ -409,9 +494,27 @@ const availableFields = computed(() => {
       { key: 'page.name', desc: '所属页面名称' },
       { key: 'page.route', desc: '所属页面路径' },
     );
+  } else if (type === 'email') {
+    if (emailSubType === 'verification_code') {
+      fields.push(
+        { key: 'username', desc: '用户名 (若用户已填写)' },
+        { key: 'email', desc: '收件人邮箱地址' },
+        { key: 'code', desc: '6位数字验证码' }
+      );
+    } else if (emailSubType === 'password_reset') {
+      fields.push(
+        { key: 'username', desc: '用户名' },
+        { key: 'email', desc: '收件人邮箱地址' },
+        { key: 'resetLink', desc: '密码重置链接' }
+      );
+    }
+    fields.push({ key: 'appName', desc: '应用名称 (全局)' });
   }
 
-  fields.push({ key: 'formatDate()', desc: '格式化日期的方法，如 {{ formatDate(article.createdAt) }}' });
+  // Common fields (if any) can be pushed here
+  if (type !== 'email') {
+    fields.push({ key: 'formatDate()', desc: '格式化日期的方法，如 {{ formatDate(article.createdAt) }}' });
+  }
 
   return fields;
 });

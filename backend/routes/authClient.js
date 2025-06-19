@@ -64,12 +64,12 @@ const attachActivePromotions = async (application) => {
  * @access  Public
  */
 router.post('/send-registration-code', async (req, res) => {
-    const { email } = req.body;
+    const { email, username } = req.body;
     if (!email) {
         return res.status(400).json({ message: '需要邮箱地址。' });
     }
     try {
-        await authClientService.sendRegistrationCode(email);
+        await authClientService.sendRegistrationCode(email, username);
         res.status(200).json({ message: '验证码已发送至您的邮箱。' });
     } catch (error) {
         console.error('[Route] Error in POST /api/auth/client/send-registration-code: ', error.message);

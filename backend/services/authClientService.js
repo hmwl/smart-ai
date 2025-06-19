@@ -8,9 +8,10 @@ const crypto = require('crypto');
 /**
  * Generate and send a registration verification code.
  * @param {string} email
+ * @param {string} [username] - Optional username for personalization.
  * @returns {Promise<void>}
  */
-exports.sendRegistrationCode = async (email) => {
+exports.sendRegistrationCode = async (email, username) => {
   // Check if an active user with this email already exists
   const existingUser = await User.findOne({ email });
   if (existingUser && existingUser.status === 'active') {
@@ -26,7 +27,7 @@ exports.sendRegistrationCode = async (email) => {
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-  await emailService.sendRegistrationCode(email, code);
+  await emailService.sendRegistrationCode(email, code, username);
 };
 
 /**
@@ -121,7 +122,7 @@ exports.forgotPassword = async (email) => {
     user.resetPasswordTokenExpires = new Date(Date.now() + 3600000); // 1 hour
 
     await user.save();
-    await emailService.sendPasswordResetEmail(user.email, user.resetPasswordToken);
+    await emailService.sendPasswordResetEmail(user.email, user.resetPasswordToken, user.username);
 };
 
 /**

@@ -73,18 +73,26 @@ router.get('/:id', authenticateToken, isAdmin, async (req, res) => {
 
 // POST create a new template
 router.post('/', authenticateToken, isAdmin, async (req, res) => {
-    const { name, type, content, customJs } = req.body;
+    // Destructure all possible fields from the body
+    const { name, type, content, customJs, emailSubType, emailConfig } = req.body;
+
     if (!name || !type || !content) {
         return res.status(400).json({ message: 'Template name, type, and content are required.' });
     }
-    // Add validation for type enum if needed
 
-    const template = new Template({
+    // Construct the template data object dynamically
+    const templateData = {
         name,
         type,
         content,
-        customJs
-    });
+        customJs,
+    };
+    if (type === 'email') {
+        templateData.emailSubType = emailSubType;
+        templateData.emailConfig = emailConfig;
+    }
+
+    const template = new Template(templateData);
 
     try {
         const newTemplate = await template.save();
@@ -110,13 +118,23 @@ router.put('/:id', authenticateToken, isAdmin, async (req, res) => {
             return res.status(404).json({ message: 'Template not found' });
         }
 
-        const { name, type, content, customJs } = req.body;
+        const { name, type, content, customJs, emailSubType, emailConfig } = req.body;
 
         // Update fields if they exist in the request body
         if (name !== undefined) template.name = name;
         if (type !== undefined) template.type = type;
         if (content !== undefined) template.content = content;
         if (customJs !== undefined) template.customJs = customJs;
+
+        // Handle email-specific fields
+        if (type === 'email') {
+            if (emailSubType !== undefined) template.emailSubType = emailSubType;
+            if (emailConfig !== undefined) template.emailConfig = emailConfig;
+        } else {
+            // If type is changed from 'email' to something else, clear the fields
+            template.emailSubType = undefined;
+            template.emailConfig = undefined;
+        }
 
         const updatedTemplate = await template.save();
         res.json(updatedTemplate);

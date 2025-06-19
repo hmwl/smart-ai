@@ -31,8 +31,30 @@ const TemplateSchema = new Schema({
     type: {
         type: String,
         required: [true, 'Template type is required.'],
-        enum: ['single', 'list', 'item'], // For single pages, collection lists, collection items
+        enum: ['single', 'list', 'item', 'email'], // Added 'email'
         index: true
+    },
+    emailSubType: { // For 'email' type, e.g., 'verification_code', 'password_reset'
+        type: String,
+        required: function() { return this.type === 'email'; },
+        index: true,
+        default: null
+    },
+    emailConfig: {
+        from: {
+            type: String,
+            trim: true,
+            required: function() { return this.type === 'email'; }
+        },
+        subject: {
+            type: String,
+            trim: true,
+            required: function() { return this.type === 'email'; }
+        },
+        text: { // Optional plain-text version of the email
+            type: String,
+            trim: true
+        }
     },
     content: {
         type: String,

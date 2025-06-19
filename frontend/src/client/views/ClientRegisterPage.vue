@@ -77,7 +77,10 @@ const sendCode = async () => {
 
   isSendingCode.value = true;
   try {
-    await apiClient.post('/auth/client/send-registration-code', { email: registerForm.email });
+    await apiClient.post('/auth/client/send-registration-code', { 
+      email: registerForm.email,
+      username: registerForm.username 
+    });
     Message.success('验证码已发送，请注意查收。');
     countdown.value = 60;
     const interval = setInterval(() => {
