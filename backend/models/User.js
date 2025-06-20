@@ -92,10 +92,14 @@ userSchema.pre('save', async function (next) {
   }
 
   // Hash password if it has been modified (or is new)
-  if (this.isModified('passwordHash') || this.isNew) {
+  // 只有在密码字段真正被修改时才重新哈希
+  if (this.isModified('passwordHash')) {
     try {
-      const salt = await bcrypt.genSalt(10);
-      this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+      // 检查密码是否已经是哈希值（避免重复哈希）
+      if (!this.passwordHash.startsWith('$2a$') && !this.passwordHash.startsWith('$2b$')) {
+        const salt = await bcrypt.genSalt(10);
+        this.passwordHash = await bcrypt.hash(this.passwordHash, salt);
+      }
     } catch (error) {
       return next(error);
     }

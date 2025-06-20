@@ -70,7 +70,14 @@ router.post('/', upload.single('workFile'), async (req, res) => {
       sourceUrl: `/uploads/works/${req.file.filename}`, // Path to access the file via HTTP
       // thumbnailUrl: Can be set explicitly or derived later (e.g. first frame of video, or same as source for image)
       prompt,
-      tags: tags ? JSON.parse(tags) : [], // Assuming tags are sent as a JSON string array
+      tags: tags ? (() => {
+        try {
+          return JSON.parse(tags);
+        } catch (error) {
+          console.warn('Invalid tags JSON format:', tags);
+          return [];
+        }
+      })() : [], // Safe JSON parsing with fallback
       creator, // Assuming creator ID is sent
       originalApplication,
       status

@@ -44,33 +44,65 @@ router.post('/prompt', authenticateToken, async (req, res) => {
     // 检查用户积分
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        message: '用户未找到' 
+      return res.status(404).json({
+        success: false,
+        message: '用户未找到'
       });
     }
 
     const creditsRequired = application.creditsConsumed || 0;
     if (creditsRequired > 0 && user.creditsBalance < creditsRequired) {
-      return res.status(400).json({ 
-        success: false, 
-        message: '积分余额不足' 
+      return res.status(400).json({
+        success: false,
+        message: '积分余额不足'
       });
     }
 
     // 获取平台服务
     const platformService = getPlatformService(application.platformType);
 
-    // 提交任务
-    const result = await platformService.submitPrompt(application, {
-      userId: userId,
-      formConfig: formConfig
-    });
+    let result;
+    let updatedUser;
 
-    // 扣除积分
+    // 使用事务确保数据一致性
     if (creditsRequired > 0) {
-      await User.findByIdAndUpdate(userId, {
-        $inc: { creditsBalance: -creditsRequired }
+      // 原子操作：检查余额并扣除积分
+      updatedUser = await User.findOneAndUpdate(
+        {
+          _id: userId,
+          creditsBalance: { $gte: creditsRequired }
+        },
+        {
+          $inc: { creditsBalance: -creditsRequired }
+        },
+        { new: true, runValidators: true }
+      );
+
+      if (!updatedUser) {
+        return res.status(400).json({
+          success: false,
+          message: '积分余额不足或用户不存在'
+        });
+      }
+
+      try {
+        // 提交任务
+        result = await platformService.submitPrompt(application, {
+          userId: userId,
+          formConfig: formConfig
+        });
+      } catch (error) {
+        // 任务提交失败，回退积分
+        await User.findByIdAndUpdate(userId, {
+          $inc: { creditsBalance: creditsRequired }
+        });
+        throw error;
+      }
+    } else {
+      // 免费任务，直接提交
+      result = await platformService.submitPrompt(application, {
+        userId: userId,
+        formConfig: formConfig
       });
     }
 
