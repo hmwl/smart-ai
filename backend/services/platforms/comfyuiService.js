@@ -1,27 +1,23 @@
 const fs = require('fs').promises;
 const path = require('path');
-const EnumConfig = require('../../models/EnumConfig');
-const TaskExecution = require('../../models/TaskExecution');
-const BasePlatformService = require('./BasePlatformService');
+const EnumConfig = require('../../models/EnumConfig'); // Import EnumConfig model
 
 /**
  * ComfyUI Service
  *
- * 基于统一化平台标准的ComfyUI服务实现
- * 支持任务提交、状态轮询、结果获取等功能
+ * This service will contain the logic to interact with a ComfyUI instance.
+ * - Make API calls to generate images, etc.
+ * - Handle authentication if necessary.
+ * - Process responses from ComfyUI.
  */
 
-class ComfyUIService extends BasePlatformService {
+class ComfyUIService {
   constructor() {
-    super();
-    this.platformType = 'ComfyUI';
+    // General initialization, specific API details will be handled per call via application object
   }
 
-  /**
-   * 实现基类的submitPrompt方法
-   * 提交任务到ComfyUI平台
-   */
-  async submitPrompt(application, clientInputs = {}) {
+  // Main method to be called by the router
+  async handleLaunchRequest(application, clientInputs = {}) {
     // 1. Validate and select API from application.apis
     if (!application || !application.apis || !Array.isArray(application.apis)) {
       throw new Error('无效的应用配置数据，缺少 API 信息。');
@@ -140,7 +136,6 @@ class ComfyUIService extends BasePlatformService {
     console.log(JSON.stringify(modifiedWorkflow, null, 2));
     console.log("----------------------------------------------");
 
-
     // 5. Submit to ComfyUI's /prompt endpoint
     const endpoint = `${apiUrl.replace(/\/$/, '')}/api/prompt`;
 
@@ -173,79 +168,42 @@ class ComfyUIService extends BasePlatformService {
       }
 
       const data = await response.json();
-
-      // 创建TaskExecution记录
-      const taskExecution = new TaskExecution({
-        prompt_id: data.prompt_id,
-        platform_task_id: data.prompt_id, // ComfyUI使用相同的ID
-        application_id: application._id,
-        user_id: clientInputs.userId,
-        platform_type: this.platformType,
-        api_config: {
-          apiUrl: apiUrl,  // 使用apiUrl而不是api_url
-          api_url: apiUrl, // 保持向后兼容
-          platform_name: apiName
-        },
-        status: 'pending',
-        input_data: {
-          workflow: modifiedWorkflow,
-          form_config: clientInputs.formConfig
-        },
-        timing: {
-          submitted_at: new Date()
-        }
-      });
-
-      await taskExecution.save();
-
-      // 添加原始响应记录
-      taskExecution.raw_responses.push({
-        type: 'submit',
-        data: data,
-        timestamp: new Date()
-      });
-      await taskExecution.save();
-
+      
+      // Store the output node ID for later result retrieval
+      const outputNodeId = application.formSchema?.comfyUIConfig?.outputNodeId;
+      const outputType = application.formSchema?.comfyUIConfig?.outputType || 'image';
+      
       return {
-        prompt_id: data.prompt_id,
-        task_id: data.prompt_id,
-        status: 'pending',
-        message: `任务已成功提交至 ComfyUI。`,
-        data: data
+        data: data,
+        clientMessage: `任务已成功提交至 ComfyUI。`, // Message for client
+        promptId: data.prompt_id,
+        apiUrl: apiUrl,
+        outputNodeId: outputNodeId,
+        outputType: outputType
       };
     } catch (error) {
       console.error(`[ComfyUIService] Error during /prompt call for ${apiName} (${apiUrl}): ${error.message}`);
-      throw this.handleApiError(error, '提交任务');
+      // Re-throw the original or newly constructed error. The route handler will catch it.
+      throw error;
     }
   }
 
   /**
-   * 实现基类的getStatus方法
-   * 查询ComfyUI任务状态
+   * Check the status of a ComfyUI task
+   * @param {string} promptId - The prompt ID returned from handleLaunchRequest
+   * @param {string} apiUrl - The ComfyUI API URL
+   * @returns {Object} Status information
    */
-  async getStatus(promptId, apiConfig) {
+  async checkTaskStatus(promptId, apiUrl) {
+    if (!promptId || !apiUrl) {
+      throw new Error('缺少必要的参数：promptId 或 apiUrl');
+    }
+
     try {
-      // 全局修复：如果是有问题的 prompt_id，直接返回失败状态
-      if (promptId === '51cfb1ee-36cd-4156-a2f3-fbc40aa15f6c') {
-        console.log('[ComfyUIService] 跳过有问题的 prompt_id:', promptId);
-        return {
-          prompt_id: promptId,
-          status: 'failed',
-          queue_info: { position: null, running_count: 0, pending_count: 0 },
-          progress: null,
-          workflow_info: null,
-          execution_time: null,
-          error_message: '任务已失效',
-          output_data: null,
-          raw_response: null
-        };
-      }
-
-      this.validateApiConfig(apiConfig);
-
-      const apiUrl = apiConfig.apiUrl || apiConfig.api_url;
-      const statusUrl = this.buildApiUrl(apiUrl, '/task_monitor/status');
-      const response = await fetch(`${statusUrl}?prompt_id=${promptId}`, {
+      // Call the ComfyUI task monitor endpoint
+      const endpoint = `${apiUrl.replace(/\/$/, '')}/task_monitor/status`;
+      
+      const response = await fetch(endpoint, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -257,390 +215,177 @@ class ComfyUIService extends BasePlatformService {
       }
 
       const statusData = await response.json();
+      
+      // Standardize the response format for our API
+      const result = {
+        promptId: promptId,
+        status: 'unknown', // Default status
+        progress: 0,
+        queuePosition: -1,
+        message: '',
+        error: null
+      };
 
-      const normalizedStatus = await this.normalizeComfyUIStatus(statusData, promptId);
-
-      // 更新TaskExecution记录
-      try {
-        const taskExecution = await TaskExecution.findOne({ prompt_id: promptId });
-        if (taskExecution) {
-          // 添加原始响应记录
-          taskExecution.raw_responses.push({
-            type: 'status',
-            data: statusData,
-            timestamp: new Date()
-          });
-
-          // 更新状态和进度信息
-          taskExecution.status = normalizedStatus.status;
-          taskExecution.queue_info = normalizedStatus.queue_info;
-          taskExecution.progress = normalizedStatus.progress;
-          taskExecution.workflow_info = normalizedStatus.workflow_info;
-
-          if (statusData.execution_time) {
-            taskExecution.timing.execution_time = statusData.execution_time;
+      // Check if our prompt is in the running queue
+      if (statusData.queue && Array.isArray(statusData.queue.running)) {
+        const runningTask = statusData.queue.running.find(task => task.prompt_id === promptId);
+        if (runningTask) {
+          result.status = 'running';
+          
+          // If we have progress information
+          if (statusData.current_task_progress) {
+            const progress = statusData.current_task_progress;
+            if (progress.step !== undefined && progress.total_steps) {
+              result.progress = Math.round((progress.step / progress.total_steps) * 100);
+            }
+            result.message = `正在处理节点: ${progress.node_type || '未知'} (${progress.step || 0}/${progress.total_steps || '?'})`;
+          } else if (statusData.workflow_progress) {
+            const progress = statusData.workflow_progress;
+            if (progress.executed_nodes !== undefined && progress.total_nodes) {
+              result.progress = Math.round((progress.executed_nodes / progress.total_nodes) * 100);
+            }
+            result.message = `工作流进度: ${progress.executed_nodes || 0}/${progress.total_nodes || '?'} 节点已执行`;
           }
-
-          // 更新输出数据
-          if (normalizedStatus.output_data) {
-            taskExecution.output_data = normalizedStatus.output_data;
-          }
-
-          // 设置完成时间
-          if (normalizedStatus.status === 'completed') {
-            taskExecution.timing.completed_at = new Date();
-          }
-
-          await taskExecution.save();
         }
-      } catch (error) {
-        console.warn('[ComfyUIService] 更新TaskExecution失败:', error.message);
       }
 
-      return normalizedStatus;
+      // Check if our prompt is in the pending queue
+      if (result.status === 'unknown' && statusData.queue && Array.isArray(statusData.queue.pending)) {
+        const pendingIndex = statusData.queue.pending.findIndex(task => task.prompt_id === promptId);
+        if (pendingIndex !== -1) {
+          result.status = 'pending';
+          result.queuePosition = pendingIndex + 1; // 1-based position
+          result.message = `排队中，位置: ${result.queuePosition}`;
+        }
+      }
+
+      // Check for completion or errors
+      if (result.status === 'unknown') {
+        // If not found in running or pending, and we have outputs, it's completed
+        if (statusData.current_task_outputs && Object.keys(statusData.current_task_outputs).length > 0) {
+          result.status = 'completed';
+          result.progress = 100;
+          result.message = '处理完成';
+        } 
+        // If there's an error
+        else if (statusData.error_info) {
+          result.status = 'error';
+          result.error = statusData.error_info;
+          result.message = `处理出错: ${statusData.error_info}`;
+        }
+        // If task_id matches but not found in queues, it might be completed but no outputs yet
+        else if (statusData.task_id === promptId) {
+          result.status = 'processing';
+          result.message = '正在处理中...';
+        }
+        // Truly unknown status
+        else {
+          result.message = '任务状态未知';
+        }
+      }
+
+      return result;
     } catch (error) {
-      console.error(`[ComfyUIService] Error getting status for ${promptId}:`, error);
-      throw this.handleApiError(error, '查询状态');
+      console.error(`[ComfyUIService] Error checking task status: ${error.message}`);
+      throw new Error(`检查任务状态失败: ${error.message}`);
     }
   }
 
   /**
-   * 实现基类的getPromptData方法
-   * 获取ComfyUI任务结果
+   * Get the results of a completed ComfyUI task
+   * @param {string} promptId - The prompt ID returned from handleLaunchRequest
+   * @param {string} apiUrl - The ComfyUI API URL
+   * @param {string} outputNodeId - The ID of the output node in the workflow
+   * @param {string} outputType - The type of output (image, text, etc.)
+   * @returns {Object} The task results
    */
-  async getPromptData(promptId, apiConfig) {
-    try {
-      this.validateApiConfig(apiConfig);
+  async getTaskResults(promptId, apiUrl, outputNodeId, outputType = 'image') {
+    if (!promptId || !apiUrl) {
+      throw new Error('缺少必要的参数：promptId 或 apiUrl');
+    }
 
-      // 首先检查任务状态
-      const status = await this.getStatus(promptId, apiConfig);
-      if (status.status !== 'completed') {
-        throw new Error(`任务尚未完成，当前状态: ${status.status}`);
+    try {
+      // First check if the task is completed
+      const statusResult = await this.checkTaskStatus(promptId, apiUrl);
+      if (statusResult.status !== 'completed') {
+        throw new Error(`任务尚未完成，当前状态: ${statusResult.status}`);
       }
 
-      // 如果状态查询中已经包含输出数据，直接使用
-      if (status.output_data) {
-        return {
-          prompt_id: promptId,
-          status: 'completed',
-          data: status.output_data,
-          message: '任务执行完成'
+      // For ComfyUI, we need to get the history to find our completed outputs
+      const historyEndpoint = `${apiUrl.replace(/\/$/, '')}/history`;
+      const historyResponse = await fetch(historyEndpoint);
+      
+      if (!historyResponse.ok) {
+        throw new Error(`获取历史记录失败: ${historyResponse.status} ${historyResponse.statusText}`);
+      }
+
+      const historyData = await historyResponse.json();
+      
+      // Find our prompt in the history
+      if (!historyData[promptId]) {
+        throw new Error(`在历史记录中找不到任务 ID: ${promptId}`);
+      }
+
+      const promptHistory = historyData[promptId];
+      
+      // Get the outputs based on the output node ID
+      let outputs = null;
+      if (outputNodeId && promptHistory.outputs && promptHistory.outputs[outputNodeId]) {
+        outputs = promptHistory.outputs[outputNodeId];
+      } else {
+        // If no specific output node ID, try to find any output
+        for (const nodeId in promptHistory.outputs || {}) {
+          outputs = promptHistory.outputs[nodeId];
+          break;
+        }
+      }
+
+      if (!outputs) {
+        throw new Error('找不到任务输出');
+      }
+
+      // Process the outputs based on the output type
+      let result;
+      
+      if (outputType === 'image') {
+        // For images, we need to construct the URL to the image
+        const images = [];
+        
+        if (Array.isArray(outputs.images)) {
+          for (const image of outputs.images) {
+            const imageUrl = `${apiUrl.replace(/\/$/, '')}/view?filename=${encodeURIComponent(image.filename)}&subfolder=${encodeURIComponent(image.subfolder || '')}&type=${encodeURIComponent(image.type || 'output')}`;
+            images.push({
+              url: imageUrl,
+              filename: image.filename,
+              type: image.type || 'output',
+              subfolder: image.subfolder || ''
+            });
+          }
+        }
+        
+        result = {
+          type: 'image',
+          images: images
+        };
+      } else if (outputType === 'text') {
+        // For text outputs
+        result = {
+          type: 'text',
+          text: outputs.text || JSON.stringify(outputs)
+        };
+      } else {
+        // For other types, just return the raw outputs
+        result = {
+          type: outputType,
+          data: outputs
         };
       }
 
-      // 获取结果数据（这里需要根据ComfyUI的实际API调整）
-      const apiUrl = apiConfig.apiUrl || apiConfig.api_url;
-      const resultUrl = this.buildApiUrl(apiUrl, `/history/${promptId}`);
-      const response = await fetch(resultUrl, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error(`获取结果失败: ${response.status} ${response.statusText}`);
-      }
-
-      const resultData = await response.json();
-
-      // 处理ComfyUI历史记录格式
-      let processedData = null;
-      if (resultData[promptId] && resultData[promptId].outputs) {
-        // 从数据库获取用户ID
-        let userId = null;
-        try {
-          const taskExecution = await TaskExecution.findOne({ prompt_id: promptId });
-          if (taskExecution && taskExecution.user_id) {
-            userId = taskExecution.user_id.toString();
-          }
-        } catch (error) {
-          console.warn('[ComfyUIService] 获取用户ID失败:', error.message);
-        }
-
-        processedData = this.processComfyUIOutputs(resultData[promptId].outputs, promptId, userId);
-      }
-
-      // 更新TaskExecution记录
-      try {
-        const taskExecution = await TaskExecution.findOne({ prompt_id: promptId });
-        if (taskExecution) {
-          taskExecution.raw_responses.push({
-            type: 'result',
-            data: resultData,
-            timestamp: new Date()
-          });
-          taskExecution.status = 'completed';
-          taskExecution.output_data = processedData || resultData;
-          taskExecution.timing.completed_at = new Date();
-          await taskExecution.save();
-        }
-      } catch (error) {
-        console.warn('[ComfyUIService] 更新TaskExecution失败:', error.message);
-      }
-
-      return {
-        prompt_id: promptId,
-        status: 'completed',
-        data: processedData || resultData,
-        message: '任务执行完成'
-      };
+      return result;
     } catch (error) {
-      console.error(`[ComfyUIService] Error getting result for ${promptId}:`, error);
-      throw this.handleApiError(error, '获取结果');
+      console.error(`[ComfyUIService] Error getting task results: ${error.message}`);
+      throw new Error(`获取任务结果失败: ${error.message}`);
     }
-  }
-
-  /**
-   * 将ComfyUI状态响应标准化
-   */
-  async normalizeComfyUIStatus(statusData, promptId = null) {
-    const status = this.mapComfyUIStatus(statusData.status);
-
-    let queuePosition = null;
-    if (status === 'pending' && statusData.queue && statusData.queue.pending) {
-      // 查找当前任务在pending队列中的位置
-      const pendingIndex = statusData.queue.pending.findIndex(
-        item => item.prompt_id === statusData.task_id
-      );
-      queuePosition = pendingIndex >= 0 ? pendingIndex + 1 : null;
-    }
-
-    // 处理输出结果
-    let outputData = null;
-    if (status === 'completed' && statusData.current_task_outputs && statusData.current_task_outputs.outputs) {
-      const taskId = statusData.task_id || promptId;
-
-      // 尝试从数据库获取用户ID
-      let userId = null;
-      try {
-        const taskExecution = await TaskExecution.findOne({ prompt_id: taskId });
-        if (taskExecution && taskExecution.user_id) {
-          userId = taskExecution.user_id.toString();
-        }
-      } catch (error) {
-        console.warn('[ComfyUIService] 获取用户ID失败:', error.message);
-      }
-
-      outputData = this.processComfyUIOutputs(statusData.current_task_outputs.outputs, taskId, userId);
-    }
-
-    return {
-      prompt_id: statusData.task_id,
-      status: status,
-      queue_info: {
-        position: queuePosition,
-        running_count: statusData.queue?.running_count || 0,
-        pending_count: statusData.queue?.pending_count || 0
-      },
-      progress: statusData.current_task_progress ? {
-        current_step: statusData.current_task_progress.step,
-        total_steps: statusData.current_task_progress.total_steps,
-        current_node_id: statusData.current_task_progress.node_id,
-        current_node_type: statusData.current_task_progress.node_type,
-        text_message: statusData.current_task_progress.text_message,
-        percentage: statusData.current_task_progress.total_steps > 0
-          ? Math.round((statusData.current_task_progress.step / statusData.current_task_progress.total_steps) * 100)
-          : 0
-      } : null,
-      workflow_info: statusData.workflow_progress ? {
-        total_nodes: statusData.workflow_progress.total_nodes,
-        executed_nodes: statusData.workflow_progress.executed_nodes,
-        last_executed_node_id: statusData.workflow_progress.last_executed_node_id
-      } : null,
-      execution_time: statusData.execution_time,
-      error_message: statusData.error_info?.message || null,
-      output_data: outputData,
-      raw_response: statusData
-    };
-  }
-
-  /**
-   * 映射ComfyUI状态到标准状态
-   */
-  mapComfyUIStatus(comfyStatus) {
-    const statusMap = {
-      'pending': 'pending',
-      'running': 'running',
-      'completed': 'completed',
-      'success': 'completed',
-      'failed': 'failed',
-      'error': 'failed'
-    };
-
-    return statusMap[comfyStatus?.toLowerCase()] || 'pending'; // 默认返回 'pending' 而不是 'unknown'
-  }
-
-  /**
-   * 处理ComfyUI的输出结果
-   * @param {Object} outputs - ComfyUI输出对象
-   * @param {string} promptId - 任务ID
-   * @param {string} userId - 用户ID
-   * @returns {Object} 处理后的输出数据
-   */
-  processComfyUIOutputs(outputs, promptId, userId = null) {
-    const result = {
-      images: [],
-      videos: [],
-      texts: [],
-      raw_outputs: outputs
-    };
-
-    // 遍历所有输出节点
-    Object.keys(outputs).forEach(nodeId => {
-      const nodeOutput = outputs[nodeId];
-
-      // 处理图片输出
-      if (nodeOutput.images && Array.isArray(nodeOutput.images)) {
-        nodeOutput.images.forEach((image, index) => {
-          // 生成新的文件名：用户ID_时间戳_索引
-          const timestamp = Date.now();
-          const userPrefix = userId ? userId.substring(0, 8) : 'user';
-          const originalName = image.filename;
-          const extension = originalName.split('.').pop();
-          const newFilename = `${userPrefix}_${timestamp}_${index}.${extension}`;
-
-          // 构建代理URL而不是原始URL
-          const proxyUrl = this.buildProxyUrl(promptId, nodeId, {
-            filename: newFilename,
-            subfolder: image.subfolder || '',
-            type: image.type || 'temp'
-          });
-
-          const downloadUrl = this.buildDownloadUrl(promptId, nodeId, {
-            filename: newFilename,
-            subfolder: image.subfolder || '',
-            type: image.type || 'temp'
-          });
-
-          result.images.push({
-            nodeId: nodeId,
-            filename: newFilename, // 使用新的文件名
-            originalFilename: originalName, // 保留原始文件名
-            subfolder: image.subfolder || '',
-            type: image.type || 'temp',
-            url: proxyUrl, // 使用代理URL
-            downloadUrl: downloadUrl, // 使用代理下载URL
-            original: image
-          });
-        });
-      }
-
-      // 处理视频输出
-      if (nodeOutput.videos && Array.isArray(nodeOutput.videos)) {
-        nodeOutput.videos.forEach((video, index) => {
-          // 生成新的文件名
-          const timestamp = Date.now();
-          const userPrefix = userId ? userId.substring(0, 8) : 'user';
-          const originalName = video.filename;
-          const extension = originalName.split('.').pop();
-          const newFilename = `${userPrefix}_${timestamp}_${index}.${extension}`;
-
-          // 构建代理URL而不是原始URL
-          const proxyUrl = this.buildProxyUrl(promptId, nodeId, {
-            filename: newFilename,
-            subfolder: video.subfolder || '',
-            type: video.type || 'temp'
-          });
-
-          const downloadUrl = this.buildDownloadUrl(promptId, nodeId, {
-            filename: newFilename,
-            subfolder: video.subfolder || '',
-            type: video.type || 'temp'
-          });
-
-          result.videos.push({
-            nodeId: nodeId,
-            filename: newFilename,
-            originalFilename: originalName,
-            subfolder: video.subfolder || '',
-            type: video.type || 'temp',
-            url: proxyUrl, // 使用代理URL
-            downloadUrl: downloadUrl, // 使用代理下载URL
-            original: video
-          });
-        });
-      }
-
-      // 处理文本输出
-      if (nodeOutput.text && Array.isArray(nodeOutput.text)) {
-        nodeOutput.text.forEach(text => {
-          result.texts.push({
-            nodeId: nodeId,
-            content: text,
-            original: text
-          });
-        });
-      }
-    });
-
-    return result;
-  }
-
-  /**
-   * 构建代理URL
-   * @param {string} promptId - 任务ID
-   * @param {string} nodeId - 节点ID
-   * @param {Object} fileInfo - 文件信息
-   * @returns {string} 代理URL
-   */
-  buildProxyUrl(promptId, nodeId, fileInfo) {
-    const { filename, subfolder = '', type = 'temp' } = fileInfo;
-
-    // 构建代理URL: /api/proxy/:taskId/:nodeId/:filename
-    const params = new URLSearchParams({
-      subfolder: subfolder,
-      type: type
-    });
-
-    // 使用相对路径，让前端自动处理基础URL
-    return `/api/proxy/${promptId}/${nodeId}/${filename}?${params.toString()}`;
-  }
-
-  /**
-   * 构建下载URL
-   * @param {string} promptId - 任务ID
-   * @param {string} nodeId - 节点ID
-   * @param {Object} fileInfo - 文件信息
-   * @returns {string} 下载URL
-   */
-  buildDownloadUrl(promptId, nodeId, fileInfo) {
-    const { filename, subfolder = '', type = 'temp' } = fileInfo;
-
-    // 构建下载URL: /api/proxy/download/:taskId/:nodeId/:filename
-    const params = new URLSearchParams({
-      subfolder: subfolder,
-      type: type
-    });
-
-    // 使用相对路径，让前端自动处理基础URL
-    return `/api/proxy/download/${promptId}/${nodeId}/${filename}?${params.toString()}`;
-  }
-
-  /**
-   * 构建ComfyUI图片/视频URL（保留用于直接访问）
-   * @param {string} baseUrl - API基础URL
-   * @param {Object} fileInfo - 文件信息
-   * @returns {string} 完整的文件URL
-   */
-  buildComfyUIImageUrl(baseUrl, fileInfo) {
-    const { filename, subfolder = '', type = 'temp' } = fileInfo;
-
-    // 构建查看URL: /api/view?filename=xxx&subfolder=xxx&type=xxx
-    const params = new URLSearchParams({
-      filename: filename,
-      subfolder: subfolder,
-      type: type
-    });
-
-    return `${baseUrl}/api/view?${params.toString()}`;
-  }
-
-  /**
-   * 保持向后兼容的方法
-   */
-  async handleLaunchRequest(application, clientInputs = {}) {
-    return await this.submitPrompt(application, clientInputs);
   }
 }
 

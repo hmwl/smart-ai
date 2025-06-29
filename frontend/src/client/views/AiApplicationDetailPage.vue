@@ -86,132 +86,77 @@
                 :widget-list="widgetList"
                 class=""
               />
-              <!-- 任务状态显示 -->
-              <div v-if="isTaskRunning" class="task-status-section">
-                <a-alert
-                  :type="taskStatus === 'failed' ? 'error' : 'info'"
-                  :title="`任务状态: ${getStatusText(taskStatus)}`"
-                  :description="getTaskDescription()"
-                  show-icon
-                  closable
-                  @close="isTaskRunning = false"
-                />
-
-                <!-- 进度条 -->
-                <div v-if="taskProgress && taskProgress.percentage" class="task-progress">
-                  <a-progress
-                    :percent="taskProgress.percentage"
-                    :status="taskStatus === 'failed' ? 'danger' : 'normal'"
-                  />
-                  <div class="progress-text">
-                    {{ taskProgress.text_message || `步骤 ${taskProgress.current_step}/${taskProgress.total_steps}` }}
-                  </div>
-                </div>
-
-                <!-- 取消按钮 -->
-                <a-button
-                  v-if="['pending', 'running'].includes(taskStatus)"
-                  type="outline"
-                  status="warning"
-                  @click="cancelCurrentTask"
-                  class="w-full mt-2"
-                >
-                  取消任务
-                </a-button>
-              </div>
-
-              <!-- 生成按钮 -->
-              <a-button
-                type="primary"
-                v-if="canLaunch && !isTaskRunning"
-                @click="launchAppWithConfig"
-                class="w-full"
-              >
-                立即生成（{{ discountedCredits > 0 ? discountedCredits : '限时免费' }}）
-              </a-button>
+              <a-button type="primary" v-if="canLaunch" @click="launchAppWithConfig" class="w-full">立即生成（{{ discountedCredits > 0 ? discountedCredits : '限时免费' }}）</a-button>
             </a-card>
             <a-empty v-else description="此应用无需配置" class="empty-config-placeholder"/>
           </div>
 
-          <!-- Right Column: Result Content -->
+          <!-- Right Column: Result Content (Placeholder) -->
           <div class="app-result-column">
             <a-card class="details-card scrollable-card" title="结果内容" :bordered="false">
-              <!-- 任务结果显示 -->
-              <div v-if="taskResults && hasValidResults" class="task-results">
-                <div class="result-header">
-                  <a-tag color="green">任务完成</a-tag>
-                  <span class="result-time">{{ new Date().toLocaleString() }}</span>
-                </div>
-
-                <!-- 根据结果类型显示不同内容 -->
-                <div class="result-content">
-                  <!-- 图片结果 -->
-                  <div v-if="taskResults.images && taskResults.images.length > 0" class="result-images">
-                    <div v-for="(image, index) in taskResults.images" :key="index" class="result-image">
-                      <img
-                        :src="getImageUrl(image.url || image.downloadUrl)"
-                        :alt="`结果图片 ${index + 1}`"
-                        @error="handleImageError"
-                      />
-                      <div class="image-info">
-                        <span class="filename">{{ image.filename }}</span>
-                        <a :href="image.downloadUrl || image.url" target="_blank" class="download-link">
-                          <icon-download /> 下载
-                        </a>
+              <!-- Task Status and Progress -->
+              <template v-if="currentTask">
+                <div class="task-status-container">
+                  <div class="task-status-header">
+                    <h3>任务状态</h3>
+                    <a-tag :color="getTaskStatusColor(currentTask.status)">{{ getTaskStatusText(currentTask.status) }}</a-tag>
+                  </div>
+                  
+                  <!-- Progress bar for running tasks -->
+                  <div v-if="currentTask.status === 'running' || currentTask.status === 'processing'" class="task-progress">
+                    <a-progress :percent="currentTask.progress" :show-text="true" />
+                    <p class="task-message">{{ currentTask.message }}</p>
+                  </div>
+                  
+                  <!-- Queue position for pending tasks -->
+                  <div v-else-if="currentTask.status === 'pending'" class="task-pending">
+                    <p>您的任务正在排队等待处理，位置: {{ currentTask.queuePosition }}</p>
+                  </div>
+                  
+                  <!-- Error display -->
+                  <div v-else-if="currentTask.status === 'error'" class="task-error">
+                    <a-alert type="error" :content="currentTask.message" />
+                  </div>
+                  
+                  <!-- Result display for completed tasks -->
+                  <div v-else-if="currentTask.status === 'completed' && taskResult" class="task-result">
+                    <!-- Image result -->
+                    <template v-if="taskResult.type === 'image' && taskResult.images && taskResult.images.length > 0">
+                      <div class="image-result-container">
+                        <a-carousel :auto-play="false" class="result-carousel">
+                          <a-carousel-item v-for="(image, index) in taskResult.images" :key="index">
+                            <div class="carousel-image-container">
+                              <img :src="image.url" :alt="`结果图片 ${index + 1}`" class="result-image" />
+                              <div class="image-actions">
+                                <a-button type="primary" size="small" @click="downloadImage(image.url, image.filename)">
+                                  下载图片
+                                </a-button>
+                              </div>
+                            </div>
+                          </a-carousel-item>
+                        </a-carousel>
                       </div>
-                    </div>
-                  </div>
-
-                  <!-- 视频结果 -->
-                  <div v-if="taskResults.videos && taskResults.videos.length > 0" class="result-videos">
-                    <div v-for="(video, index) in taskResults.videos" :key="index" class="result-video">
-                      <video
-                        :src="getImageUrl(video.url || video.downloadUrl)"
-                        controls
-                        :alt="`结果视频 ${index + 1}`"
-                      />
-                      <div class="video-info">
-                        <span class="filename">{{ video.filename }}</span>
-                        <a :href="video.downloadUrl || video.url" target="_blank" class="download-link">
-                          <icon-download /> 下载
-                        </a>
-                      </div>
-                    </div>
-                  </div>
-
-                  <!-- 文本结果 -->
-                  <div v-if="taskResults.texts && taskResults.texts.length > 0" class="result-texts">
-                    <div v-for="(text, index) in taskResults.texts" :key="index" class="result-text">
-                      <pre>{{ text.content }}</pre>
-                    </div>
-                  </div>
-
-                  <!-- 原始JSON结果（调试用） -->
-                  <div v-if="taskResults && typeof taskResults === 'object'" class="result-json">
-                    <a-collapse>
-                      <a-collapse-item header="查看原始数据" key="raw">
-                        <pre>{{ JSON.stringify(taskResults, null, 2) }}</pre>
-                      </a-collapse-item>
-                    </a-collapse>
+                    </template>
+                    
+                    <!-- Text result -->
+                    <template v-else-if="taskResult.type === 'text'">
+                      <a-typography-paragraph>{{ taskResult.text }}</a-typography-paragraph>
+                    </template>
+                    
+                    <!-- Unknown result type -->
+                    <template v-else>
+                      <a-alert type="info" content="任务已完成，但结果类型未知" />
+                    </template>
                   </div>
                 </div>
-              </div>
-
-              <!-- 无结果时的占位符 -->
-              <div v-else-if="!isTaskRunning" class="no-results">
-                <a-empty description="暂无生成结果">
-                  <template #image>
-                    <icon-apps style="font-size: 64px; color: var(--color-text-3);" />
-                  </template>
-                </a-empty>
-              </div>
-
-              <!-- 任务运行中的占位符 -->
-              <div v-else class="task-running">
-                <a-spin :size="32">
-                  <div class="running-text">任务执行中，请稍候...</div>
-                </a-spin>
-              </div>
+              </template>
+              
+              <!-- No task running -->
+              <template v-else>
+                <div class="no-task-container">
+                  <p>还没有运行任务，请点击"运行应用"按钮开始。</p>
+                </div>
+              </template>
             </a-card>
           </div>
         </div>
@@ -240,8 +185,7 @@
 import { ref, onMounted, computed, inject, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import apiClient, { getStaticAssetBaseUrl } from '../services/apiService';
-import taskService from '../services/taskService';
-import { Message, PageHeader as APageHeader, Spin as ASpin, Alert as AAlert, Card as ACard, Empty as AEmpty, Tag as ATag, Divider as ADivider, Tabs as ATabs, TabPane as ATabPane, Space as ASpace, Button as AButton, Modal } from '@arco-design/web-vue';
+import { Message, PageHeader as APageHeader, Spin as ASpin, Alert as AAlert, Card as ACard, Empty as AEmpty, Tag as ATag, Divider as ADivider, Tabs as ATabs, TabPane as ATabPane, Space as ASpace, Button as AButton, Modal, Progress as AProgress, Carousel as ACarousel, CarouselItem as ACarouselItem, Typography } from '@arco-design/web-vue';
 import {
   IconApps, IconTag, IconLayers, IconStar, IconBookmark, IconSchedule, IconHistory,
   IconFire
@@ -265,12 +209,11 @@ const dynamicFormModel = ref({});
 const dynamicFormRendererRef = ref(null);
 const widgetList = ref([]);
 
-// 任务状态管理
+// Task management state
 const currentTask = ref(null);
-const taskStatus = ref(null);
-const taskProgress = ref(null);
-const isTaskRunning = ref(false);
-const taskResults = ref(null);
+const taskResult = ref(null);
+const pollingInterval = ref(null);
+const pollingDelay = 2000; // 2 seconds between polls
 
 const appId = computed(() => route.params.id);
 
@@ -336,29 +279,10 @@ const canLaunch = computed(() => {
   return true;
 });
 
-// 判断是否有有效的结果数据
-const hasValidResults = computed(() => {
-  if (!taskResults.value) return false;
-
-  // 检查是否有图片、视频或文本结果
-  const hasImages = taskResults.value.images && taskResults.value.images.length > 0;
-  const hasVideos = taskResults.value.videos && taskResults.value.videos.length > 0;
-  const hasTexts = taskResults.value.texts && taskResults.value.texts.length > 0;
-
-  return hasImages || hasVideos || hasTexts;
-});
-
-const getImageUrl = (imagePath) => {
-  if (!imagePath) return '';
-
-  // 如果是完整URL（如ComfyUI的API地址），直接返回
-  if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
-    return imagePath;
-  }
-
-  // 如果是相对路径（如应用封面图），拼接静态资源基础URL
+const getImageUrl = (relativePath) => {
+  if (!relativePath) return '';
   const staticAssetBase = getStaticAssetBaseUrl();
-  const path = imagePath.startsWith('/') ? imagePath : `/${imagePath}`;
+  const path = relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
   return `${staticAssetBase}${path}`;
 };
 
@@ -545,425 +469,247 @@ async function uploadFile(file, fieldSchema) {
 
 const launchApp = async () => {
   if (!isLoggedIn.value) {
-    if (openLoginModal) openLoginModal();
+    openLoginModal();
     return;
   }
-  if (!application.value) return;
-
-  let formIsValid = true;
-  if (formSchema.value && formSchema.value.fields && formSchema.value.fields.length > 0) {
-    if (dynamicFormRendererRef.value) {
-      formIsValid = await dynamicFormRendererRef.value.validateForm();
-      if (!formIsValid) {
-        Message.error('存在必填项未填写或格式不正确，请检查。');
-        return;
-      }
-    }
-  }
-
-  // Deep clone the form model to avoid mutating original state during processing
-  const processedFormConfigData = JSON.parse(JSON.stringify(dynamicFormModel.value));
-  let uploadsProcessedSuccessfully = true;
-  const loadingUploadMsg = Message.loading('正在处理表单数据并上传文件...');
 
   try {
-    if (formSchema.value && formSchema.value.fields) {
-      for (const field of formSchema.value.fields) {
-        const fieldKey = field.props?.field;
-
-        if (fieldKey && processedFormConfigData.hasOwnProperty(fieldKey)) {
-          let fieldValue = processedFormConfigData[fieldKey];
-
-          if (typeof fieldValue === 'string' && fieldValue.startsWith('data:image')) { // Handles direct base64 (e.g. canvas drawing)
-            Message.info(`正在上传 ${field.props.label || '画板内容'}...`);
-            // Use proper subpath, don't pass old URL values as defaultSubpath
-            const defaultSubpathForCanvas = 'app_canvas_files';
-            processedFormConfigData[fieldKey] = await uploadBase64AsFile(fieldValue, field, 'canvas', defaultSubpathForCanvas);
-          } else if (typeof fieldValue === 'string') {
-            try {
-              const parsedValue = JSON.parse(fieldValue);
-              if (parsedValue && parsedValue.type === 'mask_data') {
-                Message.info(`正在上传 ${field.props.label || '蒙版数据'}...`);
-                // Use proper subpath, don't pass old URL values as defaultSubpath
-                const defaultSubpathForMask = 'app_mask_files';
-
-                const originalPath = await uploadBase64AsFile(parsedValue.original, field, 'mask_original', defaultSubpathForMask);
-                const maskPath = await uploadBase64AsFile(parsedValue.mask, field, 'mask_drawing', defaultSubpathForMask);
-
-                processedFormConfigData[fieldKey] = JSON.stringify({ original: originalPath, mask: maskPath });
-              }
-            } catch (e) {
-              // Not a JSON string from our mask_data, or not our specific type, leave as is
-            }
-          } else if (Array.isArray(fieldValue)) {
-
-            if (field.type === 'upload' || field.componentName === 'upload') {
-              // Handle upload component files
-              const uploadedFiles = [];
-              for (const fileItem of fieldValue) {
-                // Get the actual File object - try different approaches for ArcoDesign
-                let actualFile = fileItem?.originFileObj || fileItem?.file;
-
-                // Check if actualFile is a valid File object, not just truthy
-                const isValidFile = actualFile && actualFile instanceof File;
-
-                // If we don't have a valid File object but have a blob URL, try to fetch it
-                if (!isValidFile && fileItem?.url && fileItem.url.startsWith('blob:')) {
-                  try {
-                    const response = await fetch(fileItem.url);
-                    const blob = response.ok ? await response.blob() : null;
-                    if (blob) {
-                      // Create a File object from the blob
-                      actualFile = new File([blob], fileItem.name || 'upload-file', {
-                        type: blob.type || 'application/octet-stream'
-                      });
-                    }
-                  } catch (error) {
-                    console.error(`LaunchApp debug - Failed to fetch blob:`, error);
-                  }
-                }
-
-                if (actualFile && actualFile instanceof File && fileItem?.status !== 'done') {
-                  // This is a file object that needs to be uploaded
-                  Message.info(`正在上传文件 ${fileItem.name}...`);
-                  const uploadedPath = await uploadFile(actualFile, field);
-                  uploadedFiles.push({
-                    name: fileItem.name,
-                    url: uploadedPath,
-                    status: 'done',
-                    uid: fileItem.uid
-                  });
-                } else if (fileItem?.url && fileItem?.status === 'done') {
-                  // This is already uploaded or has a URL
-                  uploadedFiles.push(fileItem);
-                } else {
-                  console.warn(`LaunchApp debug - Skipping file item (no valid file found):`, fileItem);
-                  console.warn(`LaunchApp debug - actualFile:`, actualFile);
-                  console.warn(`LaunchApp debug - actualFile instanceof File:`, actualFile instanceof File);
-                  console.warn(`LaunchApp debug - fileItem.status:`, fileItem?.status);
-                }
-              }
-              processedFormConfigData[fieldKey] = uploadedFiles;
-            }
-          }
+    // Validate form if needed
+    if (formSchema.value && formSchema.value.fields && formSchema.value.fields.length > 0) {
+      if (dynamicFormRendererRef.value) {
+        const isValid = await dynamicFormRendererRef.value.validateForm();
+        if (!isValid) {
+          Message.warning('请填写所有必填字段并修正表单错误');
+          return;
         }
       }
     }
-  } catch (uploadError) {
-    uploadsProcessedSuccessfully = false;
-    // Error message already shown by uploadBase64AsFile
-    // loadingUploadMsg.close(); // Close loading message if an upload fails
-    // return; // Stop if any upload fails
+
+    loading.value = true;
+    
+    // Get form data from the dynamic form renderer
+    const formData = dynamicFormRendererRef.value ? dynamicFormRendererRef.value.getFormData() : {};
+    
+    // Launch the application
+    const response = await apiClient.post(`/auth/client/ai-applications/${appId.value}/launch`, {
+      formConfig: formData // Send form data to the server
+    });
+    
+    // Handle successful launch
+    Message.success(response.data.message || '应用已成功启动');
+    
+    // Update user balance if needed
+    if (response.data.newBalance !== undefined) {
+      refreshUserData();
+    }
+    
+    // Start task polling if we have a promptId
+    console.log('Launch response data:', response.data); // Debug: log the response data
+    
+    // 检查 serviceData 中的数据结构
+    const serviceData = response.data.serviceData || {};
+    let promptId, apiUrl;
+    
+    // 尝试从不同位置获取 promptId
+    if (serviceData.prompt_id) {
+      promptId = serviceData.prompt_id;
+    } else if (serviceData.data && serviceData.data.prompt_id) {
+      promptId = serviceData.data.prompt_id;
+    }
+    
+    // 尝试从不同位置获取 apiUrl
+    if (serviceData.apiUrl) {
+      apiUrl = serviceData.apiUrl;
+    } else if (serviceData.data && serviceData.data.apiUrl) {
+      apiUrl = serviceData.data.apiUrl;
+    }
+    
+    // 如果有必要的参数，开始轮询
+    if (promptId && apiUrl) {
+      startTaskPolling({
+        promptId,
+        apiUrl,
+        platformType: application.value.platformType,
+        outputNodeId: serviceData.outputNodeId || (serviceData.data && serviceData.data.outputNodeId),
+        outputType: serviceData.outputType || (serviceData.data && serviceData.data.outputType) || 'image'
+      });
+    } else {
+      console.error('Missing required parameters for task polling:', { promptId, apiUrl });
+    }
+    
+  } catch (error) {
+    console.error('Error launching application:', error);
+    Message.error(error.response?.data?.message || '启动应用失败');
   } finally {
-    if(typeof loadingUploadMsg.close === 'function') loadingUploadMsg.close();
+    loading.value = false;
   }
-
-  if (!uploadsProcessedSuccessfully) {
-    Message.error('部分文件上传失败，请重试。');
-    return;
-  }
-
-  const appName = application.value.name;
-  const originalCreditsToConsume = application.value.creditsConsumed;
-  let finalCreditsToDisplay = originalCreditsToConsume; // Default to original
-  if (application.value.activePromotion) {
-    // ... (discount logic remains the same)
-    const promo = application.value.activePromotion;
-    if (promo.discountType === 'percentage' && promo.discountValue !== null) {
-      finalCreditsToDisplay = Math.max(0, Math.round(originalCreditsToConsume * (1 - parseFloat(promo.discountValue) / 100)));
-    } else if (promo.discountType === 'fixed_reduction' && promo.discountValue !== null) {
-      finalCreditsToDisplay = Math.max(0, originalCreditsToConsume - parseInt(promo.discountValue, 10));
-    }
-  }
-
-  Modal.confirm({
-    title: '确认生成',
-    content: `执行应用 "${appName}" ${finalCreditsToDisplay > 0 ? `将消耗 ${finalCreditsToDisplay} 积分` : '免费'}${application.value.activePromotion ? ' (已应用优惠)' : ''}。是否继续？`,
-    okText: '确认生成',
-    cancelText: '取消',
-    onOk: async () => {
-      const finalLoadingMsg = Message.loading('正在提交任务，请稍候...');
-      try {
-        // 打印最终提交的表单数据
-        console.log('最终提交的表单数据:', JSON.stringify(processedFormConfigData, null, 2));
-
-        // 使用新的任务服务提交任务
-        const result = await taskService.submitTask(appId.value, processedFormConfigData);
-
-        if (result.success) {
-          currentTask.value = {
-            promptId: result.promptId,
-            taskId: result.taskId,
-            status: result.status,
-            applicationName: appName
-          };
-
-          isTaskRunning.value = true;
-          taskStatus.value = result.status;
-
-          Message.success(`任务已成功提交！${result.creditsConsumed > 0 ? `已消耗 ${result.creditsConsumed} 积分。` : ''}`);
-
-          if (refreshUserData) refreshUserData();
-
-          // 开始监听任务状态
-          startTaskMonitoring(result.promptId);
-        }
-
-      } catch (error) {
-        Message.error(error.message || '提交任务失败');
-        console.error('Error submitting task:', error);
-      } finally {
-        if(typeof finalLoadingMsg.close === 'function') finalLoadingMsg.close();
-      }
-    },
-    onCancel: () => {}
-  });
 };
 
 const launchAppWithConfig = () => {
   launchApp();
 }
 
-// 状态文本辅助函数
-const getStatusText = (status) => {
-  const statusMap = {
-    'pending': '等待中',
-    'running': '执行中',
-    'completed': '已完成',
-    'failed': '失败',
-    'cancelled': '已取消'
+// Start polling for task status
+const startTaskPolling = (taskInfo) => {
+  // Clear any existing polling
+  stopTaskPolling();
+  
+  // Initialize task state
+  currentTask.value = {
+    ...taskInfo,
+    status: 'pending',
+    progress: 0,
+    message: '正在初始化任务...',
+    queuePosition: -1
   };
-  return statusMap[status] || status;
+  
+  // Start polling
+  pollTaskStatus();
 };
 
-const getTaskDescription = () => {
-  if (!currentTask.value) return '';
-
-  let description = `应用: ${currentTask.value.applicationName}`;
-
-  if (taskProgress.value) {
-    if (taskProgress.value.current_node_type) {
-      description += ` | 当前节点: ${taskProgress.value.current_node_type}`;
-    }
-    if (taskProgress.value.current_step && taskProgress.value.total_steps) {
-      description += ` | 进度: ${taskProgress.value.current_step}/${taskProgress.value.total_steps}`;
-    }
+// Poll for task status
+const pollTaskStatus = async () => {
+  if (!currentTask.value || !currentTask.value.promptId) {
+    stopTaskPolling();
+    return;
   }
-
-  return description;
-};
-
-// 图片加载错误处理
-const handleImageError = (event) => {
-  console.error('图片加载失败:', event.target.src);
-  Message.error('图片加载失败，请检查网络连接或图片地址');
-};
-
-// 任务监听相关函数
-const startTaskMonitoring = (promptId) => {
-  // 使用轮询监控任务状态
-  pollTaskStatus(promptId);
-};
-
-// 移除WebSocket相关的handleTaskUpdate函数，改为在轮询中处理状态更新
-
-const pollTaskStatus = async (promptId) => {
+  
   try {
-    const finalStatus = await taskService.pollTaskUntilComplete(promptId, {
-      maxAttempts: 120,
-      interval: 3000, // 使用较短的轮询间隔以提供更好的用户体验
-      onProgress: (status) => {
-        // 更新任务状态和进度
-        taskStatus.value = status.status;
-        taskProgress.value = status.progress;
-
-        // 显示队列信息
-        if (status.queueInfo && status.queueInfo.position) {
-          Message.info(`任务在队列中排第 ${status.queueInfo.position} 位`);
-        }
-
-        // 如果状态更新中包含输出数据，直接使用
-        if (status.output_data) {
-          taskResults.value = status.output_data;
-        }
+    console.log('Polling task status with params:', {
+      promptId: currentTask.value.promptId,
+      apiUrl: currentTask.value.apiUrl,
+      platformType: currentTask.value.platformType
+    });
+    
+    const response = await apiClient.get(`/auth/client/ai-tasks/${currentTask.value.promptId}/status`, {
+      params: {
+        apiUrl: currentTask.value.apiUrl,
+        platformType: currentTask.value.platformType
       }
     });
-
-    // 轮询完成后处理最终结果
-    isTaskRunning.value = false;
-
-    if (finalStatus.status === 'completed') {
-      Message.success('任务执行完成！');
-
-      if (finalStatus.output_data) {
-        taskResults.value = finalStatus.output_data;
-      } else {
-        // 添加短暂延迟，确保后端状态已更新
-        setTimeout(async () => {
-          await loadTaskResults(promptId);
-        }, 2000);
-      }
-    } else if (finalStatus.status === 'failed') {
-      Message.error(finalStatus.errorMessage || '任务执行失败');
+    
+    // Update task state with response data
+    currentTask.value = {
+      ...currentTask.value,
+      ...response.data
+    };
+    
+    // If task is completed, fetch results
+    if (response.data.status === 'completed') {
+      await fetchTaskResults();
+      stopTaskPolling();
     }
-
-    // 清除当前任务引用
-    currentTask.value = null;
-
+    // If task errored, stop polling
+    else if (response.data.status === 'error') {
+      Message.error(response.data.message || '任务执行出错');
+      stopTaskPolling();
+    }
+    // Otherwise continue polling
+    else {
+      pollingInterval.value = setTimeout(pollTaskStatus, pollingDelay);
+    }
+    
   } catch (error) {
-    console.error('轮询任务状态失败:', error);
-    Message.error('任务状态查询失败');
-    isTaskRunning.value = false;
-    currentTask.value = null;
+    console.error('Error polling task status:', error);
+    currentTask.value.status = 'error';
+    currentTask.value.message = error.response?.data?.message || '检查任务状态失败';
+    stopTaskPolling();
   }
 };
 
-const loadTaskResults = async (promptId, retryCount = 0) => {
+// Fetch task results
+const fetchTaskResults = async () => {
+  if (!currentTask.value || !currentTask.value.promptId) return;
+  
   try {
-    const result = await taskService.getTaskResult(promptId);
-    if (result.success) {
-      // 处理不同格式的结果数据
-      let processedData = result.data;
-
-      // 如果数据是标准格式（包含images数组），直接使用
-      if (processedData && processedData.images) {
-        taskResults.value = processedData;
+    console.log('Fetching task results with params:', {
+      promptId: currentTask.value.promptId,
+      apiUrl: currentTask.value.apiUrl,
+      platformType: currentTask.value.platformType,
+      outputNodeId: currentTask.value.outputNodeId,
+      outputType: currentTask.value.outputType
+    });
+    
+    const response = await apiClient.get(`/auth/client/ai-tasks/${currentTask.value.promptId}/results`, {
+      params: {
+        apiUrl: currentTask.value.apiUrl,
+        platformType: currentTask.value.platformType,
+        outputNodeId: currentTask.value.outputNodeId,
+        outputType: currentTask.value.outputType
       }
-      // 如果数据是ComfyUI历史格式，需要转换
-      else if (processedData && typeof processedData === 'object') {
-        taskResults.value = processComfyUIHistoryData(processedData, promptId);
-      }
-      // 其他情况，保持原样
-      else {
-        taskResults.value = processedData;
-      }
-
-      Message.success('任务结果已加载');
-    }
+    });
+    
+    taskResult.value = response.data;
+    
   } catch (error) {
-    console.error('加载任务结果失败:', error);
-
-    // 如果是任务尚未完成的错误，且重试次数少于3次，则重试
-    if (error.message && error.message.includes('任务尚未完成') && retryCount < 3) {
-      console.log(`任务可能刚完成，${3 - retryCount}秒后重试...`);
-      setTimeout(() => {
-        loadTaskResults(promptId, retryCount + 1);
-      }, 3000);
-    } else {
-      Message.error('加载任务结果失败');
-    }
+    console.error('Error fetching task results:', error);
+    Message.error(error.response?.data?.message || '获取任务结果失败');
   }
 };
 
-// 处理ComfyUI历史数据格式
-const processComfyUIHistoryData = (historyData, promptId) => {
-  const result = {
-    images: [],
-    videos: [],
-    texts: [],
-    raw_outputs: historyData
-  };
-
-  // 查找对应的任务数据
-  const taskData = historyData[promptId];
-  if (!taskData || !taskData.outputs) {
-    return result;
+// Stop task polling
+const stopTaskPolling = () => {
+  if (pollingInterval.value) {
+    clearTimeout(pollingInterval.value);
+    pollingInterval.value = null;
   }
-
-  // 遍历输出节点
-  Object.keys(taskData.outputs).forEach(nodeId => {
-    const nodeOutput = taskData.outputs[nodeId];
-
-    // 处理图片
-    if (nodeOutput.images && Array.isArray(nodeOutput.images)) {
-      nodeOutput.images.forEach(image => {
-        const proxyUrl = buildProxyUrl(promptId, nodeId, image);
-        const downloadUrl = buildDownloadUrl(promptId, nodeId, image);
-
-        result.images.push({
-          nodeId: nodeId,
-          filename: image.filename,
-          subfolder: image.subfolder || '',
-          type: image.type || 'temp',
-          url: proxyUrl,
-          downloadUrl: downloadUrl,
-          original: image
-        });
-      });
-    }
-
-    // 处理视频
-    if (nodeOutput.videos && Array.isArray(nodeOutput.videos)) {
-      nodeOutput.videos.forEach(video => {
-        const proxyUrl = buildProxyUrl(promptId, nodeId, video);
-        const downloadUrl = buildDownloadUrl(promptId, nodeId, video);
-
-        result.videos.push({
-          nodeId: nodeId,
-          filename: video.filename,
-          subfolder: video.subfolder || '',
-          type: video.type || 'temp',
-          url: proxyUrl,
-          downloadUrl: downloadUrl,
-          original: video
-        });
-      });
-    }
-  });
-
-  return result;
 };
 
-// 构建代理URL
-const buildProxyUrl = (promptId, nodeId, fileInfo) => {
-  const { filename, subfolder = '', type = 'temp' } = fileInfo;
-  const params = new URLSearchParams({
-    subfolder: subfolder,
-    type: type
-  });
-  return `/api/proxy/${promptId}/${nodeId}/${filename}?${params.toString()}`;
+// Get task status color
+const getTaskStatusColor = (status) => {
+  switch (status) {
+    case 'pending': return 'blue';
+    case 'running': 
+    case 'processing': return 'orange';
+    case 'completed': return 'green';
+    case 'error': return 'red';
+    default: return 'gray';
+  }
 };
 
-// 构建下载URL
-const buildDownloadUrl = (promptId, nodeId, fileInfo) => {
-  const { filename, subfolder = '', type = 'temp' } = fileInfo;
-  const params = new URLSearchParams({
-    subfolder: subfolder,
-    type: type
-  });
-  return `/api/proxy/download/${promptId}/${nodeId}/${filename}?${params.toString()}`;
+// Get task status text
+const getTaskStatusText = (status) => {
+  switch (status) {
+    case 'pending': return '等待中';
+    case 'running': return '运行中';
+    case 'processing': return '处理中';
+    case 'completed': return '已完成';
+    case 'error': return '出错';
+    default: return '未知状态';
+  }
 };
 
-const cancelCurrentTask = async () => {
-  if (!currentTask.value) return;
-
+// Download image
+const downloadImage = async (url, filename) => {
   try {
-    const result = await taskService.cancelTask(currentTask.value.promptId);
-    if (result.success) {
-      isTaskRunning.value = false;
-      taskStatus.value = 'cancelled';
-      Message.success('任务已取消');
-
-      // 清除当前任务引用
-      currentTask.value = null;
-    }
+    const response = await fetch(url);
+    const blob = await response.blob();
+    const blobUrl = window.URL.createObjectURL(blob);
+    
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename || 'image.png';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(blobUrl);
+    
+    Message.success('图片下载已开始');
   } catch (error) {
-    console.error('取消任务失败:', error);
-    Message.error('取消任务失败');
+    console.error('Error downloading image:', error);
+    Message.error('下载图片失败');
   }
 };
+
+// Clean up on component unmount
+onUnmounted(() => {
+  stopTaskPolling();
+});
 
 onMounted(() => {
   if (appId.value) {
     fetchApplicationDetail();
     fetchWidgetList();
-  }
-});
-
-onUnmounted(() => {
-  // 清理任务相关状态
-  if (currentTask.value) {
-    currentTask.value = null;
   }
 });
 
@@ -1141,148 +887,69 @@ onUnmounted(() => {
   padding-top: 16px;
 }
 
-/* 任务状态相关样式 */
-.task-status-section {
+/* Task status and result styles */
+.task-status-container {
+  padding: 10px;
+}
+
+.task-status-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   margin-bottom: 16px;
+}
+
+.task-status-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 500;
 }
 
 .task-progress {
-  margin-top: 12px;
+  margin: 20px 0;
 }
 
-.progress-text {
+.task-message {
   margin-top: 8px;
-  font-size: 12px;
-  color: var(--color-text-3);
+  color: #666;
+  font-size: 14px;
+}
+
+.task-pending, .task-error, .no-task-container {
+  padding: 20px 0;
   text-align: center;
 }
 
-.task-results {
-  padding: 16px 0;
+.task-result {
+  margin-top: 20px;
 }
 
-.result-header {
+.image-result-container {
+  width: 100%;
+  margin: 0 auto;
+}
+
+.result-carousel {
+  width: 100%;
+  height: 400px;
+}
+
+.carousel-image-container {
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--color-border-2);
-}
-
-.result-time {
-  font-size: 12px;
-  color: var(--color-text-3);
-}
-
-.result-content {
-  margin-top: 16px;
-}
-
-.result-images {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
+  height: 100%;
 }
 
 .result-image {
-  border: 1px solid var(--color-border-2);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--color-bg-1);
+  max-width: 100%;
+  max-height: 350px;
+  object-fit: contain;
 }
 
-.result-image img {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.image-info {
-  padding: 8px 12px;
+.image-actions {
+  margin-top: 10px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--color-bg-2);
-}
-
-.filename {
-  font-size: 12px;
-  color: var(--color-text-2);
-  flex: 1;
-  margin-right: 8px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.download-link {
-  font-size: 12px;
-  color: var(--color-primary-6);
-  text-decoration: none;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.download-link:hover {
-  color: var(--color-primary-5);
-}
-
-.result-videos {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 16px;
-}
-
-.result-video {
-  border: 1px solid var(--color-border-2);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--color-bg-1);
-}
-
-.result-video video {
-  width: 100%;
-  height: auto;
-  display: block;
-}
-
-.video-info {
-  padding: 8px 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--color-bg-2);
-}
-
-.result-texts {
-  margin-top: 16px;
-}
-
-.result-text pre,
-.result-json pre {
-  background: var(--color-bg-3);
-  padding: 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.5;
-  overflow-x: auto;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.no-results,
-.task-running {
-  display: flex;
-  align-items: center;
   justify-content: center;
-  min-height: 200px;
-  flex-direction: column;
-}
-
-.running-text {
-  margin-top: 16px;
-  color: var(--color-text-2);
 }
 </style>

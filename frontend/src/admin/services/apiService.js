@@ -325,4 +325,69 @@ apiService.deleteAnnouncement = (id) => {
   return apiService.delete(`/announcements/${id}`);
 };
 
-export default apiService; 
+// --- Permission Management Service Methods ---
+// 权限管理
+apiService.getPermissions = (params) => {
+  return apiService.get('/permissions', { params });
+};
+
+apiService.getPermissionTree = (params) => {
+  return apiService.get('/permissions/tree', { params });
+};
+
+apiService.createPermission = (data) => {
+  return apiService.post('/permissions', data);
+};
+
+apiService.updatePermission = (id, data) => {
+  return apiService.put(`/permissions/${id}`, data);
+};
+
+apiService.deletePermission = (id) => {
+  return apiService.delete(`/permissions/${id}`);
+};
+
+// 角色管理
+apiService.getRoles = (params) => {
+  return apiService.get('/permissions/roles', { params });
+};
+
+apiService.createRole = (data) => {
+  return apiService.post('/permissions/roles', data);
+};
+
+apiService.updateRole = (id, data) => {
+  return apiService.put(`/permissions/roles/${id}`, data);
+};
+
+apiService.deleteRole = (id) => {
+  return apiService.delete(`/permissions/roles/${id}`);
+};
+
+// 用户角色分配
+apiService.getUserRoles = (params) => {
+  return apiService.get('/permissions/user-roles', { params });
+};
+
+apiService.getUserRolesByUserId = (userId, params) => {
+  return apiService.get(`/permissions/user-roles/${userId}`, { params });
+};
+
+apiService.assignUserRole = (data) => {
+  return apiService.post('/permissions/user-roles', data);
+};
+
+apiService.batchAssignUserRoles = (data) => {
+  return apiService.post('/permissions/user-roles/batch', data);
+};
+
+apiService.removeUserRole = (id) => {
+  return apiService.delete(`/permissions/user-roles/${id}`);
+};
+
+// 获取当前用户权限
+apiService.getMyPermissions = (params) => {
+  return apiService.get('/permissions/my-permissions', { params });
+};
+
+export default apiService;

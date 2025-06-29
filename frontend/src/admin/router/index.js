@@ -123,8 +123,20 @@ const routes = [
   {
     path: '/permissions',
     name: 'PermissionManagement',
-    component: () => import('../views/PermissionManagement.vue'),
+    component: () => import('../views/PermissionManagementComplete.vue'),
     meta: { title: '权限设置', requiresAuth: true }
+  },
+  {
+    path: '/permission-test',
+    name: 'PermissionTest',
+    component: () => import('../views/PermissionTest.vue'),
+    meta: { title: '权限测试', requiresAuth: true }
+  },
+  {
+    path: '/user-role-test',
+    name: 'UserRoleTest',
+    component: () => import('../views/UserRoleTest.vue'),
+    meta: { title: '用户角色测试', requiresAuth: true }
   },
   {
     path: '/other-settings',

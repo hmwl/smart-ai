@@ -527,11 +527,13 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
 // POST /api/client/ai-applications/:id/launch - Client launches an AI application
 router.post('/client/ai-applications/:id/launch', authenticateToken, async (req, res) => {
+  console.log('[LAUNCH] --- Launch request received ---');
   let consumptionTransactionId = null;
   const { id: applicationId } = req.params;
   const userId = req.user ? req.user.userId : null;
 
   try {
+    console.log(`[LAUNCH] 1. Validating user: ${userId}`);
     if (!userId) {
       // This case should ideally be caught by authenticateToken, but as a safeguard:
       return res.status(401).json({ message: '用户认证失败，无法执行操作。' });
@@ -540,6 +542,7 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
     // 1. Fetch User and Application, perform initial checks
     const currentUser = await User.findById(userId);
     if (!currentUser) return res.status(404).json({ message: '用户未找到。' });
+    console.log(`[LAUNCH] 2. User found: ${currentUser.username}`);
     if (currentUser.isAdmin) return res.status(403).json({ message: '此操作仅限客户端用户。' });
     if (currentUser.status !== 'active') return res.status(403).json({ message: '用户账户已被禁用。' });
 
@@ -548,9 +551,16 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
       .populate('apis'); // Populate all API details for the service to use
 
     if (!application) return res.status(404).json({ message: 'AI 应用未找到。' });
+    console.log(`[LAUNCH] 3. Application found: ${application.name}`);
+    
+    // --- DEBUG: Print the full application object ---
+    console.log('[LAUNCH] DEBUG: Full application object from DB:', JSON.stringify(application, null, 2));
+    // --- END DEBUG ---
+    
     if (application.status !== 'active') return res.status(400).json({ message: `AI 应用 "${application.name}" 当前不可用。` });
 
     // 2. Determine Credits to Consume (with Promotion Logic)
+    console.log('[LAUNCH] 4. Calculating credits and promotions.');
     let originalCreditsToConsume = application.creditsConsumed;
     let finalCreditsToConsume = originalCreditsToConsume;
     let appliedPromotionId = null;
@@ -616,8 +626,10 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
     });
     await consumptionTransaction.save();
     consumptionTransactionId = consumptionTransaction._id;
+    console.log(`[LAUNCH] 5. Credit transaction saved: ${consumptionTransactionId}`);
 
     // 4. Dynamically get and execute platform-specific service
+    console.log(`[LAUNCH] 6. Looking for service for platform: ${application.platformType}`);
     // Case-insensitive key lookup
     const platformTypeFromApp = application.platformType;
     const mapKeys = Object.keys(platformServiceMap);
@@ -630,6 +642,7 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
       console.error(`[LAUNCH] ERROR: Service class not found for platform type: ${application.platformType}`);
       throw new Error(`平台类型 "${application.platformType}" 的服务处理程序未实现。`);
     }
+    console.log(`[LAUNCH] 7. Service class found. Instantiating...`);
 
     const serviceInstance = new ServiceClass();
     let serviceResult;
@@ -637,7 +650,9 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
 
     try {
       // Pass the full application model and any relevant client inputs (req.body could be used for this)
+      console.log('[LAUNCH] 8. Executing serviceInstance.handleLaunchRequest...');
       serviceResult = await serviceInstance.handleLaunchRequest(application, req.body);
+      console.log('[LAUNCH] 9. Service execution successful.');
       
       clientResponseMessage = serviceResult.clientMessage || `应用 "${application.name}" 服务执行成功。`;
       
@@ -741,6 +756,80 @@ router.post('/client/ai-applications/:id/launch', authenticateToken, async (req,
         message: clientMessage + (consumptionTransactionId ? ' 请联系管理员核实您的积分。' : ''),
         error: outerError.message // Keep original error for server logs / admin diagnosis
     });
+  }
+});
+
+// GET /api/client/ai-tasks/:promptId/status - Check status of an AI task
+router.get('/client/ai-tasks/:promptId/status', authenticateToken, async (req, res) => {
+  const { promptId } = req.params;
+  const { apiUrl, platformType } = req.query;
+  const userId = req.user ? req.user.userId : null;
+
+  try {
+    if (!userId) {
+      return res.status(401).json({ message: '用户认证失败，无法执行操作。' });
+    }
+
+    if (!promptId || !apiUrl || !platformType) {
+      return res.status(400).json({ message: '缺少必要的参数：promptId, apiUrl, 或 platformType' });
+    }
+
+    // Dynamically get the correct service based on platformType
+    const mapKeys = Object.keys(platformServiceMap);
+    const matchingKey = mapKeys.find(key => key.toLowerCase() === platformType.toLowerCase());
+    
+    const ServiceClass = matchingKey ? platformServiceMap[matchingKey] : null;
+
+    if (!ServiceClass) {
+      return res.status(400).json({ message: `不支持的平台类型: ${platformType}` });
+    }
+
+    const serviceInstance = new ServiceClass();
+    
+    // Call the checkTaskStatus method
+    const statusResult = await serviceInstance.checkTaskStatus(promptId, apiUrl);
+    
+    return res.json(statusResult);
+  } catch (error) {
+    console.error(`Error checking task status: ${error.message}`);
+    return res.status(500).json({ message: `检查任务状态失败: ${error.message}` });
+  }
+});
+
+// GET /api/client/ai-tasks/:promptId/results - Get results of an AI task
+router.get('/client/ai-tasks/:promptId/results', authenticateToken, async (req, res) => {
+  const { promptId } = req.params;
+  const { apiUrl, platformType, outputNodeId, outputType } = req.query;
+  const userId = req.user ? req.user.userId : null;
+
+  try {
+    if (!userId) {
+      return res.status(401).json({ message: '用户认证失败，无法执行操作。' });
+    }
+
+    if (!promptId || !apiUrl || !platformType) {
+      return res.status(400).json({ message: '缺少必要的参数：promptId, apiUrl, 或 platformType' });
+    }
+
+    // Dynamically get the correct service based on platformType
+    const mapKeys = Object.keys(platformServiceMap);
+    const matchingKey = mapKeys.find(key => key.toLowerCase() === platformType.toLowerCase());
+    
+    const ServiceClass = matchingKey ? platformServiceMap[matchingKey] : null;
+
+    if (!ServiceClass) {
+      return res.status(400).json({ message: `不支持的平台类型: ${platformType}` });
+    }
+
+    const serviceInstance = new ServiceClass();
+    
+    // Call the getTaskResults method
+    const resultData = await serviceInstance.getTaskResults(promptId, apiUrl, outputNodeId, outputType);
+    
+    return res.json(resultData);
+  } catch (error) {
+    console.error(`Error getting task results: ${error.message}`);
+    return res.status(500).json({ message: `获取任务结果失败: ${error.message}` });
   }
 });
 

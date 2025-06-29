@@ -40,7 +40,21 @@ const userSchema = new Schema({
   },
   isAdmin: {
     type: Boolean,
-    default: false // 默认不是管理员
+    default: false // 默认不是管理员（保留向后兼容）
+  },
+  // 用户类型，用于区分不同类型的用户
+  userType: {
+    type: String,
+    enum: ['admin', 'client', 'system'],
+    default: 'client',
+    index: true
+  },
+  // 用户权限状态
+  permissionStatus: {
+    type: String,
+    enum: ['normal', 'restricted', 'suspended'],
+    default: 'normal',
+    index: true
   },
   verificationCode: { // For email verification code
     type: String,
@@ -111,6 +125,94 @@ userSchema.pre('save', async function (next) {
 // Method to compare password
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return bcrypt.compare(candidatePassword, this.passwordHash);
+};
+
+// 权限相关方法
+userSchema.methods.getUserRoles = async function(scope = null) {
+  const UserRole = require('./UserRole');
+  return await UserRole.getUserActiveRoles(this._id, scope);
+};
+
+userSchema.methods.hasRole = async function(roleCode, scope = null) {
+  const userRoles = await this.getUserRoles(scope);
+  return userRoles.some(ur => ur.roleDetails && ur.roleDetails.code === roleCode);
+};
+
+userSchema.methods.hasPermission = async function(permissionCode, scope = null) {
+  const userRoles = await this.getUserRoles(scope);
+
+  for (const userRole of userRoles) {
+    if (!userRole.isValid()) continue;
+
+    const role = userRole.roleDetails;
+    if (!role || role.status !== 'active') continue;
+
+    // 检查角色权限
+    if (role.permissionDetails) {
+      const hasRolePermission = role.permissionDetails.some(p =>
+        p.code === permissionCode && p.status === 'active'
+      );
+
+      // 检查是否在受限权限中
+      const isRestricted = userRole.restrictedPermissionDetails &&
+        userRole.restrictedPermissionDetails.some(p => p.code === permissionCode);
+
+      if (hasRolePermission && !isRestricted) {
+        return true;
+      }
+    }
+
+    // 检查额外权限
+    if (userRole.additionalPermissionDetails) {
+      const hasAdditionalPermission = userRole.additionalPermissionDetails.some(p =>
+        p.code === permissionCode && p.status === 'active'
+      );
+      if (hasAdditionalPermission) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+};
+
+userSchema.methods.getAllPermissions = async function(scope = null) {
+  const userRoles = await this.getUserRoles(scope);
+  const permissions = new Set();
+
+  for (const userRole of userRoles) {
+    if (!userRole.isValid()) continue;
+
+    const role = userRole.roleDetails;
+    if (!role || role.status !== 'active') continue;
+
+    // 添加角色权限
+    if (role.permissionDetails) {
+      role.permissionDetails.forEach(p => {
+        if (p.status === 'active') {
+          permissions.add(p.code);
+        }
+      });
+    }
+
+    // 移除受限权限
+    if (userRole.restrictedPermissionDetails) {
+      userRole.restrictedPermissionDetails.forEach(p => {
+        permissions.delete(p.code);
+      });
+    }
+
+    // 添加额外权限
+    if (userRole.additionalPermissionDetails) {
+      userRole.additionalPermissionDetails.forEach(p => {
+        if (p.status === 'active') {
+          permissions.add(p.code);
+        }
+      });
+    }
+  }
+
+  return Array.from(permissions);
 };
 
 const User = mongoose.model('User', userSchema);

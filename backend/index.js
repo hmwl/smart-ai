@@ -152,6 +152,9 @@ app.use('/api/proxy', require('./routes/simpleProxy'));
 // 注册媒体代理路由
 // app.use('/api/media', require('./routes/mediaProxy'));
 
+// 注册权限管理路由
+app.use('/api/permissions', require('./routes/permissions'));
+
 // 注册统一化平台API路由
 app.use('/api', authenticateToken, require('./routes/platformApi'));
 
